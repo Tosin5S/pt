@@ -1,0 +1,3467 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Prehistoric Tribes - Stone Age RTS</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Fredoka for cartoon Stone Age headers, Inter for crisp UI stats -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root {
+            --font-cartoon: 'Fredoka', cursive, sans-serif;
+            --font-ui: 'Inter', sans-serif;
+        }
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #1c1917;
+            font-family: var(--font-ui);
+            touch-action: none;
+        }
+        .font-cartoon {
+            font-family: var(--font-cartoon);
+            letter-spacing: 0.02em;
+        }
+        /* Stone Age Carved UI Panels */
+        .stone-panel {
+            background: linear-gradient(180deg, rgba(41, 37, 36, 0.95) 0%, rgba(28, 25, 23, 0.98) 100%);
+            border: 2px solid #57534e;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        }
+        .wood-btn {
+            background: linear-gradient(180deg, #a16207 0%, #713f12 100%);
+            border: 2px solid #ca8a04;
+            box-shadow: 0 3px 0 #422006, inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            transition: all 0.12s ease;
+        }
+        .wood-btn:hover:not(:disabled) {
+            background: linear-gradient(180deg, #b45309 0%, #854d0e 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 0 #422006, inset 0 1px 0 rgba(255, 255, 255, 0.35);
+        }
+        .wood-btn:active:not(:disabled) {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #422006;
+        }
+        .wood-btn:disabled {
+            opacity: 0.45;
+            filter: grayscale(0.5);
+            cursor: not-allowed;
+        }
+        .stone-btn {
+            background: linear-gradient(180deg, #57534e 0%, #44403c 100%);
+            border: 2px solid #78716c;
+            box-shadow: 0 3px 0 #1c1917, inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transition: all 0.12s ease;
+        }
+        .stone-btn:hover:not(:disabled) {
+            background: linear-gradient(180deg, #78716c 0%, #57534e 100%);
+            transform: translateY(-1px);
+        }
+        .stone-btn:active:not(:disabled) {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #1c1917;
+        }
+        .stone-btn.active-btn {
+            background: linear-gradient(180deg, #d97706 0%, #b45309 100%);
+            border-color: #fbbf24;
+            color: #fff;
+        }
+        /* Custom Scrollbar for horizontal build bar on small devices */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        @keyframes pulse-danger {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            50% { transform: scale(1.03); box-shadow: 0 0 14px 4px rgba(239, 68, 68, 0.5); }
+        }
+        .raid-alert {
+            animation: pulse-danger 1.2s infinite;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+    </style>
+</head>
+<body class="text-stone-100 select-none">
+
+    <!-- MAIN GAME CANVAS -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- TOP HUD: RESOURCES, POPULATION, WAVE TIMER & SYSTEM CONTROLS -->
+    <header class="fixed top-0 left-0 right-0 z-20 pointer-events-none p-2 flex flex-wrap items-center justify-between gap-2">
+        <!-- Resource Counters -->
+        <div class="stone-panel rounded-2xl px-3 py-1.5 pointer-events-auto flex flex-wrap items-center gap-2 sm:gap-4 shadow-xl">
+            <!-- Wood -->
+            <div class="flex items-center gap-1.5" title="Wood (Chopped from prehistoric trees)">
+                <span class="text-lg">🪵</span>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-stone-400 font-semibold leading-none">Wood</div>
+                    <div class="text-xs sm:text-sm font-bold text-amber-300"><span id="resWood">100</span><span class="text-stone-500 text-[11px]">/<span id="capWood">200</span></span></div>
+                </div>
+            </div>
+            <!-- Stone -->
+            <div class="flex items-center gap-1.5" title="Stone (Mined from boulders)">
+                <span class="text-lg">🪨</span>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-stone-400 font-semibold leading-none">Stone</div>
+                    <div class="text-xs sm:text-sm font-bold text-stone-200"><span id="resStone">80</span><span class="text-stone-500 text-[11px]">/<span id="capStone">200</span></span></div>
+                </div>
+            </div>
+            <!-- Raw Food -->
+            <div class="flex items-center gap-1.5" title="Raw Food (Foraged from bushes or hunted from wildlife. Cook at the Kitchen!)">
+                <span class="text-lg">🍓</span>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-stone-400 font-semibold leading-none">Raw Food</div>
+                    <div class="text-xs sm:text-sm font-bold text-rose-300"><span id="resRawFood">60</span><span class="text-stone-500 text-[11px]">/<span id="capFood">200</span></span></div>
+                </div>
+            </div>
+            <!-- Cooked Ribs -->
+            <div class="flex items-center gap-1.5" title="Cooked Sabre-Tooth Ribs (Prepared at Kitchen; keeps tribe fed & energized!)">
+                <span class="text-lg">🍖</span>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-stone-400 font-semibold leading-none">Cooked Ribs</div>
+                    <div class="text-xs sm:text-sm font-bold text-orange-400"><span id="resCooked">40</span><span class="text-stone-500 text-[11px]">/<span id="capCooked">200</span></span></div>
+                </div>
+            </div>
+            <!-- Weapons Stockpile -->
+            <div class="flex items-center gap-1.5" title="Crafted Weapons in Armoury (Clubs / Bone Spears)">
+                <span class="text-lg">🦴</span>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-stone-400 font-semibold leading-none">Armoury</div>
+                    <div class="text-xs sm:text-sm font-bold text-yellow-300"><span id="resClubs">1</span>🪵 <span id="resSpears">0</span>🔱</div>
+                </div>
+            </div>
+            <!-- Population -->
+            <div class="flex items-center gap-1.5 border-l border-stone-700 pl-2 sm:pl-3" title="Tribe Population: Adults (+Cave Kids) / Housing Capacity">
+                <span class="text-lg">🗿</span>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-stone-400 font-semibold leading-none">Tribe Pop</div>
+                    <div class="text-xs sm:text-sm font-bold text-emerald-400">
+                        <span id="popAdults">4</span><span id="popKidsWrap" class="text-pink-400 text-xs ml-0.5">(+0👶)</span><span class="text-stone-400 text-xs">/<span id="popMax">6</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Raid Status & Discipline Toggle -->
+        <div class="stone-panel rounded-2xl px-3 py-1.5 pointer-events-auto flex items-center gap-2 sm:gap-3 shadow-xl">
+            <div id="raidBox" class="flex items-center gap-2 px-2 py-0.5 rounded-xl bg-stone-800/90 border border-stone-700">
+                <span class="text-base" id="raidIcon">🥁</span>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-stone-400 font-semibold leading-none">Cannibal Wave <span id="waveNum">1</span></div>
+                    <div class="text-xs sm:text-sm font-bold text-red-400" id="raidTimerText">02:15</div>
+                </div>
+                <button id="btnCallWave" onclick="game.callWaveEarly()" class="ml-1 px-2 py-1 rounded-lg bg-red-900/70 hover:bg-red-700 text-[11px] font-bold text-red-100 border border-red-600/60 transition" title="Call next Cannibal Raid now for a +30 Wood & +30 Stone bravery bonus!">
+                    ⚔️ Raid Now
+                </button>
+            </div>
+
+            <!-- War Horn Town Alert -->
+            <button id="btnWarHorn" onclick="game.toggleTownAlert()" class="stone-btn px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5" title="Sound the Mammoth War Horn! All villagers grab weapons & defend the village">
+                <span>📯</span>
+                <span class="hidden md:inline" id="warHornLabel">War Horn</span>
+            </button>
+
+            <!-- 2008 Pocket Gamer Easter Egg: Villager Discipline Mode -->
+            <button id="btnDiscipline" onclick="game.toggleDisciplineMode()" class="stone-btn px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border-amber-500/50" title="Toggle between Smart Auto-Work AI and '2008 Authentic Wander Mode' (where cavemen occasionally wander off from half-built huts to chase butterflies, just like the Pocket Gamer review!)">
+                <span id="disciplineIcon">🧠</span>
+                <span class="hidden lg:inline" id="disciplineLabel">AI: Smart Tribe</span>
+            </button>
+        </div>
+
+        <!-- Right System Controls -->
+        <div class="stone-panel rounded-2xl px-2.5 py-1.5 pointer-events-auto flex items-center gap-1.5 shadow-xl">
+            <button onclick="game.setSpeed(1)" id="btnSpd1" class="stone-btn active-btn px-2 py-1 rounded-lg text-xs font-bold" title="Normal Speed (1x)">1x</button>
+            <button onclick="game.setSpeed(2)" id="btnSpd2" class="stone-btn px-2 py-1 rounded-lg text-xs font-bold" title="Fast Forward (2x)">2x</button>
+            <button onclick="game.togglePause()" id="btnPause" class="stone-btn px-2 py-1 rounded-lg text-xs font-bold" title="Pause Game (Space)"><i class="fa-solid fa-pause"></i></button>
+            <button onclick="game.toggleAudio()" id="btnAudio" class="stone-btn px-2 py-1 rounded-lg text-xs font-bold text-amber-300" title="Toggle Tribal Sound Effects"><i class="fa-solid fa-volume-high" id="audioIcon"></i></button>
+            <button onclick="game.openGuideModal()" class="stone-btn px-2.5 py-1 rounded-lg text-xs font-bold text-sky-300" title="Tribal Field Guide & Review Notes"><i class="fa-solid fa-book-skull mr-1"></i><span class="hidden sm:inline">Guide</span></button>
+            <button onclick="game.openSetupModal()" class="stone-btn px-2.5 py-1 rounded-lg text-xs font-bold text-amber-200" title="New Game / Difficulty Settings"><i class="fa-solid fa-gear"></i></button>
+        </div>
+    </header>
+
+    <!-- FLOATING TOAST / EVENT BANNER -->
+    <div id="eventBanner" class="fixed top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none transition-all duration-300 opacity-0 translate-y-[-10px]">
+        <div class="stone-panel px-4 py-2 rounded-full border-2 border-amber-500/80 shadow-2xl flex items-center gap-2 text-xs sm:text-sm font-bold text-amber-200">
+            <span id="eventBannerIcon">🔥</span>
+            <span id="eventBannerText">Your tribe emerges from the Ancestral Ice Cave!</span>
+        </div>
+    </div>
+
+    <!-- PLACEMENT MODE HELPER BANNER -->
+    <div id="buildPlacementBanner" class="hidden fixed top-28 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+        <div class="stone-panel px-4 py-2 rounded-2xl border-2 border-emerald-500 shadow-2xl flex items-center gap-3 text-xs sm:text-sm">
+            <span class="text-emerald-400 font-bold"><i class="fa-solid fa-hammer mr-1"></i>Placing: <span id="placingBuildingName">Hut</span></span>
+            <span class="text-stone-300 hidden sm:inline">Click on valid green grass to start construction</span>
+            <button onclick="game.cancelBuildMode()" class="px-2.5 py-1 rounded-lg bg-rose-700 hover:bg-rose-600 text-white font-bold text-xs">Cancel (Esc)</button>
+        </div>
+    </div>
+
+    <!-- MINIMAP & CAMERA CONTROLS (TOP RIGHT BELOW HEADER OR BOTTOM RIGHT ABOVE DOCK) -->
+    <div class="fixed right-3 bottom-44 sm:bottom-40 z-20 flex flex-col items-end gap-2 pointer-events-none">
+        <!-- Camera Zoom & Center Buttons -->
+        <div class="flex gap-1.5 pointer-events-auto">
+            <button onclick="game.centerOnCave()" class="stone-btn px-2.5 py-1.5 rounded-xl text-xs font-bold" title="Center Camera on Ancestral Cave (Home)">
+                🏠 Cave
+            </button>
+            <button onclick="game.zoomCamera(0.15)" class="stone-btn w-8 h-8 rounded-xl text-xs font-bold flex items-center justify-center" title="Zoom In">+</button>
+            <button onclick="game.zoomCamera(-0.15)" class="stone-btn w-8 h-8 rounded-xl text-xs font-bold flex items-center justify-center" title="Zoom Out">-</button>
+        </div>
+        <!-- Interactive Minimap -->
+        <div class="stone-panel p-1.5 rounded-2xl pointer-events-auto shadow-2xl">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-stone-400 px-1 mb-1 flex justify-between items-center">
+                <span>Valley Map</span>
+                <span class="text-emerald-400" id="exploredPct">32% Explored</span>
+            </div>
+            <canvas id="minimapCanvas" width="150" height="112" class="rounded-xl border border-stone-700 cursor-pointer" style="width:150px; height:112px;"></canvas>
+        </div>
+    </div>
+
+    <!-- BOTTOM CONTROL DOCK: INSPECTOR + TRIBE ROSTER + CONSTRUCTION MENU -->
+    <footer class="fixed bottom-0 left-0 right-0 z-20 p-2 pointer-events-none flex flex-col gap-1.5">
+        <!-- Quick Tribe Selection Strip -->
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pointer-events-auto px-1">
+            <button onclick="game.selectIdleVillagers()" class="stone-panel hover:border-amber-400 px-2.5 py-1 rounded-xl text-xs font-bold text-amber-300 flex items-center gap-1 shrink-0 shadow">
+                <span>💤</span> Idle (<span id="idleCount">0</span>)
+            </button>
+            <button onclick="game.selectAllWarriors()" class="stone-panel hover:border-rose-400 px-2.5 py-1 rounded-xl text-xs font-bold text-rose-300 flex items-center gap-1 shrink-0 shadow">
+                <span>🦴</span> Warriors
+            </button>
+            <button onclick="game.selectAllVillagers()" class="stone-panel hover:border-emerald-400 px-2.5 py-1 rounded-xl text-xs font-bold text-emerald-300 flex items-center gap-1 shrink-0 shadow">
+                <span>👥</span> All Tribe
+            </button>
+            <button onclick="game.repairAllBuildings()" id="btnRepairAll" class="hidden stone-panel border-amber-500 px-2.5 py-1 rounded-xl text-xs font-bold text-amber-200 flex items-center gap-1 shrink-0 shadow">
+                <span>🔨</span> Repair Damaged
+            </button>
+            <!-- Dynamic Villager Roster Pills -->
+            <div id="tribeRosterBar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar"></div>
+        </div>
+
+        <!-- Main Dock Row: Inspector (Left) & Building Construction Bar (Right) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-2 pointer-events-auto">
+            <!-- Left Inspector Card (5 cols on desktop) -->
+            <div id="inspectorPanel" class="stone-panel rounded-2xl p-2.5 lg:col-span-5 flex items-center justify-between gap-3 min-h-[96px]">
+                <!-- Populated dynamically by updateInspectorUI() -->
+            </div>
+
+            <!-- Right Build Menu (7 cols on desktop) -->
+            <div class="stone-panel rounded-2xl p-2 lg:col-span-7 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <!-- Hut -->
+                <button onclick="game.startBuildMode('hut')" id="buildBtn_hut" class="wood-btn rounded-xl p-2 min-w-[98px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-xl leading-none mb-1">🛖 <span class="text-xs font-bold text-amber-100">Hut</span></div>
+                    <div class="text-[10px] text-amber-200 font-semibold">35🪵 15🪨</div>
+                    <div class="text-[9px] text-amber-100/80 mt-0.5">+3 Pop • Rest & Kids</div>
+                </button>
+                <!-- Kitchen -->
+                <button onclick="game.startBuildMode('kitchen')" id="buildBtn_kitchen" class="wood-btn rounded-xl p-2 min-w-[98px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-xl leading-none mb-1">🍖 <span class="text-xs font-bold text-amber-100">Kitchen</span></div>
+                    <div class="text-[10px] text-amber-200 font-semibold">40🪵 30🪨</div>
+                    <div class="text-[9px] text-amber-100/80 mt-0.5">Cooks Tasty Ribs</div>
+                </button>
+                <!-- Store Room -->
+                <button onclick="game.startBuildMode('storeroom')" id="buildBtn_storeroom" class="wood-btn rounded-xl p-2 min-w-[98px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-xl leading-none mb-1">🏺 <span class="text-xs font-bold text-amber-100">Store Room</span></div>
+                    <div class="text-[10px] text-amber-200 font-semibold">50🪵 40🪨</div>
+                    <div class="text-[9px] text-amber-100/80 mt-0.5">+150 Max Storage</div>
+                </button>
+                <!-- Armoury -->
+                <button onclick="game.startBuildMode('armoury')" id="buildBtn_armoury" class="wood-btn rounded-xl p-2 min-w-[98px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-xl leading-none mb-1">🦴 <span class="text-xs font-bold text-amber-100">Armoury</span></div>
+                    <div class="text-[10px] text-amber-200 font-semibold">55🪵 45🪨</div>
+                    <div class="text-[9px] text-amber-100/80 mt-0.5">Clubs & Bone Spears</div>
+                </button>
+                <!-- Prehistoric Gym -->
+                <button onclick="game.startBuildMode('gym')" id="buildBtn_gym" class="wood-btn rounded-xl p-2 min-w-[98px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-xl leading-none mb-1">🏋️ <span class="text-xs font-bold text-amber-100">Stone Gym</span></div>
+                    <div class="text-[10px] text-amber-200 font-semibold">45🪵 60🪨</div>
+                    <div class="text-[9px] text-amber-100/80 mt-0.5">Train STR & Speed</div>
+                </button>
+                <!-- Net Trap -->
+                <button onclick="game.startBuildMode('trap')" id="buildBtn_trap" class="wood-btn rounded-xl p-2 min-w-[98px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-xl leading-none mb-1">🕸️ <span class="text-xs font-bold text-amber-100">Net Trap</span></div>
+                    <div class="text-[10px] text-amber-200 font-semibold">20🪵 10🪨</div>
+                    <div class="text-[9px] text-amber-100/80 mt-0.5">Snares Cannibals</div>
+                </button>
+                <!-- Tribal Totem (Monument) -->
+                <button onclick="game.startBuildMode('totem')" id="buildBtn_totem" class="wood-btn rounded-xl p-2 min-w-[98px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-xl leading-none mb-1">🗿 <span class="text-xs font-bold text-amber-100">Sun Totem</span></div>
+                    <div class="text-[10px] text-amber-200 font-semibold">60🪵 80🪨</div>
+                    <div class="text-[9px] text-amber-100/80 mt-0.5">Heals & +Tribe Aura</div>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- NEW GAME / DIFFICULTY & CUSTOM SETUP MODAL -->
+    <div id="setupModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="stone-panel rounded-3xl max-w-xl w-full p-6 border-2 border-amber-500/70 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-stone-700 pb-3 mb-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-4xl">🦣</span>
+                    <div>
+                        <h1 class="font-cartoon text-2xl sm:text-3xl text-amber-400 leading-none">PREHISTORIC TRIBES</h1>
+                        <p class="text-xs text-stone-400 mt-1">2008 Stone Age Village & RTS Classic Edition</p>
+                    </div>
+                </div>
+                <button onclick="game.closeSetupModal()" class="stone-btn w-8 h-8 rounded-full text-sm font-bold">✕</button>
+            </div>
+
+            <p class="text-xs sm:text-sm text-stone-300 leading-relaxed mb-4">
+                The Ice Age is thawing! Guide your quirky cavemen out of their frozen Ancestral Cave. Gather wood, stone, and sabre-tooth meat, cook hearty ribs at the <strong>Kitchen</strong>, pump stone barbells at the <strong>Prehistoric Gym</strong>, grow your tribe in <strong>Huts</strong>, and fend off rival <strong>Cannibal Raids</strong>!
+            </p>
+
+            <!-- Preset Difficulty Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
+                <button onclick="game.selectDifficultyPreset('normal')" id="diffBtn_normal" class="p-3 rounded-2xl border-2 border-amber-500 bg-amber-950/40 text-left transition">
+                    <div class="font-cartoon text-base text-amber-300">🌿 Normal Valley</div>
+                    <div class="text-[11px] text-stone-300 mt-1">Generous resources, steady cannibal waves, smart cavemen.</div>
+                </button>
+                <button onclick="game.selectDifficultyPreset('hard')" id="diffBtn_hard" class="p-3 rounded-2xl border-2 border-stone-700 bg-stone-800/50 text-left transition">
+                    <div class="font-cartoon text-base text-rose-400">🌋 Hard Ice Age</div>
+                    <div class="text-[11px] text-stone-300 mt-1">Scarcer food, fierce & frequent cannibal raids, tougher wildlife.</div>
+                </button>
+                <button onclick="game.selectDifficultyPreset('authentic2008')" id="diffBtn_authentic2008" class="p-3 rounded-2xl border-2 border-stone-700 bg-stone-800/50 text-left transition">
+                    <div class="font-cartoon text-base text-purple-300">🦋 2008 Review Mode</div>
+                    <div class="text-[11px] text-stone-300 mt-1">Enables "Authentic Wander AI" where cavemen daydream mid-build!</div>
+                </button>
+            </div>
+
+            <!-- Custom Game Sliders -->
+            <div class="bg-stone-900/90 rounded-2xl p-3.5 border border-stone-700/80 space-y-3 mb-5">
+                <div class="text-xs font-bold uppercase tracking-wider text-amber-400">Custom Tribe Settings</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                        <label class="text-stone-400 block mb-1">Starting Resources</label>
+                        <select id="cfgResources" class="w-full bg-stone-800 border border-stone-600 rounded-xl px-2.5 py-1.5 text-stone-100 font-semibold">
+                            <option value="abundant">Abundant (140 Wood / 110 Stone / 80 Food)</option>
+                            <option value="standard" selected>Standard (100 Wood / 80 Stone / 60 Food)</option>
+                            <option value="lean">Lean Survival (65 Wood / 50 Stone / 35 Food)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-stone-400 block mb-1">Cannibal Raid Frequency</label>
+                        <select id="cfgRaidFreq" class="w-full bg-stone-800 border border-stone-600 rounded-xl px-2.5 py-1.5 text-stone-100 font-semibold">
+                            <option value="relaxed">Relaxed (Every 165s)</option>
+                            <option value="normal" selected>Standard (Every 130s)</option>
+                            <option value="relentless">Relentless (Every 95s)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-stone-400 block mb-1">Starting Tribe Size</label>
+                        <select id="cfgStartPop" class="w-full bg-stone-800 border border-stone-600 rounded-xl px-2.5 py-1.5 text-stone-100 font-semibold">
+                            <option value="3">3 Cavemen (Classic)</option>
+                            <option value="4" selected>4 Cavemen (Balanced)</option>
+                            <option value="6">6 Cavemen (Booming Clan)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-stone-400 block mb-1">Default Villager Discipline</label>
+                        <select id="cfgDiscipline" class="w-full bg-stone-800 border border-stone-600 rounded-xl px-2.5 py-1.5 text-stone-100 font-semibold">
+                            <option value="smart" selected>🧠 Smart AI Auto-Work</option>
+                            <option value="wander">🦋 2008 Authentic Wander Mode</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <button onclick="game.openGuideModal()" class="stone-btn px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-sky-300">
+                    <i class="fa-solid fa-book-open mr-1.5"></i>How to Play / Field Guide
+                </button>
+                <div class="flex gap-2">
+                    <button onclick="game.closeSetupModal()" class="stone-btn px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold">
+                        Resume Current
+                    </button>
+                    <button onclick="game.startNewGameFromModal()" class="wood-btn px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white">
+                        🔥 Start New Tribe!
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FIELD GUIDE / TUTORIAL MODAL -->
+    <div id="guideModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="stone-panel rounded-3xl max-w-2xl w-full p-6 border-2 border-sky-500/70 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-stone-700 pb-3 mb-4">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-3xl">📜</span>
+                    <div>
+                        <h2 class="font-cartoon text-2xl text-sky-300 leading-none">STONE AGE FIELD GUIDE</h2>
+                        <p class="text-xs text-stone-400 mt-1">Mastering Your Prehistoric Tribe</p>
+                    </div>
+                </div>
+                <button onclick="game.closeGuideModal()" class="stone-btn w-8 h-8 rounded-full text-sm font-bold">✕</button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-stone-200 mb-4">
+                <div class="bg-stone-900/80 p-3 rounded-2xl border border-stone-700">
+                    <div class="font-bold text-amber-400 text-sm mb-1">1. Selecting & Commanding 👋</div>
+                    <p class="text-stone-300 leading-relaxed">
+                        <strong>Click any Villager</strong> (or use the bottom roster bar) to select them. Then <strong>click any Tree, Boulder, Berry Bush, Animal, Building, or Raider</strong> to assign them! Drag the map or use <strong>WASD / Arrow Keys</strong> to pan.
+                    </p>
+                </div>
+                <div class="bg-stone-900/80 p-3 rounded-2xl border border-stone-700">
+                    <div class="font-bold text-orange-400 text-sm mb-1">2. Kitchen & Hunger 🍖</div>
+                    <p class="text-stone-300 leading-relaxed">
+                        Foraged berries and hunted meat give <strong>Raw Food (🍓)</strong>. Assign a villager to the <strong>Kitchen</strong> to roast 1 Raw Food into <strong>2 Sabre-Tooth Ribs (🍖)</strong>! Hungry villagers automatically eat Cooked Ribs to restore Stamina & Health.
+                    </p>
+                </div>
+                <div class="bg-stone-900/80 p-3 rounded-2xl border border-stone-700">
+                    <div class="font-bold text-pink-400 text-sm mb-1">3. Huts & Growing the Tribe 👶</div>
+                    <p class="text-stone-300 leading-relaxed">
+                        Each <strong>Hut</strong> adds +3 Max Population. Assign tired villagers to a Hut to sleep, or click <strong>"❤️ Grow Tribe"</strong> on a Hut (or send 2 adults inside) to spawn a <strong>Cave Child</strong> who grows into a full worker!
+                    </p>
+                </div>
+                <div class="bg-stone-900/80 p-3 rounded-2xl border border-stone-700">
+                    <div class="font-bold text-emerald-400 text-sm mb-1">4. Prehistoric Gym & Armoury 💪</div>
+                    <p class="text-stone-300 leading-relaxed">
+                        Build a <strong>Stone Gym</strong> so villagers can lift stone barbells and permanently level up <strong>Strength (STR)</strong> and <strong>Speed</strong>! Build an <strong>Armoury</strong> to craft <strong>Wooden Clubs</strong> and <strong>Bone Spears</strong>.
+                    </p>
+                </div>
+                <div class="bg-stone-900/80 p-3 rounded-2xl border border-stone-700">
+                    <div class="font-bold text-red-400 text-sm mb-1">5. Cannibal Raids & Net Traps 🕸️</div>
+                    <p class="text-stone-300 leading-relaxed">
+                        Watch the countdown timer! Rival cannibals attack periodically. Place <strong>Net Traps</strong> around your perimeter to snare raiders, and ring the <strong>📯 War Horn</strong> to rally all warriors to defend!
+                    </p>
+                </div>
+                <div class="bg-stone-900/80 p-3 rounded-2xl border border-stone-700">
+                    <div class="font-bold text-purple-300 text-sm mb-1">6. 2008 Review Easter Egg 🦋</div>
+                    <p class="text-stone-300 leading-relaxed">
+                        As noted in the <em>Pocket Gamer</em> review of <em>Prehistoric Tribes</em>, cavemen in 2008 sometimes wandered away from half-built huts! Toggle between <strong>Smart AI</strong> and <strong>2008 Wander Mode</strong> anytime on the top bar.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="game.closeGuideModal()" class="wood-btn px-6 py-2 rounded-xl text-sm font-bold text-white">Got It, Chief!</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * PREHISTORIC TRIBES - COMPLETE STONE AGE RTS & VILLAGE SIMULATION
+         * Inspired by the 2008 Java Mobile RTS reviewed by Pocket Gamer.
+         */
+
+        // --- SYNTHESIZED RETRO CARTOON SOUND ENGINE (Web Audio API) ---
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            play(type) {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+
+                try {
+                    if (type === 'chop') {
+                        // Wood thunk
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(160, now);
+                        osc.frequency.exponentialRampToValueAtTime(55, now + 0.09);
+                        gain.gain.setValueAtTime(0.22, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.09);
+                    } else if (type === 'mine') {
+                        // High metallic stone clink
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(980, now);
+                        osc.frequency.exponentialRampToValueAtTime(1420, now + 0.07);
+                        gain.gain.setValueAtTime(0.15, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.08);
+                    } else if (type === 'bonk') {
+                        // Cartoon club bonk
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(190, now);
+                        osc.frequency.exponentialRampToValueAtTime(340, now + 0.05);
+                        osc.frequency.exponentialRampToValueAtTime(90, now + 0.12);
+                        gain.gain.setValueAtTime(0.26, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.13);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.13);
+                    } else if (type === 'build') {
+                        // Cheerful completion chord
+                        [261.6, 329.6, 392.0, 523.2].forEach((freq, idx) => {
+                            const osc = this.ctx.createOscillator();
+                            const gain = this.ctx.createGain();
+                            osc.type = 'triangle';
+                            osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+                            gain.gain.setValueAtTime(0.16, now + idx * 0.06);
+                            gain.gain.exponentialRampToValueAtTime(0.008, now + idx * 0.06 + 0.22);
+                            osc.connect(gain);
+                            gain.connect(this.ctx.destination);
+                            osc.start(now + idx * 0.06);
+                            osc.stop(now + idx * 0.06 + 0.22);
+                        });
+                    } else if (type === 'baby') {
+                        // Cute rising giggle notes
+                        [520, 680, 580, 820].forEach((freq, idx) => {
+                            const osc = this.ctx.createOscillator();
+                            const gain = this.ctx.createGain();
+                            osc.type = 'sine';
+                            osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+                            gain.gain.setValueAtTime(0.18, now + idx * 0.07);
+                            gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.07 + 0.12);
+                            osc.connect(gain);
+                            gain.connect(this.ctx.destination);
+                            osc.start(now + idx * 0.07);
+                            osc.stop(now + idx * 0.07 + 0.12);
+                        });
+                    } else if (type === 'gym') {
+                        // Power-up fanfare
+                        [220, 277, 330, 440].forEach((freq, idx) => {
+                            const osc = this.ctx.createOscillator();
+                            const gain = this.ctx.createGain();
+                            osc.type = 'sawtooth';
+                            osc.frequency.setValueAtTime(freq, now + idx * 0.05);
+                            gain.gain.setValueAtTime(0.1, now + idx * 0.05);
+                            gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.05 + 0.15);
+                            osc.connect(gain);
+                            gain.connect(this.ctx.destination);
+                            osc.start(now + idx * 0.05);
+                            osc.stop(now + idx * 0.05 + 0.15);
+                        });
+                    } else if (type === 'horn') {
+                        // Deep Mammoth War Horn
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(110, now);
+                        osc.frequency.linearRampToValueAtTime(146.8, now + 0.35);
+                        osc.frequency.linearRampToValueAtTime(138, now + 0.85);
+                        gain.gain.setValueAtTime(0.01, now);
+                        gain.gain.linearRampToValueAtTime(0.24, now + 0.15);
+                        gain.gain.exponentialRampToValueAtTime(0.008, now + 0.9);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.9);
+                    } else if (type === 'trap') {
+                        // Net snap
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(420, now);
+                        osc.frequency.exponentialRampToValueAtTime(120, now + 0.11);
+                        gain.gain.setValueAtTime(0.18, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.11);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.11);
+                    } else if (type === 'select') {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(440, now);
+                        osc.frequency.exponentialRampToValueAtTime(580, now + 0.05);
+                        gain.gain.setValueAtTime(0.1, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.05);
+                    }
+                } catch (e) {
+                    // Ignore audio context restrictions
+                }
+            }
+        }
+
+        // --- BUILDING BLUEPRINTS ---
+        const BUILDING_SPECS = {
+            cave: {
+                name: 'Ancestral Ice Cave',
+                icon: '🏔️',
+                wood: 0,
+                stone: 0,
+                radius: 56,
+                maxHp: 800,
+                buildTime: 1,
+                desc: 'Your tribe emerged from this thawing Ice Age cavern. Safe drop-off point for all resources.'
+            },
+            hut: {
+                name: 'Fur Hut',
+                icon: '🛖',
+                wood: 35,
+                stone: 15,
+                radius: 34,
+                maxHp: 220,
+                buildTime: 100,
+                popBonus: 3,
+                desc: 'Adds +3 Population Capacity. Villagers rest here to restore Energy or pair up to make Cave Kids!'
+            },
+            kitchen: {
+                name: 'Sabre-Rib Kitchen',
+                icon: '🍖',
+                wood: 40,
+                stone: 30,
+                radius: 36,
+                maxHp: 250,
+                buildTime: 110,
+                desc: 'Roasts 1 Raw Food into 2 hearty Cooked Ribs! Keeps your tribe well-fed and energetic.'
+            },
+            storeroom: {
+                name: 'Stone Store Room',
+                icon: '🏺',
+                wood: 50,
+                stone: 40,
+                radius: 36,
+                maxHp: 300,
+                buildTime: 120,
+                storageBonus: 150,
+                desc: 'Expands your tribe storage capacity by +150 for Wood, Stone, Raw Food, and Cooked Ribs.'
+            },
+            armoury: {
+                name: 'Bone Armoury',
+                icon: '🦴',
+                wood: 55,
+                stone: 45,
+                radius: 38,
+                maxHp: 280,
+                buildTime: 130,
+                desc: 'Crafts Wooden Clubs (+7 DMG) and Heavy Bone Spears (+15 DMG) for your tribe warriors.'
+            },
+            gym: {
+                name: 'Prehistoric Gym',
+                icon: '🏋️',
+                wood: 45,
+                stone: 60,
+                radius: 40,
+                maxHp: 270,
+                buildTime: 130,
+                desc: 'Stone barbells & target dummies! Assigned villagers pump iron to permanently level up Strength & Speed.'
+            },
+            trap: {
+                name: 'Vine Net Trap',
+                icon: '🕸️',
+                wood: 20,
+                stone: 10,
+                radius: 22,
+                maxHp: 90,
+                buildTime: 45,
+                desc: 'Hidden perimeter snare that traps invading Cannibal Raiders for 7 seconds and makes them vulnerable!'
+            },
+            totem: {
+                name: 'Sun Spirit Totem',
+                icon: '🗿',
+                wood: 60,
+                stone: 80,
+                radius: 30,
+                maxHp: 350,
+                buildTime: 140,
+                desc: 'Sacred Stone Age monument that gently heals nearby tribe members and inspires faster work.'
+            }
+        };
+
+        const CAVEMAN_NAMES = [
+            "Grog", "Ugga", "Bambo", "Thag", "Zog", "Ooga", "Korg", "Lala",
+            "Torg", "Pebble", "Bonga", "Yabba", "Mook", "Grub", "Rokka", "Zuzu",
+            "Bamm", "Chaka", "Dodo", "Flink", "Gronk", "Huga"
+        ];
+
+        // --- MAIN GAME CONTROLLER ---
+        class PrehistoricTribesGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.minimapCanvas = document.getElementById('minimapCanvas');
+                this.minimapCtx = this.minimapCanvas.getContext('2d');
+                this.sfx = new SoundEngine();
+
+                // World dimensions
+                this.worldW = 2400;
+                this.worldH = 1800;
+
+                // Camera state
+                this.cam = {
+                    x: 1200,
+                    y: 520,
+                    zoom: 1.0,
+                    isDragging: false,
+                    dragStartX: 0,
+                    dragStartY: 0,
+                    camStartX: 0,
+                    camStartY: 0,
+                    movedDuringDrag: false
+                };
+
+                // Keyboard pan state
+                this.keys = {};
+
+                // Fog of war grid (40x30 cells, each 60x60 px)
+                this.fogCols = 40;
+                this.fogRows = 30;
+                this.fogCellW = this.worldW / this.fogCols;
+                this.fogCellH = this.worldH / this.fogRows;
+                this.fogGrid = []; // 0 = unexplored, 1 = explored
+
+                // Game speed & modes
+                this.speedMultiplier = 1;
+                this.paused = false;
+                this.disciplineMode = 'smart'; // 'smart' or 'wander' (2008 Pocket Gamer review mode)
+                this.townAlert = false;
+
+                // Placement state
+                this.buildMode = null; // building key or null
+                this.mouseWorldX = 1200;
+                this.mouseWorldY = 600;
+
+                // Game Entities
+                this.resources = {
+                    wood: 100,
+                    stone: 80,
+                    rawFood: 60,
+                    cookedFood: 40,
+                    clubs: 1,
+                    spears: 0,
+                    maxStorage: 200
+                };
+
+                this.buildings = [];
+                this.nodes = []; // Trees, Boulders, Bushes, Ancient Totems
+                this.wildlife = []; // Dodos, Boars, Sabre-Tigers, Mammoths
+                this.villagers = [];
+                this.raiders = [];
+                this.particles = [];
+                this.floatTexts = [];
+                this.butterflies = [];
+                this.scenery = [];
+
+                // Selection state
+                this.selectedEntity = null; // single building, resource, wildlife, or villager
+                this.selectedVillagers = []; // supports multi-villager selection
+
+                // Wave system
+                this.waveNumber = 1;
+                this.raidInterval = 130;
+                this.raidCountdown = 130;
+
+                // Bind input events
+                this.setupEvents();
+                this.resizeCanvas();
+
+                // Initialize default world so canvas is alive behind the welcome modal
+                this.initWorld({
+                    resourcePreset: 'standard',
+                    raidFreq: 'normal',
+                    startPop: 4,
+                    discipline: 'smart'
+                });
+
+                this.lastTime = performance.now();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            // --- SETUP & DIFFICULTY PRESETS ---
+            selectDifficultyPreset(preset) {
+                ['normal', 'hard', 'authentic2008'].forEach(k => {
+                    const btn = document.getElementById('diffBtn_' + k);
+                    if (btn) {
+                        btn.className = (k === preset)
+                            ? 'p-3 rounded-2xl border-2 border-amber-500 bg-amber-950/40 text-left transition'
+                            : 'p-3 rounded-2xl border-2 border-stone-700 bg-stone-800/50 text-left transition';
+                    }
+                });
+
+                if (preset === 'normal') {
+                    document.getElementById('cfgResources').value = 'standard';
+                    document.getElementById('cfgRaidFreq').value = 'normal';
+                    document.getElementById('cfgStartPop').value = '4';
+                    document.getElementById('cfgDiscipline').value = 'smart';
+                } else if (preset === 'hard') {
+                    document.getElementById('cfgResources').value = 'lean';
+                    document.getElementById('cfgRaidFreq').value = 'relentless';
+                    document.getElementById('cfgStartPop').value = '3';
+                    document.getElementById('cfgDiscipline').value = 'smart';
+                } else if (preset === 'authentic2008') {
+                    document.getElementById('cfgResources').value = 'standard';
+                    document.getElementById('cfgRaidFreq').value = 'normal';
+                    document.getElementById('cfgStartPop').value = '4';
+                    document.getElementById('cfgDiscipline').value = 'wander';
+                }
+            }
+
+            startNewGameFromModal() {
+                const resourcePreset = document.getElementById('cfgResources').value;
+                const raidFreq = document.getElementById('cfgRaidFreq').value;
+                const startPop = parseInt(document.getElementById('cfgStartPop').value, 10) || 4;
+                const discipline = document.getElementById('cfgDiscipline').value;
+
+                this.initWorld({ resourcePreset, raidFreq, startPop, discipline });
+                this.closeSetupModal();
+                this.sfx.play('build');
+                this.showBanner('🦣', 'A new Stone Age era begins! Click a villager to assign tasks.');
+            }
+
+            openSetupModal() {
+                document.getElementById('setupModal').classList.remove('hidden');
+            }
+            closeSetupModal() {
+                document.getElementById('setupModal').classList.add('hidden');
+            }
+            openGuideModal() {
+                document.getElementById('guideModal').classList.remove('hidden');
+            }
+            closeGuideModal() {
+                document.getElementById('guideModal').classList.add('hidden');
+            }
+
+            // --- WORLD INITIALIZATION ---
+            initWorld(cfg) {
+                this.buildings = [];
+                this.nodes = [];
+                this.wildlife = [];
+                this.villagers = [];
+                this.raiders = [];
+                this.particles = [];
+                this.floatTexts = [];
+                this.butterflies = [];
+                this.scenery = [];
+                this.selectedEntity = null;
+                this.selectedVillagers = [];
+                this.townAlert = false;
+                this.updateWarHornUI();
+
+                // Set discipline mode
+                this.disciplineMode = cfg.discipline || 'smart';
+                this.updateDisciplineUI();
+
+                // Resources
+                if (cfg.resourcePreset === 'abundant') {
+                    this.resources = { wood: 140, stone: 110, rawFood: 80, cookedFood: 55, clubs: 2, spears: 1, maxStorage: 200 };
+                } else if (cfg.resourcePreset === 'lean') {
+                    this.resources = { wood: 65, stone: 50, rawFood: 35, cookedFood: 25, clubs: 1, spears: 0, maxStorage: 200 };
+                } else {
+                    this.resources = { wood: 100, stone: 80, rawFood: 60, cookedFood: 40, clubs: 1, spears: 0, maxStorage: 200 };
+                }
+
+                // Raid timer
+                this.waveNumber = 1;
+                this.raidInterval = cfg.raidFreq === 'relaxed' ? 165 : (cfg.raidFreq === 'relentless' ? 95 : 130);
+                this.raidCountdown = this.raidInterval;
+
+                // Reset Fog of War
+                this.fogGrid = new Array(this.fogCols * this.fogRows).fill(0);
+
+                // Decorative background pebbles & grass tufts
+                for (let i = 0; i < 220; i++) {
+                    this.scenery.push({
+                        x: 80 + Math.random() * (this.worldW - 160),
+                        y: 120 + Math.random() * (this.worldH - 200),
+                        type: Math.random() < 0.65 ? 'grass' : (Math.random() < 0.5 ? 'flower' : 'pebble'),
+                        color: ['#4d7c0f', '#65a30d', '#84cc16', '#facc15', '#fb923c'][Math.floor(Math.random() * 5)],
+                        scale: 0.7 + Math.random() * 0.6
+                    });
+                }
+
+                // Ambient butterflies (especially fun in 2008 Wander mode!)
+                for (let i = 0; i < 16; i++) {
+                    this.butterflies.push({
+                        x: 300 + Math.random() * (this.worldW - 600),
+                        y: 300 + Math.random() * (this.worldH - 600),
+                        vx: (Math.random() - 0.5) * 30,
+                        vy: (Math.random() - 0.5) * 30,
+                        color: ['#f472b6', '#38bdf8', '#facc15', '#c084fc'][i % 4],
+                        phase: Math.random() * Math.PI * 2
+                    });
+                }
+
+                // 1. Place Starting Ancestral Ice Cave at North-Center
+                const caveX = 1200;
+                const caveY = 300;
+                this.buildings.push({
+                    id: 'bld_cave',
+                    type: 'cave',
+                    x: caveX,
+                    y: caveY,
+                    hp: 800,
+                    maxHp: 800,
+                    built: true,
+                    progress: 1,
+                    radius: BUILDING_SPECS.cave.radius,
+                    cookTimer: 0,
+                    craftTimer: 0,
+                    craftQueue: []
+                });
+
+                // 2. Place one starting Hut & one starting Kitchen near the cave so new players can immediately test features
+                this.buildings.push({
+                    id: 'bld_start_hut',
+                    type: 'hut',
+                    x: caveX - 150,
+                    y: caveY + 130,
+                    hp: BUILDING_SPECS.hut.maxHp,
+                    maxHp: BUILDING_SPECS.hut.maxHp,
+                    built: true,
+                    progress: 1,
+                    radius: BUILDING_SPECS.hut.radius,
+                    loveCooldown: 0
+                });
+
+                this.buildings.push({
+                    id: 'bld_start_kitchen',
+                    type: 'kitchen',
+                    x: caveX + 155,
+                    y: caveY + 125,
+                    hp: BUILDING_SPECS.kitchen.maxHp,
+                    maxHp: BUILDING_SPECS.kitchen.maxHp,
+                    built: true,
+                    progress: 1,
+                    radius: BUILDING_SPECS.kitchen.radius,
+                    cookTimer: 0
+                });
+
+                // 3. Generate Resource Nodes (Trees, Boulders, Berry Bushes, & Discovery Totems)
+                this.spawnResourceCluster(caveX - 290, caveY + 60, 'tree', 6, 110);
+                this.spawnResourceCluster(caveX + 290, caveY + 80, 'stone', 5, 95);
+                this.spawnResourceCluster(caveX - 60, caveY + 250, 'bush', 5, 85);
+
+                // Outer valley clusters
+                for (let i = 0; i < 12; i++) {
+                    const cx = 220 + Math.random() * (this.worldW - 440);
+                    const cy = 260 + Math.random() * (this.worldH - 420);
+                    if (Math.hypot(cx - caveX, cy - caveY) < 350) continue;
+                    const rType = i % 3 === 0 ? 'tree' : (i % 3 === 1 ? 'stone' : 'bush');
+                    this.spawnResourceCluster(cx, cy, rType, 4 + Math.floor(Math.random() * 4), 110);
+                }
+
+                // Hidden Ancient Totems in Fog of War (grant instant discovery bonuses)
+                const totemSpots = [
+                    { x: 350, y: 420 },
+                    { x: 2050, y: 460 },
+                    { x: 420, y: 1420 },
+                    { x: 1980, y: 1380 }
+                ];
+                totemSpots.forEach((pt, idx) => {
+                    this.nodes.push({
+                        id: 'relic_' + idx,
+                        type: 'relic',
+                        name: 'Ancient Ice Relic',
+                        x: pt.x,
+                        y: pt.y,
+                        amount: 1,
+                        maxAmount: 1,
+                        radius: 26,
+                        discovered: false
+                    });
+                });
+
+                // 4. Spawn Prehistoric Wildlife (Dodos, Boars, Sabre-Toothed Tigers, Woolly Mammoths)
+                for (let i = 0; i < 10; i++) {
+                    this.spawnWildlife('dodo', 300 + Math.random() * (this.worldW - 600), 380 + Math.random() * (this.worldH - 600));
+                }
+                for (let i = 0; i < 6; i++) {
+                    this.spawnWildlife('boar', 260 + Math.random() * (this.worldW - 520), 520 + Math.random() * (this.worldH - 680));
+                }
+                for (let i = 0; i < 4; i++) {
+                    this.spawnWildlife('tiger', 250 + Math.random() * (this.worldW - 500), 850 + Math.random() * (this.worldH - 950));
+                }
+                for (let i = 0; i < 2; i++) {
+                    this.spawnWildlife('mammoth', 450 + i * 1400, 1250 + (Math.random() - 0.5) * 200);
+                }
+
+                // 5. Spawn Starting Tribe Villagers
+                const count = cfg.startPop || 4;
+                for (let i = 0; i < count; i++) {
+                    const angle = (i / count) * Math.PI * 2;
+                    const vx = caveX + Math.cos(angle) * 75;
+                    const vy = caveY + 95 + Math.sin(angle) * 45;
+                    const v = this.createVillager(vx, vy, false);
+                    if (i === 0) v.weapon = 'club'; // First tribal warrior starts with a club
+                }
+
+                // Reveal initial Fog of War around Cave & starting villagers
+                this.revealFog(caveX, caveY, 440);
+                this.centerOnCave();
+                this.selectVillager(this.villagers[0], false);
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            spawnResourceCluster(cx, cy, type, count, spread) {
+                for (let i = 0; i < count; i++) {
+                    const nx = Math.max(90, Math.min(this.worldW - 90, cx + (Math.random() - 0.5) * spread * 2));
+                    const ny = Math.max(180, Math.min(this.worldH - 90, cy + (Math.random() - 0.5) * spread * 2));
+                    const maxAmt = type === 'tree' ? 90 : (type === 'stone' ? 110 : 75);
+                    this.nodes.push({
+                        id: 'node_' + Math.random().toString(36).slice(2, 9),
+                        type: type, // 'tree', 'stone', 'bush'
+                        name: type === 'tree' ? 'Prehistoric Pine' : (type === 'stone' ? 'Flint Boulder' : 'Wild Berry Bush'),
+                        x: nx,
+                        y: ny,
+                        amount: maxAmt,
+                        maxAmount: maxAmt,
+                        radius: type === 'stone' ? 25 : 22,
+                        swaySeed: Math.random() * 10,
+                        regrowTimer: 0
+                    });
+                }
+            }
+
+            spawnWildlife(species, x, y) {
+                const specs = {
+                    dodo: { name: 'Plump Dodo', hp: 35, speed: 42, dmg: 0, meat: 35, radius: 15, aggressive: false },
+                    boar: { name: 'Tusked Wild Boar', hp: 85, speed: 58, dmg: 6, meat: 65, radius: 19, aggressive: false },
+                    tiger: { name: 'Sabre-Tooth Tiger', hp: 145, speed: 78, dmg: 13, meat: 110, radius: 22, aggressive: true },
+                    mammoth: { name: 'Woolly Mammoth', hp: 340, speed: 45, dmg: 22, meat: 240, radius: 34, aggressive: false }
+                };
+                const s = specs[species];
+                this.wildlife.push({
+                    id: 'wild_' + Math.random().toString(36).slice(2, 9),
+                    species,
+                    name: s.name,
+                    x,
+                    y,
+                    vx: 0,
+                    vy: 0,
+                    hp: s.hp,
+                    maxHp: s.hp,
+                    speed: s.speed,
+                    dmg: s.dmg,
+                    meat: s.meat,
+                    radius: s.radius,
+                    aggressive: s.aggressive,
+                    state: 'wander',
+                    wanderTimer: 1 + Math.random() * 4,
+                    targetX: x,
+                    targetY: y,
+                    attackCooldown: 0,
+                    facing: 1,
+                    animPhase: Math.random() * 6
+                });
+            }
+
+            createVillager(x, y, isChild = false) {
+                const usedNames = new Set(this.villagers.map(v => v.name));
+                let name = CAVEMAN_NAMES.find(n => !usedNames.has(n)) || (CAVEMAN_NAMES[Math.floor(Math.random() * CAVEMAN_NAMES.length)] + ' Jr');
+                const v = {
+                    id: 'vil_' + Math.random().toString(36).slice(2, 9),
+                    name,
+                    x,
+                    y,
+                    radius: isChild ? 12 : 16,
+                    isChild,
+                    growthProgress: isChild ? 0 : 100, // Grows to 100 in ~35 seconds
+                    hp: isChild ? 50 : 100,
+                    maxHp: isChild ? 50 : 100,
+                    hunger: 100, // 100 = full, 0 = starving
+                    energy: 100, // 100 = rested, 0 = exhausted
+                    strLevel: 1,
+                    spdLevel: 1,
+                    gymXp: 0,
+                    weapon: 'none', // 'none', 'club', 'spear'
+                    task: isChild ? 'growing' : 'idle', // 'idle', 'move', 'chop', 'mine', 'forage', 'hunt', 'build', 'cook', 'craft', 'gym', 'rest', 'love', 'attack', 'wander2008'
+                    targetId: null,
+                    targetX: x,
+                    targetY: y,
+                    carryType: null,
+                    carryAmount: 0,
+                    actionTimer: 0,
+                    wanderCheckTimer: 6 + Math.random() * 8,
+                    bubble: isChild ? '👶' : '👋',
+                    bubbleTimer: 3.0,
+                    facing: 1,
+                    animPhase: Math.random() * Math.PI * 2,
+                    furColor: ['#b45309', '#92400e', '#78350f', '#a16207'][Math.floor(Math.random() * 4)],
+                    hairStyle: Math.floor(Math.random() * 3)
+                };
+                this.villagers.push(v);
+                return v;
+            }
+
+            // --- FOG OF WAR ---
+            revealFog(wx, wy, radius) {
+                const minC = Math.max(0, Math.floor((wx - radius) / this.fogCellW));
+                const maxC = Math.min(this.fogCols - 1, Math.floor((wx + radius) / this.fogCellW));
+                const minR = Math.max(0, Math.floor((wy - radius) / this.fogCellH));
+                const maxR = Math.min(this.fogRows - 1, Math.floor((wy + radius) / this.fogCellH));
+
+                for (let r = minR; r <= maxR; r++) {
+                    for (let c = minC; c <= maxC; c++) {
+                        const cellCenterX = (c + 0.5) * this.fogCellW;
+                        const cellCenterY = (r + 0.5) * this.fogCellH;
+                        if (Math.hypot(cellCenterX - wx, cellCenterY - wy) <= radius) {
+                            this.fogGrid[r * this.fogCols + c] = 1;
+                        }
+                    }
+                }
+            }
+
+            isPointExplored(wx, wy) {
+                const c = Math.max(0, Math.min(this.fogCols - 1, Math.floor(wx / this.fogCellW)));
+                const r = Math.max(0, Math.min(this.fogRows - 1, Math.floor(wy / this.fogCellH)));
+                return this.fogGrid[r * this.fogCols + c] === 1;
+            }
+
+            // --- POPULATION & STORAGE HELPERS ---
+            getMaxPop() {
+                let cap = 3; // Base Ancestral Cave capacity
+                for (const b of this.buildings) {
+                    if (b.built && b.type === 'hut') cap += BUILDING_SPECS.hut.popBonus;
+                }
+                return cap;
+            }
+
+            getMaxStorage() {
+                let cap = 200;
+                for (const b of this.buildings) {
+                    if (b.built && b.type === 'storeroom') cap += BUILDING_SPECS.storeroom.storageBonus;
+                }
+                return cap;
+            }
+
+            addResource(type, amt) {
+                const cap = this.getMaxStorage();
+                this.resources.maxStorage = cap;
+                if (type === 'wood') this.resources.wood = Math.min(cap, this.resources.wood + amt);
+                if (type === 'stone') this.resources.stone = Math.min(cap, this.resources.stone + amt);
+                if (type === 'rawFood') this.resources.rawFood = Math.min(cap, this.resources.rawFood + amt);
+                if (type === 'cookedFood') this.resources.cookedFood = Math.min(cap, this.resources.cookedFood + amt);
+            }
+
+            // --- UI TOGGLES & CONTROLS ---
+            setSpeed(mult) {
+                this.speedMultiplier = mult;
+                this.paused = false;
+                document.getElementById('btnSpd1').classList.toggle('active-btn', mult === 1);
+                document.getElementById('btnSpd2').classList.toggle('active-btn', mult === 2);
+                document.getElementById('btnPause').classList.remove('active-btn');
+            }
+
+            togglePause() {
+                this.paused = !this.paused;
+                document.getElementById('btnPause').classList.toggle('active-btn', this.paused);
+                if (this.paused) {
+                    this.showBanner('⏸️', 'Game Paused');
+                } else {
+                    this.showBanner('▶️', 'Game Resumed');
+                }
+            }
+
+            toggleAudio() {
+                this.sfx.muted = !this.sfx.muted;
+                const icon = document.getElementById('audioIcon');
+                icon.className = this.sfx.muted ? 'fa-solid fa-volume-xmark text-stone-500' : 'fa-solid fa-volume-high text-amber-300';
+            }
+
+            toggleDisciplineMode() {
+                this.disciplineMode = this.disciplineMode === 'smart' ? 'wander' : 'smart';
+                this.updateDisciplineUI();
+                if (this.disciplineMode === 'wander') {
+                    this.showBanner('🦋', '2008 Authentic Wander Mode ON! Keep an eye on easily-distracted builders!');
+                } else {
+                    this.showBanner('🧠', 'Smart AI Auto-Work Mode ON! Villagers stay focused on tasks.');
+                }
+            }
+
+            updateDisciplineUI() {
+                const icon = document.getElementById('disciplineIcon');
+                const label = document.getElementById('disciplineLabel');
+                const btn = document.getElementById('btnDiscipline');
+                if (this.disciplineMode === 'wander') {
+                    icon.textContent = '🦋';
+                    label.textContent = 'AI: 2008 Wander';
+                    btn.classList.add('active-btn');
+                } else {
+                    icon.textContent = '🧠';
+                    label.textContent = 'AI: Smart Tribe';
+                    btn.classList.remove('active-btn');
+                }
+            }
+
+            toggleTownAlert() {
+                this.townAlert = !this.townAlert;
+                this.sfx.play('horn');
+                this.updateWarHornUI();
+
+                if (this.townAlert) {
+                    this.showBanner('📯', 'WAR HORN SOUNDED! All adult tribe members are rallying to defend!');
+                    // Auto-equip available weapons & engage raiders or rally near village center
+                    for (const v of this.villagers) {
+                        if (v.isChild) continue;
+                        this.tryAutoEquipVillager(v);
+                        const nearestRaider = this.findNearestRaider(v.x, v.y, 900);
+                        if (nearestRaider) {
+                            v.task = 'attack';
+                            v.targetId = nearestRaider.id;
+                            this.setBubble(v, '⚔️');
+                        } else {
+                            v.task = 'move';
+                            v.targetX = 1200 + (Math.random() - 0.5) * 180;
+                            v.targetY = 440 + (Math.random() - 0.5) * 120;
+                            this.setBubble(v, '📯');
+                        }
+                    }
+                } else {
+                    this.showBanner('🕊️', 'All Clear! Tribe returning to peaceful Stone Age duties.');
+                    for (const v of this.villagers) {
+                        if (!v.isChild && (v.task === 'attack' || v.task === 'move')) {
+                            v.task = 'idle';
+                            this.setBubble(v, '👍');
+                        }
+                    }
+                }
+                this.updateInspectorUI();
+            }
+
+            updateWarHornUI() {
+                const btn = document.getElementById('btnWarHorn');
+                const lbl = document.getElementById('warHornLabel');
+                if (this.townAlert) {
+                    btn.classList.add('active-btn', 'raid-alert');
+                    lbl.textContent = 'All Clear';
+                } else {
+                    btn.classList.remove('active-btn', 'raid-alert');
+                    lbl.textContent = 'War Horn';
+                }
+            }
+
+            showBanner(icon, text) {
+                const banner = document.getElementById('eventBanner');
+                document.getElementById('eventBannerIcon').textContent = icon;
+                document.getElementById('eventBannerText').textContent = text;
+                banner.classList.remove('opacity-0', 'translate-y-[-10px]');
+                banner.classList.add('opacity-100', 'translate-y-0');
+                clearTimeout(this.bannerTimeout);
+                this.bannerTimeout = setTimeout(() => {
+                    banner.classList.add('opacity-0', 'translate-y-[-10px]');
+                    banner.classList.remove('opacity-100', 'translate-y-0');
+                }, 4200);
+            }
+
+            // --- BUILDING PLACEMENT & REPAIR ---
+            startBuildMode(type) {
+                const spec = BUILDING_SPECS[type];
+                if (!spec) return;
+                if (this.resources.wood < spec.wood || this.resources.stone < spec.stone) {
+                    this.showBanner('⚠️', `Need ${spec.wood} Wood & ${spec.stone} Stone to build a ${spec.name}!`);
+                    return;
+                }
+                this.buildMode = type;
+                document.getElementById('placingBuildingName').textContent = spec.name;
+                document.getElementById('buildPlacementBanner').classList.remove('hidden');
+            }
+
+            cancelBuildMode() {
+                this.buildMode = null;
+                document.getElementById('buildPlacementBanner').classList.add('hidden');
+            }
+
+            isValidBuildSpot(x, y, radius) {
+                if (x < 100 || x > this.worldW - 100 || y < 220 || y > this.worldH - 120) return false;
+                if (!this.isPointExplored(x, y)) return false;
+                for (const b of this.buildings) {
+                    if (Math.hypot(b.x - x, b.y - y) < b.radius + radius + 24) return false;
+                }
+                for (const n of this.nodes) {
+                    if (n.amount > 0 && Math.hypot(n.x - x, n.y - y) < n.radius + radius + 12) return false;
+                }
+                return true;
+            }
+
+            confirmBuildPlacement(wx, wy) {
+                if (!this.buildMode) return;
+                const spec = BUILDING_SPECS[this.buildMode];
+                if (!this.isValidBuildSpot(wx, wy, spec.radius)) {
+                    this.showBanner('🚫', 'Cannot build there! Choose clear explored ground away from other objects.');
+                    return;
+                }
+                if (this.resources.wood < spec.wood || this.resources.stone < spec.stone) {
+                    this.showBanner('⚠️', `Not enough resources for ${spec.name}!`);
+                    this.cancelBuildMode();
+                    return;
+                }
+
+                this.resources.wood -= spec.wood;
+                this.resources.stone -= spec.stone;
+
+                const newBld = {
+                    id: 'bld_' + Math.random().toString(36).slice(2, 9),
+                    type: this.buildMode,
+                    x: wx,
+                    y: wy,
+                    hp: Math.max(25, Math.floor(spec.maxHp * 0.2)),
+                    maxHp: spec.maxHp,
+                    built: false,
+                    progress: 0,
+                    radius: spec.radius,
+                    cookTimer: 0,
+                    craftTimer: 0,
+                    loveCooldown: 0,
+                    armed: true
+                };
+                this.buildings.push(newBld);
+                this.sfx.play('chop');
+
+                // Automatically assign selected villagers (or nearest idle villager) to build it!
+                const builders = this.selectedVillagers.filter(v => !v.isChild);
+                if (builders.length > 0) {
+                    builders.forEach(v => this.assignVillagerToObject(v, newBld));
+                } else {
+                    const idleV = this.villagers.find(v => !v.isChild && v.task === 'idle');
+                    if (idleV) this.assignVillagerToObject(idleV, newBld);
+                }
+
+                this.cancelBuildMode();
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            repairAllBuildings() {
+                const damaged = this.buildings.filter(b => !b.built || b.hp < b.maxHp);
+                if (damaged.length === 0) return;
+                let assigned = 0;
+                for (const v of this.villagers) {
+                    if (!v.isChild && (v.task === 'idle' || v.task === 'chop' || v.task === 'mine')) {
+                        const target = damaged[assigned % damaged.length];
+                        this.assignVillagerToObject(v, target);
+                        assigned++;
+                    }
+                }
+                this.showBanner('🔨', `Assigned ${assigned} tribe members to build & repair structures!`);
+            }
+
+            // --- CANNIBAL RAIDS ---
+            callWaveEarly() {
+                this.addResource('wood', 30);
+                this.addResource('stone', 30);
+                this.addFloatText(1200, 320, '+30🪵 +30🪨 Bravery Bonus!', '#facc15');
+                this.triggerCannibalRaid();
+            }
+
+            triggerCannibalRaid() {
+                this.sfx.play('horn');
+                const count = 2 + Math.floor(this.waveNumber * 1.35);
+                const spawnAngles = [0.15 * Math.PI, 0.5 * Math.PI, 0.85 * Math.PI];
+                const angle = spawnAngles[Math.floor(Math.random() * spawnAngles.length)];
+                const baseX = Math.max(140, Math.min(this.worldW - 140, 1200 + Math.cos(angle) * 920));
+                const baseY = Math.max(400, Math.min(this.worldH - 140, 450 + Math.sin(angle) * 1050));
+
+                for (let i = 0; i < count; i++) {
+                    const isBoss = (i === 0 && this.waveNumber >= 2);
+                    const rx = baseX + (Math.random() - 0.5) * 130;
+                    const ry = baseY + (Math.random() - 0.5) * 130;
+                    this.raiders.push({
+                        id: 'raid_' + Math.random().toString(36).slice(2, 9),
+                        name: isBoss ? 'Cannibal Chieftain' : 'Cannibal Raider',
+                        isBoss,
+                        x: rx,
+                        y: ry,
+                        radius: isBoss ? 20 : 16,
+                        hp: (isBoss ? 140 : 75) + this.waveNumber * 14,
+                        maxHp: (isBoss ? 140 : 75) + this.waveNumber * 14,
+                        dmg: (isBoss ? 15 : 9) + Math.floor(this.waveNumber * 1.5),
+                        speed: isBoss ? 52 : 62,
+                        trappedTimer: 0,
+                        attackCooldown: 0,
+                        facing: 1,
+                        animPhase: Math.random() * 6
+                    });
+                }
+
+                this.revealFog(baseX, baseY, 220);
+                this.showBanner('🥁', `CANNIBAL RAID WAVE ${this.waveNumber}! ${count} Vicious Cannibals approaching!`);
+                this.waveNumber++;
+                this.raidCountdown = this.raidInterval;
+            }
+
+            // --- SELECTION & ASSIGNMENT LOGIC ---
+            selectVillager(v, additive = false) {
+                if (!v) return;
+                this.sfx.play('select');
+                if (!additive) {
+                    this.selectedVillagers = [v];
+                } else if (!this.selectedVillagers.includes(v)) {
+                    this.selectedVillagers.push(v);
+                }
+                this.selectedEntity = v;
+                this.updateInspectorUI();
+            }
+
+            selectIdleVillagers() {
+                const idles = this.villagers.filter(v => !v.isChild && (v.task === 'idle' || v.task === 'wander2008'));
+                if (idles.length === 0) {
+                    this.showBanner('👍', 'No idle adult villagers right now!');
+                    return;
+                }
+                this.selectedVillagers = idles;
+                this.selectedEntity = idles[0];
+                this.cam.x = idles[0].x;
+                this.cam.y = idles[0].y;
+                this.sfx.play('select');
+                this.updateInspectorUI();
+            }
+
+            selectAllWarriors() {
+                const warriors = this.villagers.filter(v => !v.isChild && v.weapon !== 'none');
+                const pool = warriors.length > 0 ? warriors : this.villagers.filter(v => !v.isChild);
+                if (pool.length === 0) return;
+                this.selectedVillagers = pool;
+                this.selectedEntity = pool[0];
+                this.sfx.play('select');
+                this.updateInspectorUI();
+            }
+
+            selectAllVillagers() {
+                const adults = this.villagers.filter(v => !v.isChild);
+                if (adults.length === 0) return;
+                this.selectedVillagers = adults;
+                this.selectedEntity = adults[0];
+                this.sfx.play('select');
+                this.updateInspectorUI();
+            }
+
+            setBubble(v, emoji, duration = 2.8) {
+                v.bubble = emoji;
+                v.bubbleTimer = duration;
+            }
+
+            assignVillagerToObject(v, obj) {
+                if (!v || v.isChild) return;
+                v.targetId = obj.id;
+                v.wanderCheckTimer = 8 + Math.random() * 10;
+
+                if (obj.type === 'tree') {
+                    v.task = 'chop';
+                    this.setBubble(v, '🪓');
+                } else if (obj.type === 'stone') {
+                    v.task = 'mine';
+                    this.setBubble(v, '⛏️');
+                } else if (obj.type === 'bush') {
+                    v.task = 'forage';
+                    this.setBubble(v, '🍓');
+                } else if (obj.type === 'relic') {
+                    v.task = 'move';
+                    v.targetX = obj.x;
+                    v.targetY = obj.y;
+                    this.setBubble(v, '✨');
+                } else if (obj.species) {
+                    // Wildlife
+                    v.task = 'hunt';
+                    this.setBubble(v, '🏹');
+                } else if (obj.id && obj.id.startsWith('raid_')) {
+                    // Enemy Cannibal Raider
+                    v.task = 'attack';
+                    this.setBubble(v, '⚔️');
+                } else if (obj.id && obj.id.startsWith('bld_')) {
+                    // Building
+                    if (!obj.built || obj.hp < obj.maxHp) {
+                        v.task = 'build';
+                        this.setBubble(v, '🔨');
+                    } else if (obj.type === 'kitchen') {
+                        v.task = 'cook';
+                        this.setBubble(v, '🍖');
+                    } else if (obj.type === 'gym') {
+                        v.task = 'gym';
+                        this.setBubble(v, '💪');
+                    } else if (obj.type === 'armoury') {
+                        v.task = 'craft';
+                        this.setBubble(v, '🦴');
+                    } else if (obj.type === 'hut') {
+                        // Check if another adult is already resting/waiting in this hut for procreation
+                        const mate = this.villagers.find(other =>
+                            other.id !== v.id && !other.isChild &&
+                            (other.task === 'rest' || other.task === 'love') &&
+                            other.targetId === obj.id
+                        );
+                        if (mate && this.villagers.length < this.getMaxPop() && (obj.loveCooldown || 0) <= 0) {
+                            v.task = 'love';
+                            mate.task = 'love';
+                            this.setBubble(v, '❤️');
+                            this.setBubble(mate, '❤️');
+                        } else {
+                            v.task = 'rest';
+                            this.setBubble(v, '💤');
+                        }
+                    } else if (obj.type === 'trap' && !obj.armed) {
+                        v.task = 'build';
+                        this.setBubble(v, '🕸️');
+                    } else {
+                        v.task = 'move';
+                        v.targetX = obj.x;
+                        v.targetY = obj.y + obj.radius + 18;
+                        this.setBubble(v, '👣');
+                    }
+                }
+                this.updateInspectorUI();
+            }
+
+            // Quick Action Buttons from Inspector
+            commandSelectedVillager(cmd) {
+                const activeList = this.selectedVillagers.filter(v => !v.isChild);
+                if (activeList.length === 0) return;
+
+                for (const v of activeList) {
+                    if (cmd === 'eat') {
+                        if (this.resources.cookedFood > 0) {
+                            this.resources.cookedFood--;
+                            v.hunger = Math.min(100, v.hunger + 65);
+                            v.hp = Math.min(v.maxHp, v.hp + 25);
+                            this.setBubble(v, '🍖');
+                            this.addFloatText(v.x, v.y - 20, '+65 Fullness!', '#fb923c');
+                        } else if (this.resources.rawFood > 0) {
+                            this.resources.rawFood--;
+                            v.hunger = Math.min(100, v.hunger + 30);
+                            this.setBubble(v, '🍓');
+                            this.addFloatText(v.x, v.y - 20, '+30 Fullness', '#fda4af');
+                        } else {
+                            this.showBanner('🍓', 'No food in storage! Gather berries or hunt wildlife!');
+                        }
+                    } else if (cmd === 'rest') {
+                        const hut = this.buildings.find(b => b.built && b.type === 'hut') || this.buildings[0];
+                        if (hut) this.assignVillagerToObject(v, hut);
+                    } else if (cmd === 'gym') {
+                        const gym = this.buildings.find(b => b.built && b.type === 'gym');
+                        if (gym) {
+                            this.assignVillagerToObject(v, gym);
+                        } else {
+                            this.showBanner('🏋️', 'Build a Prehistoric Stone Gym first so villagers can train!');
+                        }
+                    } else if (cmd === 'equip') {
+                        if (!this.tryAutoEquipVillager(v)) {
+                            const arm = this.buildings.find(b => b.built && b.type === 'armoury');
+                            if (arm) {
+                                this.assignVillagerToObject(v, arm);
+                                this.showBanner('🦴', `${v.name} is heading to the Armoury to craft weapons!`);
+                            } else {
+                                this.showBanner('🦴', 'No weapons in stock! Build an Armoury to craft Clubs & Spears.');
+                            }
+                        }
+                    }
+                }
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            tryAutoEquipVillager(v) {
+                if (v.isChild) return false;
+                if (this.resources.spears > 0 && v.weapon !== 'spear') {
+                    if (v.weapon === 'club') this.resources.clubs++;
+                    this.resources.spears--;
+                    v.weapon = 'spear';
+                    this.setBubble(v, '🔱');
+                    this.addFloatText(v.x, v.y - 24, 'Equipped Bone Spear!', '#fde047');
+                    return true;
+                }
+                if (this.resources.clubs > 0 && v.weapon === 'none') {
+                    this.resources.clubs--;
+                    v.weapon = 'club';
+                    this.setBubble(v, '🪵');
+                    this.addFloatText(v.x, v.y - 24, 'Equipped Wooden Club!', '#fde047');
+                    return true;
+                }
+                return false;
+            }
+
+            // Building Inspector Quick Actions
+            triggerHutLove(hutId) {
+                const hut = this.buildings.find(b => b.id === hutId);
+                if (!hut || !hut.built) return;
+                if (this.villagers.length >= this.getMaxPop()) {
+                    this.showBanner('🛖', 'Housing Capacity reached! Build another Fur Hut to grow your tribe.');
+                    return;
+                }
+                const adults = this.villagers.filter(v => !v.isChild);
+                if (adults.length < 2) {
+                    this.showBanner('⚠️', 'You need at least 2 Adult villagers to grow the tribe!');
+                    return;
+                }
+                // Pick 2 closest adults
+                adults.sort((a, b) => Math.hypot(a.x - hut.x, a.y - hut.y) - Math.hypot(b.x - hut.x, b.y - hut.y));
+                adults[0].task = 'love';
+                adults[0].targetId = hut.id;
+                adults[1].task = 'love';
+                adults[1].targetId = hut.id;
+                this.setBubble(adults[0], '❤️');
+                this.setBubble(adults[1], '❤️');
+                this.showBanner('❤️', `${adults[0].name} & ${adults[1].name} are heading to the Fur Hut!`);
+                this.updateInspectorUI();
+            }
+
+            craftAtArmoury(weaponType) {
+                if (weaponType === 'club') {
+                    if (this.resources.wood < 15 || this.resources.stone < 5) {
+                        this.showBanner('⚠️', 'Need 15 Wood & 5 Stone to craft a Wooden Club!');
+                        return;
+                    }
+                    this.resources.wood -= 15;
+                    this.resources.stone -= 5;
+                    this.resources.clubs++;
+                    this.sfx.play('build');
+                    this.showBanner('🪵', 'Crafted a sturdy Wooden Club (+7 Attack)!');
+                } else if (weaponType === 'spear') {
+                    if (this.resources.wood < 20 || this.resources.stone < 20) {
+                        this.showBanner('⚠️', 'Need 20 Wood & 20 Stone to craft a Heavy Bone Spear!');
+                        return;
+                    }
+                    this.resources.wood -= 20;
+                    this.resources.stone -= 20;
+                    this.resources.spears++;
+                    this.sfx.play('build');
+                    this.showBanner('🔱', 'Crafted a razor-sharp Heavy Bone Spear (+15 Attack)!');
+                }
+                // Auto-equip onto selected villager if unarmed
+                for (const v of this.selectedVillagers) {
+                    this.tryAutoEquipVillager(v);
+                }
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            // --- MAIN UPDATE SIMULATION LOOP ---
+            loop(timestamp) {
+                const rawDt = Math.min(0.1, (timestamp - this.lastTime) / 1000);
+                this.lastTime = timestamp;
+
+                this.handleKeyboardCameraPan(rawDt);
+
+                if (!this.paused) {
+                    const dt = rawDt * this.speedMultiplier;
+                    this.updateSimulation(dt);
+                }
+
+                this.render();
+                this.renderMinimap();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            handleKeyboardCameraPan(dt) {
+                const panSpeed = 480 / this.cam.zoom;
+                if (this.keys['KeyW'] || this.keys['ArrowUp']) this.cam.y -= panSpeed * dt;
+                if (this.keys['KeyS'] || this.keys['ArrowDown']) this.cam.y += panSpeed * dt;
+                if (this.keys['KeyA'] || this.keys['ArrowLeft']) this.cam.x -= panSpeed * dt;
+                if (this.keys['KeyD'] || this.keys['ArrowRight']) this.cam.x += panSpeed * dt;
+                this.clampCamera();
+            }
+
+            clampCamera() {
+                this.cam.x = Math.max(150, Math.min(this.worldW - 150, this.cam.x));
+                this.cam.y = Math.max(150, Math.min(this.worldH - 150, this.cam.y));
+            }
+
+            centerOnCave() {
+                this.cam.x = 1200;
+                this.cam.y = 480;
+            }
+
+            zoomCamera(delta) {
+                this.cam.zoom = Math.max(0.55, Math.min(1.65, this.cam.zoom + delta));
+            }
+
+            updateSimulation(dt) {
+                // 1. Raid Countdown
+                this.raidCountdown -= dt;
+                if (this.raidCountdown <= 0) {
+                    this.triggerCannibalRaid();
+                }
+
+                // 2. Update Butterflies
+                for (const bf of this.butterflies) {
+                    bf.phase += dt * 8;
+                    bf.x += bf.vx * dt;
+                    bf.y += bf.vy * dt;
+                    if (Math.random() < 0.02) {
+                        bf.vx = (Math.random() - 0.5) * 40;
+                        bf.vy = (Math.random() - 0.5) * 40;
+                    }
+                    bf.x = Math.max(120, Math.min(this.worldW - 120, bf.x));
+                    bf.y = Math.max(200, Math.min(this.worldH - 120, bf.y));
+                }
+
+                // 3. Update Resource Node Regrowth & Relic Discovery
+                for (const n of this.nodes) {
+                    if (n.type === 'relic' && !n.discovered) {
+                        const finder = this.villagers.find(v => Math.hypot(v.x - n.x, v.y - n.y) < 65);
+                        if (finder) {
+                            n.discovered = true;
+                            n.amount = 0;
+                            this.addResource('wood', 45);
+                            this.addResource('stone', 45);
+                            this.addResource('cookedFood', 30);
+                            this.sfx.play('build');
+                            this.addFloatText(n.x, n.y - 20, 'Ancient Relic! +45🪵 +45🪨 +30🍖', '#38bdf8');
+                            this.showBanner('✨', `${finder.name} discovered an Ancient Ice Relic! Bonus resources added!`);
+                        }
+                    } else if (n.amount <= 0 && n.type !== 'relic') {
+                        n.regrowTimer += dt;
+                        if (n.regrowTimer >= 45) {
+                            n.amount = n.maxAmount;
+                            n.regrowTimer = 0;
+                        }
+                    }
+                }
+
+                // 4. Update Buildings (Passive Totem aura, Hut cooldowns, Net Traps)
+                for (const b of this.buildings) {
+                    if (!b.built) continue;
+                    if (b.loveCooldown > 0) b.loveCooldown = Math.max(0, b.loveCooldown - dt);
+
+                    if (b.type === 'totem') {
+                        // Gentle healing aura for nearby villagers
+                        for (const v of this.villagers) {
+                            if (Math.hypot(v.x - b.x, v.y - b.y) < 190 && v.hp < v.maxHp) {
+                                v.hp = Math.min(v.maxHp, v.hp + 2.5 * dt);
+                            }
+                        }
+                    } else if (b.type === 'trap' && b.armed !== false) {
+                        // Check if any cannibal raider steps into the Net Trap
+                        const victim = this.raiders.find(r => r.trappedTimer <= 0 && Math.hypot(r.x - b.x, r.y - b.y) < b.radius + r.radius + 8);
+                        if (victim) {
+                            victim.trappedTimer = 7.0;
+                            b.armed = false;
+                            b.hp = Math.max(20, b.hp - 30);
+                            this.sfx.play('trap');
+                            this.addFloatText(b.x, b.y - 20, 'SNARED IN NET! 🕸️', '#fbbf24');
+                        }
+                    }
+                }
+
+                // 5. Update Wildlife
+                for (let i = this.wildlife.length - 1; i >= 0; i--) {
+                    const w = this.wildlife[i];
+                    if (w.hp <= 0) {
+                        this.addResource('rawFood', w.meat);
+                        this.addFloatText(w.x, w.y - 15, `+${w.meat}🍓 Raw Meat!`, '#fb7185');
+                        this.sfx.play('bonk');
+                        this.wildlife.splice(i, 1);
+                        continue;
+                    }
+
+                    w.attackCooldown = Math.max(0, w.attackCooldown - dt);
+                    w.wanderTimer -= dt;
+
+                    // If aggressive (Sabre-Tooth Tiger) or provoked, check for nearby villagers
+                    const targetV = (w.aggressive || w.hp < w.maxHp)
+                        ? this.villagers.find(v => !v.isChild && Math.hypot(v.x - w.x, v.y - w.y) < 120)
+                        : null;
+
+                    if (targetV && w.dmg > 0) {
+                        const dist = Math.hypot(targetV.x - w.x, targetV.y - w.y);
+                        if (dist > w.radius + targetV.radius + 6) {
+                            const dx = (targetV.x - w.x) / dist;
+                            const dy = (targetV.y - w.y) / dist;
+                            w.x += dx * w.speed * dt;
+                            w.y += dy * w.speed * dt;
+                            w.facing = dx >= 0 ? 1 : -1;
+                            w.animPhase += dt * 9;
+                        } else if (w.attackCooldown <= 0) {
+                            w.attackCooldown = 1.25;
+                            targetV.hp -= w.dmg;
+                            this.addFloatText(targetV.x, targetV.y - 18, `-${w.dmg}`, '#ef4444');
+                        }
+                    } else {
+                        if (w.wanderTimer <= 0) {
+                            w.wanderTimer = 2.5 + Math.random() * 4;
+                            w.targetX = Math.max(150, Math.min(this.worldW - 150, w.x + (Math.random() - 0.5) * 220));
+                            w.targetY = Math.max(280, Math.min(this.worldH - 150, w.y + (Math.random() - 0.5) * 220));
+                        }
+                        const dist = Math.hypot(w.targetX - w.x, w.targetY - w.y);
+                        if (dist > 8) {
+                            const dx = (w.targetX - w.x) / dist;
+                            const dy = (w.targetY - w.y) / dist;
+                            w.x += dx * (w.speed * 0.45) * dt;
+                            w.y += dy * (w.speed * 0.45) * dt;
+                            w.facing = dx >= 0 ? 1 : -1;
+                            w.animPhase += dt * 5;
+                        }
+                    }
+                }
+                // Respawn wildlife occasionally if valley gets empty
+                if (this.wildlife.length < 12 && Math.random() < 0.008) {
+                    const types = ['dodo', 'dodo', 'boar', 'tiger'];
+                    this.spawnWildlife(types[Math.floor(Math.random() * types.length)], 250 + Math.random() * (this.worldW - 500), 700 + Math.random() * 900);
+                }
+
+                // 6. Update Cannibal Raiders
+                for (let i = this.raiders.length - 1; i >= 0; i--) {
+                    const r = this.raiders[i];
+                    if (r.hp <= 0) {
+                        this.sfx.play('bonk');
+                        this.addFloatText(r.x, r.y - 20, 'Raider Defeated! +10🪵', '#4ade80');
+                        this.addResource('wood', 10);
+                        this.raiders.splice(i, 1);
+                        continue;
+                    }
+
+                    if (r.trappedTimer > 0) {
+                        r.trappedTimer -= dt;
+                        continue;
+                    }
+
+                    r.attackCooldown = Math.max(0, r.attackCooldown - dt);
+
+                    // Find closest villager or building to attack
+                    let bestTarget = null;
+                    let bestDist = Infinity;
+
+                    for (const v of this.villagers) {
+                        if (v.isChild) continue;
+                        const d = Math.hypot(v.x - r.x, v.y - r.y);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            bestTarget = { kind: 'villager', ref: v };
+                        }
+                    }
+                    for (const b of this.buildings) {
+                        const d = Math.hypot(b.x - r.x, b.y - r.y);
+                        if (d < bestDist - 35) {
+                            bestDist = d;
+                            bestTarget = { kind: 'building', ref: b };
+                        }
+                    }
+
+                    if (bestTarget) {
+                        const t = bestTarget.ref;
+                        const dist = Math.hypot(t.x - r.x, t.y - r.y);
+                        const stopDist = r.radius + (t.radius || 18) + 6;
+                        if (dist > stopDist) {
+                            const dx = (t.x - r.x) / dist;
+                            const dy = (t.y - r.y) / dist;
+                            r.x += dx * r.speed * dt;
+                            r.y += dy * r.speed * dt;
+                            r.facing = dx >= 0 ? 1 : -1;
+                            r.animPhase += dt * 9;
+                        } else if (r.attackCooldown <= 0) {
+                            r.attackCooldown = 1.15;
+                            t.hp -= r.dmg;
+                            this.sfx.play('bonk');
+                            this.addFloatText(t.x, t.y - 20, `-${r.dmg}`, '#ef4444');
+                            if (bestTarget.kind === 'building' && t.hp <= 0 && t.type !== 'cave') {
+                                this.showBanner('💥', `A ${BUILDING_SPECS[t.type].name} was smashed by Cannibals!`);
+                                this.buildings = this.buildings.filter(b => b.id !== t.id);
+                            }
+                        }
+                    }
+                }
+
+                // 7. Update Tribe Villagers
+                for (let i = this.villagers.length - 1; i >= 0; i--) {
+                    const v = this.villagers[i];
+                    if (v.hp <= 0) {
+                        this.showBanner('💀', `${v.name} has fallen in the Stone Age valley!`);
+                        this.selectedVillagers = this.selectedVillagers.filter(sv => sv.id !== v.id);
+                        if (this.selectedEntity && this.selectedEntity.id === v.id) this.selectedEntity = null;
+                        this.villagers.splice(i, 1);
+                        this.updateInspectorUI();
+                        continue;
+                    }
+
+                    // Reveal Fog of War around every villager
+                    this.revealFog(v.x, v.y, 210);
+
+                    if (v.bubbleTimer > 0) v.bubbleTimer = Math.max(0, v.bubbleTimer - dt);
+
+                    // Child growth logic
+                    if (v.isChild) {
+                        v.growthProgress += dt * 3.2; // ~31 seconds to become an adult
+                        if (v.growthProgress >= 100) {
+                            v.isChild = false;
+                            v.radius = 16;
+                            v.maxHp = 100;
+                            v.hp = 100;
+                            v.task = 'idle';
+                            this.sfx.play('build');
+                            this.setBubble(v, '💪', 4);
+                            this.addFloatText(v.x, v.y - 24, `${v.name} grew into an Adult!`, '#4ade80');
+                            this.showBanner('🎉', `${v.name} has grown up and is ready to work for the tribe!`);
+                        } else {
+                            // Cute crawling/running around Cave & Huts
+                            v.actionTimer -= dt;
+                            if (v.actionTimer <= 0) {
+                                v.actionTimer = 2 + Math.random() * 3;
+                                v.targetX = 1200 + (Math.random() - 0.5) * 260;
+                                v.targetY = 380 + (Math.random() - 0.5) * 180;
+                            }
+                            this.moveVillagerToward(v, v.targetX, v.targetY, dt, 42);
+                        }
+                        continue;
+                    }
+
+                    // Adult Hunger & Energy decay
+                    v.hunger = Math.max(0, v.hunger - dt * 0.48);
+                    v.energy = Math.max(0, v.energy - dt * (v.task === 'idle' ? 0.15 : 0.42));
+
+                    // Auto-eat when hungry
+                    if (v.hunger < 32) {
+                        if (this.resources.cookedFood > 0) {
+                            this.resources.cookedFood--;
+                            v.hunger = Math.min(100, v.hunger + 65);
+                            v.hp = Math.min(v.maxHp, v.hp + 15);
+                            this.setBubble(v, '🍖');
+                            this.addFloatText(v.x, v.y - 20, 'Ate Cooked Ribs!', '#fb923c');
+                        } else if (this.resources.rawFood > 0 && v.hunger < 18) {
+                            this.resources.rawFood--;
+                            v.hunger = Math.min(100, v.hunger + 30);
+                            this.setBubble(v, '🍓');
+                        } else if (v.hunger <= 1) {
+                            v.hp -= dt * 2.2;
+                        }
+                    }
+
+                    // 2008 Pocket Gamer Review Easter Egg: Authentic Wander Mode check!
+                    if (this.disciplineMode === 'wander' && ['build', 'chop', 'mine', 'cook', 'gym'].includes(v.task)) {
+                        v.wanderCheckTimer -= dt;
+                        if (v.wanderCheckTimer <= 0) {
+                            v.wanderCheckTimer = 9 + Math.random() * 12;
+                            if (Math.random() < 0.35) {
+                                v.task = 'wander2008';
+                                v.actionTimer = 5.5;
+                                const bf = this.butterflies[Math.floor(Math.random() * this.butterflies.length)];
+                                v.targetX = bf ? bf.x : v.x + (Math.random() - 0.5) * 180;
+                                v.targetY = bf ? bf.y : v.y + (Math.random() - 0.5) * 180;
+                                this.setBubble(v, '🦋', 5.0);
+                                this.addFloatText(v.x, v.y - 24, 'Ooh, a butterfly! 🦋', '#f472b6');
+                            }
+                        }
+                    }
+
+                    // Self-defense if a Raider or Tiger is right next to the villager
+                    const immediateThreat = this.findNearestRaider(v.x, v.y, 85);
+                    if (immediateThreat && v.task !== 'attack') {
+                        v.task = 'attack';
+                        v.targetId = immediateThreat.id;
+                        this.setBubble(v, '⚔️');
+                    }
+
+                    // Execute current villager task
+                    this.updateVillagerTask(v, dt);
+                }
+
+                // 8. Update Floating Combat/Resource Texts
+                for (let i = this.floatTexts.length - 1; i >= 0; i--) {
+                    const ft = this.floatTexts[i];
+                    ft.y -= 24 * dt;
+                    ft.life -= dt;
+                    if (ft.life <= 0) this.floatTexts.splice(i, 1);
+                }
+
+                // Periodic UI refresh
+                this.uiTick = (this.uiTick || 0) + dt;
+                if (this.uiTick > 0.25) {
+                    this.uiTick = 0;
+                    this.updateHUD();
+                    this.updateInspectorUI();
+                }
+            }
+
+            findNearestRaider(x, y, maxDist = 9999) {
+                let best = null;
+                let bestD = maxDist;
+                for (const r of this.raiders) {
+                    const d = Math.hypot(r.x - x, r.y - y);
+                    if (d < bestD) {
+                        bestD = d;
+                        best = r;
+                    }
+                }
+                return best;
+            }
+
+            getVillagerMoveSpeed(v) {
+                const base = 68 + (v.spdLevel - 1) * 12;
+                const energyFactor = v.energy < 15 ? 0.65 : 1.0;
+                return base * energyFactor;
+            }
+
+            getVillagerAttackDamage(v) {
+                const weaponBonus = v.weapon === 'spear' ? 15 : (v.weapon === 'club' ? 7 : 0);
+                return 6 + (v.strLevel - 1) * 3 + weaponBonus;
+            }
+
+            moveVillagerToward(v, tx, ty, dt, customSpeed = null) {
+                const dist = Math.hypot(tx - v.x, ty - v.y);
+                if (dist <= 4) return true;
+                const spd = customSpeed || this.getVillagerMoveSpeed(v);
+                const dx = (tx - v.x) / dist;
+                const dy = (ty - v.y) / dist;
+                v.x = Math.max(50, Math.min(this.worldW - 50, v.x + dx * spd * dt));
+                v.y = Math.max(150, Math.min(this.worldH - 50, v.y + dy * spd * dt));
+                v.facing = dx >= 0 ? 1 : -1;
+                v.animPhase += dt * (spd * 0.14);
+                return false;
+            }
+
+            updateVillagerTask(v, dt) {
+                const workPower = 1 + (v.strLevel - 1) * 0.25;
+
+                if (v.task === 'wander2008') {
+                    this.moveVillagerToward(v, v.targetX, v.targetY, dt, 48);
+                    v.actionTimer -= dt;
+                    if (v.actionTimer <= 0) {
+                        v.task = 'idle';
+                        this.setBubble(v, '❓');
+                    }
+                    return;
+                }
+
+                if (v.task === 'move') {
+                    if (this.moveVillagerToward(v, v.targetX, v.targetY, dt)) {
+                        v.task = 'idle';
+                    }
+                    return;
+                }
+
+                if (v.task === 'chop' || v.task === 'mine' || v.task === 'forage') {
+                    let node = this.nodes.find(n => n.id === v.targetId && n.amount > 0);
+                    if (!node) {
+                        // Look for another nearby node of the same type
+                        const wantedType = v.task === 'chop' ? 'tree' : (v.task === 'mine' ? 'stone' : 'bush');
+                        node = this.nodes.find(n => n.type === wantedType && n.amount > 0 && Math.hypot(n.x - v.x, n.y - v.y) < 340);
+                        if (node) {
+                            v.targetId = node.id;
+                        } else {
+                            v.task = 'idle';
+                            return;
+                        }
+                    }
+                    const dist = Math.hypot(node.x - v.x, node.y - v.y);
+                    if (dist > node.radius + v.radius + 10) {
+                        this.moveVillagerToward(v, node.x, node.y, dt);
+                    } else {
+                        v.animPhase += dt * 10;
+                        v.actionTimer += dt * workPower;
+                        if (v.actionTimer >= 1.25) {
+                            v.actionTimer = 0;
+                            const yieldAmt = Math.min(node.amount, Math.round(6 * workPower));
+                            node.amount -= yieldAmt;
+                            if (node.type === 'tree') {
+                                this.addResource('wood', yieldAmt);
+                                this.sfx.play('chop');
+                                this.addFloatText(node.x, node.y - 18, `+${yieldAmt}🪵`, '#fbbf24');
+                            } else if (node.type === 'stone') {
+                                this.addResource('stone', yieldAmt);
+                                this.sfx.play('mine');
+                                this.addFloatText(node.x, node.y - 18, `+${yieldAmt}🪨`, '#e7e5e4');
+                            } else {
+                                this.addResource('rawFood', yieldAmt);
+                                this.addFloatText(node.x, node.y - 18, `+${yieldAmt}🍓`, '#fb7185');
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                if (v.task === 'hunt') {
+                    const animal = this.wildlife.find(w => w.id === v.targetId);
+                    if (!animal) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    const dist = Math.hypot(animal.x - v.x, animal.y - v.y);
+                    if (dist > animal.radius + v.radius + 10) {
+                        this.moveVillagerToward(v, animal.x, animal.y, dt);
+                    } else {
+                        v.animPhase += dt * 11;
+                        v.actionTimer += dt;
+                        if (v.actionTimer >= 0.95) {
+                            v.actionTimer = 0;
+                            const dmg = this.getVillagerAttackDamage(v);
+                            animal.hp -= dmg;
+                            this.sfx.play('bonk');
+                            this.addFloatText(animal.x, animal.y - 16, `-${dmg}`, '#facc15');
+                        }
+                    }
+                    return;
+                }
+
+                if (v.task === 'attack') {
+                    let raider = this.raiders.find(r => r.id === v.targetId);
+                    if (!raider) {
+                        raider = this.findNearestRaider(v.x, v.y, 450);
+                        if (raider) {
+                            v.targetId = raider.id;
+                        } else {
+                            v.task = 'idle';
+                            return;
+                        }
+                    }
+                    const dist = Math.hypot(raider.x - v.x, raider.y - v.y);
+                    if (dist > raider.radius + v.radius + 10) {
+                        this.moveVillagerToward(v, raider.x, raider.y, dt);
+                    } else {
+                        v.animPhase += dt * 12;
+                        v.actionTimer += dt;
+                        if (v.actionTimer >= 0.85) {
+                            v.actionTimer = 0;
+                            let dmg = this.getVillagerAttackDamage(v);
+                            if (raider.trappedTimer > 0) dmg = Math.round(dmg * 1.5); // Bonus vs net-trapped raiders!
+                            raider.hp -= dmg;
+                            this.sfx.play('bonk');
+                            this.addFloatText(raider.x, raider.y - 18, `-${dmg}💥`, '#fde047');
+                        }
+                    }
+                    return;
+                }
+
+                if (v.task === 'build') {
+                    const bld = this.buildings.find(b => b.id === v.targetId);
+                    if (!bld) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    if (bld.built && bld.hp >= bld.maxHp && bld.armed !== false) {
+                        v.task = 'idle';
+                        this.setBubble(v, '👍');
+                        return;
+                    }
+                    const dist = Math.hypot(bld.x - v.x, bld.y - v.y);
+                    if (dist > bld.radius + v.radius + 12) {
+                        this.moveVillagerToward(v, bld.x, bld.y, dt);
+                    } else {
+                        v.animPhase += dt * 10;
+                        v.actionTimer += dt;
+                        if (!bld.built) {
+                            const spec = BUILDING_SPECS[bld.type];
+                            bld.progress += (dt * 26 * workPower) / spec.buildTime;
+                            bld.hp = Math.min(bld.maxHp, bld.hp + dt * 32 * workPower);
+                            if (v.actionTimer >= 1.1) {
+                                v.actionTimer = 0;
+                                this.sfx.play('chop');
+                            }
+                            if (bld.progress >= 1) {
+                                bld.progress = 1;
+                                bld.built = true;
+                                bld.hp = bld.maxHp;
+                                bld.armed = true;
+                                this.sfx.play('build');
+                                this.addFloatText(bld.x, bld.y - 25, `${spec.name} Built!`, '#4ade80');
+                                // If it's a Kitchen, Gym, or Armoury, villager can stay and work inside!
+                                if (bld.type === 'kitchen') v.task = 'cook';
+                                else if (bld.type === 'gym') v.task = 'gym';
+                                else if (bld.type === 'armoury') v.task = 'craft';
+                                else v.task = 'idle';
+                            }
+                        } else {
+                            // Repairing damaged building or re-arming Net Trap
+                            bld.hp = Math.min(bld.maxHp, bld.hp + dt * 35 * workPower);
+                            if (bld.hp >= bld.maxHp) {
+                                bld.armed = true;
+                                this.sfx.play('build');
+                                this.addFloatText(bld.x, bld.y - 20, 'Repaired!', '#4ade80');
+                                v.task = 'idle';
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                if (v.task === 'cook') {
+                    const kitchen = this.buildings.find(b => b.id === v.targetId && b.built);
+                    if (!kitchen) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    const dist = Math.hypot(kitchen.x - v.x, kitchen.y - v.y);
+                    if (dist > kitchen.radius + v.radius + 10) {
+                        this.moveVillagerToward(v, kitchen.x, kitchen.y, dt);
+                    } else {
+                        if (this.resources.rawFood <= 0) {
+                            this.setBubble(v, '🍓?');
+                            // Smart AI goes to forage berries if Raw Food runs out
+                            if (this.disciplineMode === 'smart') {
+                                const bush = this.nodes.find(n => n.type === 'bush' && n.amount > 0);
+                                if (bush) this.assignVillagerToObject(v, bush);
+                            }
+                            return;
+                        }
+                        v.animPhase += dt * 7;
+                        kitchen.cookTimer = (kitchen.cookTimer || 0) + dt * workPower;
+                        if (kitchen.cookTimer >= 3.0) {
+                            kitchen.cookTimer = 0;
+                            const batch = Math.min(4, this.resources.rawFood);
+                            this.resources.rawFood -= batch;
+                            this.addResource('cookedFood', batch * 2); // 1 Raw -> 2 Cooked Ribs!
+                            this.addFloatText(kitchen.x, kitchen.y - 25, `+${batch * 2}🍖 Sabre Ribs!`, '#fb923c');
+                            this.setBubble(v, '🍖');
+                        }
+                    }
+                    return;
+                }
+
+                if (v.task === 'gym') {
+                    const gym = this.buildings.find(b => b.id === v.targetId && b.built);
+                    if (!gym) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    const dist = Math.hypot(gym.x - v.x, gym.y - v.y);
+                    if (dist > gym.radius + v.radius + 10) {
+                        this.moveVillagerToward(v, gym.x, gym.y, dt);
+                    } else {
+                        v.animPhase += dt * 12;
+                        v.gymXp += dt * 14;
+                        if (v.gymXp >= 100) {
+                            v.gymXp = 0;
+                            if (v.strLevel <= v.spdLevel && v.strLevel < 5) {
+                                v.strLevel++;
+                                v.maxHp += 20;
+                                v.hp = v.maxHp;
+                                this.sfx.play('gym');
+                                this.addFloatText(v.x, v.y - 25, `💪 STR Level ${v.strLevel}!`, '#4ade80');
+                            } else if (v.spdLevel < 5) {
+                                v.spdLevel++;
+                                this.sfx.play('gym');
+                                this.addFloatText(v.x, v.y - 25, `⚡ SPD Level ${v.spdLevel}!`, '#38bdf8');
+                            } else {
+                                v.hp = v.maxHp;
+                                v.task = 'idle';
+                                this.addFloatText(v.x, v.y - 25, 'Max Champion!', '#facc15');
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                if (v.task === 'craft') {
+                    const arm = this.buildings.find(b => b.id === v.targetId && b.built);
+                    if (!arm) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    const dist = Math.hypot(arm.x - v.x, arm.y - v.y);
+                    if (dist > arm.radius + v.radius + 10) {
+                        this.moveVillagerToward(v, arm.x, arm.y, dt);
+                    } else {
+                        this.tryAutoEquipVillager(v);
+                        arm.craftTimer = (arm.craftTimer || 0) + dt * workPower;
+                        if (arm.craftTimer >= 5.5) {
+                            arm.craftTimer = 0;
+                            if (this.resources.wood >= 20 && this.resources.stone >= 20 && this.resources.spears < 6) {
+                                this.resources.wood -= 20;
+                                this.resources.stone -= 20;
+                                this.resources.spears++;
+                                this.sfx.play('build');
+                                this.addFloatText(arm.x, arm.y - 25, '+1🔱 Bone Spear Crafted!', '#fde047');
+                            } else if (this.resources.wood >= 15 && this.resources.stone >= 5 && this.resources.clubs < 6) {
+                                this.resources.wood -= 15;
+                                this.resources.stone -= 5;
+                                this.resources.clubs++;
+                                this.sfx.play('build');
+                                this.addFloatText(arm.x, arm.y - 25, '+1🪵 Wooden Club Crafted!', '#fde047');
+                            }
+                            this.tryAutoEquipVillager(v);
+                        }
+                    }
+                    return;
+                }
+
+                if (v.task === 'rest') {
+                    const hut = this.buildings.find(b => b.id === v.targetId && b.built);
+                    if (!hut) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    const dist = Math.hypot(hut.x - v.x, hut.y - v.y);
+                    if (dist > hut.radius + v.radius + 8) {
+                        this.moveVillagerToward(v, hut.x, hut.y, dt);
+                    } else {
+                        v.energy = Math.min(100, v.energy + dt * 16);
+                        v.hp = Math.min(v.maxHp, v.hp + dt * 8);
+                        if (v.energy >= 99) {
+                            v.task = 'idle';
+                            this.setBubble(v, '☀️');
+                        }
+                    }
+                    return;
+                }
+
+                if (v.task === 'love') {
+                    const hut = this.buildings.find(b => b.id === v.targetId && b.built);
+                    if (!hut || this.villagers.length >= this.getMaxPop()) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    const dist = Math.hypot(hut.x - v.x, hut.y - v.y);
+                    if (dist > hut.radius + v.radius + 10) {
+                        this.moveVillagerToward(v, hut.x, hut.y, dt);
+                    } else {
+                        // Check if partner is also at the hut
+                        const partner = this.villagers.find(other =>
+                            other.id !== v.id && !other.isChild &&
+                            other.task === 'love' && other.targetId === hut.id &&
+                            Math.hypot(other.x - hut.x, other.y - hut.y) <= hut.radius + other.radius + 14
+                        );
+                        if (partner) {
+                            v.actionTimer += dt;
+                            if (v.actionTimer >= 2.8) {
+                                v.actionTimer = 0;
+                                partner.actionTimer = 0;
+                                v.task = 'idle';
+                                partner.task = 'idle';
+                                hut.loveCooldown = 12;
+                                const baby = this.createVillager(hut.x, hut.y + hut.radius + 14, true);
+                                this.sfx.play('baby');
+                                this.addFloatText(hut.x, hut.y - 28, `👶 Baby ${baby.name} Born!`, '#f472b6');
+                                this.showBanner('👶', `A cute Cave Child (${baby.name}) was born! They will grow into an adult soon.`);
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                // Smart AI Auto-Work when idle
+                if (v.task === 'idle' && this.disciplineMode === 'smart') {
+                    v.actionTimer += dt;
+                    if (v.actionTimer >= 2.2) {
+                        v.actionTimer = 0;
+                        // 1. Finish any unbuilt/damaged building
+                        const unbuilt = this.buildings.find(b => !b.built || b.hp < b.maxHp * 0.9);
+                        if (unbuilt) {
+                            this.assignVillagerToObject(v, unbuilt);
+                            return;
+                        }
+                        // 2. If tired, rest at Hut
+                        if (v.energy < 25) {
+                            const hut = this.buildings.find(b => b.built && b.type === 'hut');
+                            if (hut) {
+                                this.assignVillagerToObject(v, hut);
+                                return;
+                            }
+                        }
+                        // 3. Gather needed resource nearby
+                        let lowestType = 'tree';
+                        if (this.resources.rawFood + this.resources.cookedFood < 35) lowestType = 'bush';
+                        else if (this.resources.stone < this.resources.wood * 0.7) lowestType = 'stone';
+
+                        const node = this.nodes.find(n => n.type === lowestType && n.amount > 0 && this.isPointExplored(n.x, n.y));
+                        if (node) this.assignVillagerToObject(v, node);
+                    }
+                }
+            }
+
+            addFloatText(x, y, text, color = '#fff') {
+                this.floatTexts.push({ x, y, text, color, life: 1.45 });
+            }
+
+            // --- HUD & INSPECTOR UPDATES ---
+            updateHUD() {
+                const cap = this.getMaxStorage();
+                document.getElementById('resWood').textContent = Math.floor(this.resources.wood);
+                document.getElementById('capWood').textContent = cap;
+                document.getElementById('resStone').textContent = Math.floor(this.resources.stone);
+                document.getElementById('capStone').textContent = cap;
+                document.getElementById('resRawFood').textContent = Math.floor(this.resources.rawFood);
+                document.getElementById('capFood').textContent = cap;
+                document.getElementById('resCooked').textContent = Math.floor(this.resources.cookedFood);
+                document.getElementById('capCooked').textContent = cap;
+                document.getElementById('resClubs').textContent = this.resources.clubs;
+                document.getElementById('resSpears').textContent = this.resources.spears;
+
+                const adults = this.villagers.filter(v => !v.isChild).length;
+                const kids = this.villagers.filter(v => v.isChild).length;
+                const maxPop = this.getMaxPop();
+                document.getElementById('popAdults').textContent = adults;
+                const kidsWrap = document.getElementById('popKidsWrap');
+                kidsWrap.textContent = kids > 0 ? `(+${kids}👶)` : '';
+                document.getElementById('popMax').textContent = maxPop;
+
+                // Wave countdown
+                document.getElementById('waveNum').textContent = this.waveNumber;
+                const mins = Math.floor(Math.max(0, this.raidCountdown) / 60);
+                const secs = Math.floor(Math.max(0, this.raidCountdown) % 60);
+                const raidBox = document.getElementById('raidBox');
+                if (this.raiders.length > 0) {
+                    document.getElementById('raidTimerText').textContent = `${this.raiders.length} Raiders!`;
+                    raidBox.classList.add('raid-alert', 'border-red-500');
+                } else {
+                    document.getElementById('raidTimerText').textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                    raidBox.classList.remove('raid-alert', 'border-red-500');
+                }
+
+                // Idle count & Repair button visibility
+                const idleCount = this.villagers.filter(v => !v.isChild && (v.task === 'idle' || v.task === 'wander2008')).length;
+                document.getElementById('idleCount').textContent = idleCount;
+                const hasDamaged = this.buildings.some(b => !b.built || b.hp < b.maxHp);
+                document.getElementById('btnRepairAll').classList.toggle('hidden', !hasDamaged);
+
+                // Explored percentage
+                const exploredCells = this.fogGrid.reduce((acc, v) => acc + v, 0);
+                const pct = Math.min(100, Math.round((exploredCells / this.fogGrid.length) * 100));
+                document.getElementById('exploredPct').textContent = `${pct}% Explored`;
+
+                // Build buttons affordability
+                Object.keys(BUILDING_SPECS).forEach(key => {
+                    const btn = document.getElementById('buildBtn_' + key);
+                    if (btn) {
+                        const spec = BUILDING_SPECS[key];
+                        btn.disabled = (this.resources.wood < spec.wood || this.resources.stone < spec.stone);
+                    }
+                });
+
+                // Render Villager Roster Pills
+                const rosterEl = document.getElementById('tribeRosterBar');
+                rosterEl.innerHTML = this.villagers.map(v => {
+                    const isSel = this.selectedVillagers.some(sv => sv.id === v.id);
+                    const weaponBadge = v.weapon === 'spear' ? '🔱' : (v.weapon === 'club' ? '🪵' : '');
+                    return `<button onclick="game.selectVillagerById('${v.id}')" class="stone-panel px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 shrink-0 transition ${isSel ? 'border-amber-400 bg-amber-950/70 text-amber-200' : 'text-stone-300 hover:border-stone-400'}">
+                        <span>${v.isChild ? '👶' : '🧑'}</span>
+                        <span>${v.name}</span>
+                        <span>${weaponBadge}</span>
+                        <span class="text-[10px]">${v.bubble || ''}</span>
+                    </button>`;
+                }).join('');
+            }
+
+            selectVillagerById(id) {
+                const v = this.villagers.find(vil => vil.id === id);
+                if (v) {
+                    this.selectVillager(v, false);
+                    this.cam.x = v.x;
+                    this.cam.y = v.y;
+                }
+            }
+
+            updateInspectorUI() {
+                const panel = document.getElementById('inspectorPanel');
+                if (!panel) return;
+
+                // Case 1: One or more villagers selected
+                if (this.selectedVillagers.length > 0) {
+                    const v = this.selectedVillagers[0];
+                    const multiCount = this.selectedVillagers.length;
+                    const weaponName = v.weapon === 'spear' ? '🔱 Bone Spear (+15)' : (v.weapon === 'club' ? '🪵 Wood Club (+7)' : '✊ Bare Hands');
+                    const taskLabels = {
+                        idle: 'Idle (Click world object to assign)',
+                        move: 'Walking / Exploring Valley',
+                        chop: '🪓 Chopping Prehistoric Wood',
+                        mine: '⛏️ Mining Flint & Stone',
+                        forage: '🍓 Foraging Wild Berries',
+                        hunt: '🏹 Hunting Prehistoric Wildlife',
+                        build: '🔨 Building / Repairing Structure',
+                        cook: '🍖 Roasting Ribs at Kitchen',
+                        craft: '🦴 Crafting Weapons at Armoury',
+                        gym: '🏋️ Pumping Iron at Stone Gym',
+                        rest: '💤 Resting in Fur Hut',
+                        love: '❤️ Growing the Tribe in Hut',
+                        attack: '⚔️ Fighting Cannibal Raiders!',
+                        wander2008: '🦋 Distracted by a Butterfly! (2008 Mode)',
+                        growing: `👶 Cave Child (${Math.floor(v.growthProgress)}% Grown)`
+                    };
+
+                    panel.innerHTML = `
+                        <div class="flex items-center gap-3 flex-1 min-w-0">
+                            <div class="w-12 h-12 rounded-2xl bg-amber-900/60 border-2 border-amber-500 flex flex-col items-center justify-center shrink-0">
+                                <span class="text-xl leading-none">${v.isChild ? '👶' : '🗿'}</span>
+                                <span class="text-[9px] font-bold text-amber-300 mt-0.5">${multiCount > 1 ? multiCount + ' Selected' : 'STR ' + v.strLevel}</span>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-cartoon text-base text-amber-300 truncate">${multiCount > 1 ? `${v.name} + ${multiCount - 1} Tribe Members` : v.name}</span>
+                                    <span class="text-[11px] px-2 py-0.5 rounded-full bg-stone-800 border border-stone-600 text-stone-200 font-semibold">${weaponName}</span>
+                                    <span class="text-[11px] text-emerald-400 font-bold">STR Lv.${v.strLevel} • SPD Lv.${v.spdLevel}</span>
+                                </div>
+                                <div class="text-xs text-stone-300 truncate mt-0.5">${taskLabels[v.task] || v.task}</div>
+                                <!-- Stat Bars -->
+                                <div class="grid grid-cols-3 gap-2 mt-1.5 text-[10px]">
+                                    <div>
+                                        <div class="flex justify-between text-rose-300 font-semibold"><span>❤️ HP</span><span>${Math.ceil(v.hp)}/${v.maxHp}</span></div>
+                                        <div class="h-1.5 bg-stone-800 rounded-full overflow-hidden"><div class="h-full bg-rose-500" style="width:${(v.hp / v.maxHp) * 100}%"></div></div>
+                                    </div>
+                                    <div>
+                                        <div class="flex justify-between text-orange-300 font-semibold"><span>🍖 Fullness</span><span>${Math.ceil(v.hunger)}%</span></div>
+                                        <div class="h-1.5 bg-stone-800 rounded-full overflow-hidden"><div class="h-full bg-orange-400" style="width:${v.hunger}%"></div></div>
+                                    </div>
+                                    <div>
+                                        <div class="flex justify-between text-sky-300 font-semibold"><span>⚡ Energy</span><span>${Math.ceil(v.energy)}%</span></div>
+                                        <div class="h-1.5 bg-stone-800 rounded-full overflow-hidden"><div class="h-full bg-sky-400" style="width:${v.energy}%"></div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        ${!v.isChild ? `
+                        <div class="flex flex-wrap sm:flex-nowrap gap-1.5 shrink-0">
+                            <button onclick="game.commandSelectedVillager('eat')" class="stone-btn px-2.5 py-1.5 rounded-xl text-xs font-bold text-orange-300" title="Eat Cooked Ribs now to restore Fullness & HP">🍖 Eat</button>
+                            <button onclick="game.commandSelectedVillager('equip')" class="stone-btn px-2.5 py-1.5 rounded-xl text-xs font-bold text-yellow-300" title="Equip best weapon from Armoury">🦴 Arm</button>
+                            <button onclick="game.commandSelectedVillager('gym')" class="stone-btn px-2.5 py-1.5 rounded-xl text-xs font-bold text-emerald-300" title="Send to Stone Gym to train Strength & Speed">💪 Gym</button>
+                            <button onclick="game.commandSelectedVillager('rest')" class="stone-btn px-2.5 py-1.5 rounded-xl text-xs font-bold text-sky-300" title="Send to Fur Hut to rest">💤 Hut</button>
+                        </div>` : ''}
+                    `;
+                    return;
+                }
+
+                // Case 2: Building Selected
+                if (this.selectedEntity && this.selectedEntity.id && this.selectedEntity.id.startsWith('bld_')) {
+                    const b = this.selectedEntity;
+                    const spec = BUILDING_SPECS[b.type];
+                    let actionButtons = '';
+                    if (b.built && b.type === 'hut') {
+                        actionButtons = `<button onclick="game.triggerHutLove('${b.id}')" class="wood-btn px-3 py-1.5 rounded-xl text-xs font-bold text-pink-200">❤️ Grow Tribe (Spawn Kid)</button>`;
+                    } else if (b.built && b.type === 'armoury') {
+                        actionButtons = `
+                            <button onclick="game.craftAtArmoury('club')" class="wood-btn px-2.5 py-1.5 rounded-xl text-xs font-bold text-amber-100">+🪵 Club (15🪵 5🪨)</button>
+                            <button onclick="game.craftAtArmoury('spear')" class="wood-btn px-2.5 py-1.5 rounded-xl text-xs font-bold text-yellow-200">+🔱 Spear (20🪵 20🪨)</button>
+                        `;
+                    }
+
+                    panel.innerHTML = `
+                        <div class="flex items-center gap-3 flex-1 min-w-0">
+                            <div class="w-12 h-12 rounded-2xl bg-stone-800 border-2 border-stone-500 flex items-center justify-center text-2xl shrink-0">${spec.icon}</div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-cartoon text-base text-amber-300">${spec.name}</span>
+                                    <span class="text-xs font-bold ${b.built ? 'text-emerald-400' : 'text-amber-400'}">${b.built ? `HP ${Math.ceil(b.hp)}/${b.maxHp}` : `Building (${Math.floor(b.progress * 100)}%)`}</span>
+                                </div>
+                                <p class="text-xs text-stone-300 truncate mt-0.5">${spec.desc}</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-1.5 shrink-0">${actionButtons}</div>
+                    `;
+                    return;
+                }
+
+                // Default Empty Inspector
+                panel.innerHTML = `
+                    <div class="flex items-center gap-3 text-xs text-stone-300">
+                        <span class="text-2xl">👆</span>
+                        <div>
+                            <div class="font-bold text-amber-300">Tribe Command Inspector</div>
+                            <div>Click any <strong>Caveman</strong> to inspect stats, then click any <strong>Tree, Boulder, Bush, Building, or Raider</strong> to assign them!</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // --- CANVAS RENDERING ---
+            resizeCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            screenToWorld(sx, sy) {
+                const wx = (sx - this.canvas.width / 2) / this.cam.zoom + this.cam.x;
+                const wy = (sy - this.canvas.height / 2) / this.cam.zoom + this.cam.y;
+                return { x: wx, y: wy };
+            }
+
+            render() {
+                const ctx = this.ctx;
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+
+                ctx.clearRect(0, 0, w, h);
+
+                ctx.save();
+                ctx.translate(w / 2, h / 2);
+                ctx.scale(this.cam.zoom, this.cam.zoom);
+                ctx.translate(-this.cam.x, -this.cam.y);
+
+                // 1. Lush Stone Age Valley Ground + Thawing Ice Age North Cliff
+                this.drawValleyTerrain(ctx);
+
+                // 2. Scenery Tufts & Pebbles
+                for (const s of this.scenery) {
+                    if (!this.isPointExplored(s.x, s.y)) continue;
+                    if (s.type === 'grass') {
+                        ctx.strokeStyle = s.color;
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(s.x, s.y);
+                        ctx.lineTo(s.x - 4, s.y - 7);
+                        ctx.moveTo(s.x, s.y);
+                        ctx.lineTo(s.x + 4, s.y - 6);
+                        ctx.stroke();
+                    } else if (s.type === 'flower') {
+                        ctx.fillStyle = s.color;
+                        ctx.beginPath();
+                        ctx.arc(s.x, s.y, 2.8, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        ctx.fillStyle = '#78716c';
+                        ctx.beginPath();
+                        ctx.ellipse(s.x, s.y, 4, 2.5, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                // 3. Collect and Y-Sort all drawable world objects for proper depth overlapping
+                const drawList = [];
+
+                for (const b of this.buildings) {
+                    if (this.isPointExplored(b.x, b.y)) drawList.push({ y: b.y, kind: 'building', obj: b });
+                }
+                for (const n of this.nodes) {
+                    if (n.amount > 0 && this.isPointExplored(n.x, n.y)) drawList.push({ y: n.y, kind: 'node', obj: n });
+                }
+                for (const wl of this.wildlife) {
+                    if (this.isPointExplored(wl.x, wl.y)) drawList.push({ y: wl.y, kind: 'wildlife', obj: wl });
+                }
+                for (const r of this.raiders) {
+                    if (this.isPointExplored(r.x, r.y)) drawList.push({ y: r.y, kind: 'raider', obj: r });
+                }
+                for (const v of this.villagers) {
+                    drawList.push({ y: v.y, kind: 'villager', obj: v });
+                }
+
+                drawList.sort((a, b) => a.y - b.y);
+
+                for (const item of drawList) {
+                    if (item.kind === 'building') this.drawBuilding(ctx, item.obj);
+                    else if (item.kind === 'node') this.drawResourceNode(ctx, item.obj);
+                    else if (item.kind === 'wildlife') this.drawWildlife(ctx, item.obj);
+                    else if (item.kind === 'raider') this.drawRaider(ctx, item.obj);
+                    else if (item.kind === 'villager') this.drawVillager(ctx, item.obj);
+                }
+
+                // 4. Butterflies
+                for (const bf of this.butterflies) {
+                    if (!this.isPointExplored(bf.x, bf.y)) continue;
+                    const wing = Math.abs(Math.sin(bf.phase)) * 5;
+                    ctx.fillStyle = bf.color;
+                    ctx.beginPath();
+                    ctx.ellipse(bf.x - 3, bf.y, wing, 3, 0.3, 0, Math.PI * 2);
+                    ctx.ellipse(bf.x + 3, bf.y, wing, 3, -0.3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // 5. Building Placement Ghost Preview
+                if (this.buildMode) {
+                    const spec = BUILDING_SPECS[this.buildMode];
+                    const valid = this.isValidBuildSpot(this.mouseWorldX, this.mouseWorldY, spec.radius);
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(this.mouseWorldX, this.mouseWorldY, spec.radius + 8, 0, Math.PI * 2);
+                    ctx.fillStyle = valid ? 'rgba(34, 197, 94, 0.32)' : 'rgba(239, 68, 68, 0.38)';
+                    ctx.fill();
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = valid ? '#4ade80' : '#f87171';
+                    ctx.stroke();
+                    ctx.font = '28px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(spec.icon, this.mouseWorldX, this.mouseWorldY);
+                    ctx.restore();
+                }
+
+                // 6. Fog of War Clouds
+                this.drawFogOfWar(ctx);
+
+                // 7. Floating Combat & Resource Texts
+                for (const ft of this.floatTexts) {
+                    ctx.save();
+                    ctx.font = 'bold 14px Fredoka, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#000';
+                    ctx.fillText(ft.text, ft.x + 1, ft.y + 1);
+                    ctx.fillStyle = ft.color;
+                    ctx.fillText(ft.text, ft.x, ft.y);
+                    ctx.restore();
+                }
+
+                ctx.restore();
+            }
+
+            drawValleyTerrain(ctx) {
+                // Lush meadow gradient
+                const grad = ctx.createLinearGradient(0, 0, 0, this.worldH);
+                grad.addColorStop(0, '#bae6fd');   // Icy northern glacier edge
+                grad.addColorStop(0.11, '#86efac'); // Thawing spring grass
+                grad.addColorStop(0.55, '#4d7c0f'); // Deep prehistoric valley green
+                grad.addColorStop(1, '#365314');   // Southern jungle border
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, this.worldW, this.worldH);
+
+                // Northern Ice Age Glacier Cliffs (where the tribe emerged!)
+                ctx.fillStyle = '#e0f2fe';
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(this.worldW, 0);
+                ctx.lineTo(this.worldW, 190);
+                for (let x = this.worldW; x >= 0; x -= 120) {
+                    ctx.lineTo(x, 175 + Math.sin(x * 0.01) * 28);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#7dd3fc';
+                ctx.lineWidth = 5;
+                ctx.stroke();
+
+                // Soft dirt clearing around the Ancestral Cave village center
+                const dirtGrad = ctx.createRadialGradient(1200, 410, 40, 1200, 410, 320);
+                dirtGrad.addColorStop(0, 'rgba(180, 130, 80, 0.55)');
+                dirtGrad.addColorStop(1, 'rgba(180, 130, 80, 0)');
+                ctx.fillStyle = dirtGrad;
+                ctx.beginPath();
+                ctx.arc(1200, 410, 320, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            drawBuilding(ctx, b) {
+                ctx.save();
+                ctx.translate(b.x, b.y);
+
+                // Selection highlight ring
+                if (this.selectedEntity && this.selectedEntity.id === b.id) {
+                    ctx.beginPath();
+                    ctx.ellipse(0, 8, b.radius + 10, (b.radius + 10) * 0.65, 0, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+
+                // Ground shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.28)';
+                ctx.beginPath();
+                ctx.ellipse(0, 12, b.radius, b.radius * 0.6, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (!b.built) {
+                    // Construction scaffolding look
+                    ctx.fillStyle = '#78350f';
+                    ctx.fillRect(-b.radius * 0.7, -b.radius * 0.5, b.radius * 1.4, b.radius);
+                    ctx.strokeStyle = '#facc15';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(-b.radius * 0.7, -b.radius * 0.5, b.radius * 1.4, b.radius);
+                    ctx.font = 'bold 12px Inter, sans-serif';
+                    ctx.fillStyle = '#fef08a';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`🔨 ${Math.floor(b.progress * 100)}%`, 0, 4);
+                    ctx.restore();
+                    return;
+                }
+
+                if (b.type === 'cave') {
+                    // Icy Ancestral Cavern Mouth
+                    ctx.fillStyle = '#64748b';
+                    ctx.beginPath();
+                    ctx.arc(0, 10, 56, Math.PI, 0);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Snow cap
+                    ctx.fillStyle = '#f0f9ff';
+                    ctx.beginPath();
+                    ctx.arc(0, -10, 46, Math.PI * 1.05, -0.05 * Math.PI);
+                    ctx.fill();
+                    // Dark cave interior
+                    ctx.fillStyle = '#1e293b';
+                    ctx.beginPath();
+                    ctx.arc(0, 10, 32, Math.PI, 0);
+                    ctx.fill();
+                    // Warm tribal campfire outside cave
+                    ctx.fillStyle = '#f97316';
+                    ctx.beginPath();
+                    ctx.arc(0, 22, 8 + Math.sin(performance.now() * 0.01) * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (b.type === 'hut') {
+                    // Mammoth-hide & thatch cone Hut
+                    ctx.fillStyle = '#b45309';
+                    ctx.beginPath();
+                    ctx.moveTo(-32, 14);
+                    ctx.quadraticCurveTo(0, -48, 32, 14);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = '#78350f';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    // Spotted fur roof pattern
+                    ctx.fillStyle = '#fde68a';
+                    ctx.beginPath();
+                    ctx.arc(-10, -8, 4, 0, Math.PI * 2);
+                    ctx.arc(12, -5, 3.5, 0, Math.PI * 2);
+                    ctx.arc(2, -18, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Doorway
+                    ctx.fillStyle = '#292524';
+                    ctx.beginPath();
+                    ctx.arc(0, 14, 11, Math.PI, 0);
+                    ctx.fill();
+                } else if (b.type === 'kitchen') {
+                    // Stone firepit & wooden spit roasting Sabre-Tooth Ribs
+                    ctx.fillStyle = '#57534e';
+                    ctx.beginPath();
+                    ctx.ellipse(0, 8, 30, 18, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Flames
+                    ctx.fillStyle = '#ef4444';
+                    ctx.beginPath();
+                    ctx.arc(0, 4, 13, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#facc15';
+                    ctx.beginPath();
+                    ctx.arc(0, 4, 7 + Math.sin(performance.now() * 0.015) * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Wooden spit frame & giant rib roast
+                    ctx.strokeStyle = '#78350f';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(-24, 12);
+                    ctx.lineTo(-24, -18);
+                    ctx.moveTo(24, 12);
+                    ctx.lineTo(24, -18);
+                    ctx.moveTo(-26, -14);
+                    ctx.lineTo(26, -14);
+                    ctx.stroke();
+                    ctx.fillStyle = '#c2410c';
+                    ctx.beginPath();
+                    ctx.ellipse(0, -14, 14, 8, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (b.type === 'storeroom') {
+                    // Stone walled storage shed with clay pots & logs
+                    ctx.fillStyle = '#78716c';
+                    ctx.fillRect(-28, -16, 56, 30);
+                    ctx.fillStyle = '#a16207';
+                    ctx.beginPath();
+                    ctx.moveTo(-34, -16);
+                    ctx.lineTo(0, -36);
+                    ctx.lineTo(34, -16);
+                    ctx.closePath();
+                    ctx.fill();
+                } else if (b.type === 'armoury') {
+                    // Bone & weapon rack pavilion
+                    ctx.fillStyle = '#7f1d1d';
+                    ctx.beginPath();
+                    ctx.moveTo(-34, 10);
+                    ctx.lineTo(0, -34);
+                    ctx.lineTo(34, 10);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Crossed bone spears on roof
+                    ctx.strokeStyle = '#fef3c7';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(-18, -28);
+                    ctx.lineTo(18, 6);
+                    ctx.moveTo(18, -28);
+                    ctx.lineTo(-18, 6);
+                    ctx.stroke();
+                } else if (b.type === 'gym') {
+                    // Open-air Prehistoric Workout Station with stone barbell & straw dummy
+                    ctx.fillStyle = '#d6d3d1';
+                    ctx.strokeStyle = '#57534e';
+                    ctx.lineWidth = 3;
+                    // Stone barbell
+                    ctx.beginPath();
+                    ctx.moveTo(-22, 4);
+                    ctx.lineTo(22, 4);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(-22, 4, 9, 0, Math.PI * 2);
+                    ctx.arc(22, 4, 9, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    // Straw punching target
+                    ctx.fillStyle = '#eab308';
+                    ctx.beginPath();
+                    ctx.arc(0, -18, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (b.type === 'trap') {
+                    // Vine Net Trap on ground
+                    ctx.strokeStyle = b.armed !== false ? '#d97706' : '#78716c';
+                    ctx.lineWidth = 1.8;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 18, 0, Math.PI * 2);
+                    ctx.moveTo(-14, -10);
+                    ctx.lineTo(14, 10);
+                    ctx.moveTo(14, -10);
+                    ctx.lineTo(-14, 10);
+                    ctx.stroke();
+                } else if (b.type === 'totem') {
+                    // Tall carved Stone Age Sun Totem
+                    ctx.fillStyle = '#a8a29e';
+                    ctx.fillRect(-10, -42, 20, 52);
+                    ctx.fillStyle = '#facc15';
+                    ctx.beginPath();
+                    ctx.arc(0, -44, 13, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Building HP Bar if damaged
+                if (b.hp < b.maxHp) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(-24, -b.radius - 16, 48, 6);
+                    ctx.fillStyle = '#22c55e';
+                    ctx.fillRect(-23, -b.radius - 15, 46 * (b.hp / b.maxHp), 4);
+                }
+
+                ctx.restore();
+            }
+
+            drawResourceNode(ctx, n) {
+                ctx.save();
+                ctx.translate(n.x, n.y);
+
+                if (n.type === 'tree') {
+                    const sway = Math.sin(performance.now() * 0.002 + n.swaySeed) * 3;
+                    // Trunk
+                    ctx.fillStyle = '#78350f';
+                    ctx.fillRect(-5, -12, 10, 22);
+                    // Lush prehistoric pine/palm canopy layers
+                    ctx.fillStyle = '#15803d';
+                    ctx.beginPath();
+                    ctx.arc(sway, -22, 20, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#22c55e';
+                    ctx.beginPath();
+                    ctx.arc(sway - 4, -26, 14, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (n.type === 'stone') {
+                    ctx.fillStyle = '#78716c';
+                    ctx.beginPath();
+                    ctx.moveTo(-22, 10);
+                    ctx.lineTo(-14, -16);
+                    ctx.lineTo(8, -20);
+                    ctx.lineTo(24, -4);
+                    ctx.lineTo(18, 12);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = '#a8a29e';
+                    ctx.beginPath();
+                    ctx.moveTo(-12, -14);
+                    ctx.lineTo(6, -18);
+                    ctx.lineTo(12, -2);
+                    ctx.lineTo(-6, 2);
+                    ctx.closePath();
+                    ctx.fill();
+                } else if (n.type === 'bush') {
+                    ctx.fillStyle = '#16a34a';
+                    ctx.beginPath();
+                    ctx.arc(0, -4, 17, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Red & purple prehistoric berries
+                    ctx.fillStyle = '#f43f5e';
+                    [[-7, -8], [6, -10], [0, -2], [-5, 3], [7, 2]].forEach(([bx, by]) => {
+                        ctx.beginPath();
+                        ctx.arc(bx, by, 3.2, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                } else if (n.type === 'relic') {
+                    // Glowing Ice Age monolith
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.beginPath();
+                    ctx.moveTo(-12, 10);
+                    ctx.lineTo(0, -32);
+                    ctx.lineTo(12, 10);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+
+            drawWildlife(ctx, w) {
+                ctx.save();
+                ctx.translate(w.x, w.y);
+                const bounce = Math.abs(Math.sin(w.animPhase)) * 3;
+
+                ctx.scale(w.facing, 1);
+
+                if (w.species === 'dodo') {
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.beginPath();
+                    ctx.ellipse(0, -6 - bounce, 11, 9, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#facc15';
+                    ctx.beginPath();
+                    ctx.ellipse(11, -11 - bounce, 5, 3, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (w.species === 'boar') {
+                    ctx.fillStyle = '#57534e';
+                    ctx.beginPath();
+                    ctx.ellipse(0, -8 - bounce, 16, 11, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // White curved tusks
+                    ctx.strokeStyle = '#fef9c3';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.moveTo(13, -6 - bounce);
+                    ctx.lineTo(19, -12 - bounce);
+                    ctx.stroke();
+                } else if (w.species === 'tiger') {
+                    // Orange Sabre-Tooth Tiger with long fangs
+                    ctx.fillStyle = '#ea580c';
+                    ctx.beginPath();
+                    ctx.ellipse(0, -10 - bounce, 19, 11, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(15, -15 - bounce, 9, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Sabre fangs
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.moveTo(18, -10 - bounce);
+                    ctx.lineTo(20, -2 - bounce);
+                    ctx.lineTo(22, -10 - bounce);
+                    ctx.fill();
+                } else if (w.species === 'mammoth') {
+                    // Giant Woolly Mammoth with long curved tusks
+                    ctx.fillStyle = '#78350f';
+                    ctx.beginPath();
+                    ctx.ellipse(0, -18 - bounce * 0.5, 28, 22, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#fef3c7';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(20, -12);
+                    ctx.quadraticCurveTo(38, -8, 34, -24);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+
+                // HP bar if damaged
+                if (w.hp < w.maxHp) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(w.x - 16, w.y - w.radius - 18, 32, 5);
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.fillRect(w.x - 15, w.y - w.radius - 17, 30 * (w.hp / w.maxHp), 3);
+                }
+            }
+
+            drawVillager(ctx, v) {
+                ctx.save();
+                ctx.translate(v.x, v.y);
+
+                const isSelected = this.selectedVillagers.some(sv => sv.id === v.id);
+                if (isSelected) {
+                    ctx.beginPath();
+                    ctx.ellipse(0, 4, v.radius + 6, (v.radius + 6) * 0.6, 0, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#4ade80';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.ellipse(0, 5, v.radius * 0.8, v.radius * 0.45, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                const bounce = Math.abs(Math.sin(v.animPhase)) * (v.isChild ? 2.5 : 4);
+                ctx.save();
+                ctx.scale(v.facing, 1);
+
+                // Body (Spotted Leopard Fur Tunic)
+                const bodyH = v.isChild ? 12 : 18;
+                const bodyW = v.isChild ? 9 : 13;
+                ctx.fillStyle = v.furColor;
+                ctx.beginPath();
+                ctx.ellipse(0, -bodyH * 0.5 - bounce, bodyW * 0.65, bodyH * 0.55, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Head
+                const headR = v.isChild ? 7 : 9.5;
+                ctx.fillStyle = '#fdba74';
+                ctx.beginPath();
+                ctx.arc(0, -bodyH - headR * 0.6 - bounce, headR, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Messy Caveman Hair + Bone in hair
+                ctx.fillStyle = '#292524';
+                ctx.beginPath();
+                ctx.arc(-1, -bodyH - headR * 0.95 - bounce, headR * 0.95, Math.PI * 0.9, Math.PI * 2.1);
+                ctx.fill();
+
+                if (!v.isChild) {
+                    // White bone accessory in hair
+                    ctx.strokeStyle = '#f5f5f4';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.moveTo(-7, -bodyH - headR * 1.45 - bounce);
+                    ctx.lineTo(7, -bodyH - headR * 1.45 - bounce);
+                    ctx.stroke();
+                }
+
+                // Eyes
+                ctx.fillStyle = '#1c1917';
+                ctx.beginPath();
+                ctx.arc(3.5, -bodyH - headR * 0.65 - bounce, 1.6, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Equipped Weapon in hand
+                if (!v.isChild) {
+                    const swing = Math.sin(v.animPhase * 1.5) * 0.35;
+                    ctx.save();
+                    ctx.translate(7, -bodyH * 0.6 - bounce);
+                    ctx.rotate(swing);
+                    if (v.weapon === 'club') {
+                        ctx.fillStyle = '#78350f';
+                        ctx.beginPath();
+                        ctx.roundRect(-2, -16, 6, 18, 3);
+                        ctx.fill();
+                    } else if (v.weapon === 'spear') {
+                        ctx.strokeStyle = '#fef3c7';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.moveTo(0, 8);
+                        ctx.lineTo(0, -22);
+                        ctx.stroke();
+                        ctx.fillStyle = '#e7e5e4';
+                        ctx.beginPath();
+                        ctx.moveTo(-4, -18);
+                        ctx.lineTo(0, -27);
+                        ctx.lineTo(4, -18);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                    ctx.restore();
+                }
+
+                ctx.restore();
+
+                // Nameplate & Speech Bubble
+                ctx.font = 'bold 11px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = 'rgba(0,0,0,0.65)';
+                ctx.fillText(v.name, 1, 17);
+                ctx.fillStyle = isSelected ? '#fde047' : '#f5f5f4';
+                ctx.fillText(v.name, 0, 16);
+
+                if (v.bubble && v.bubbleTimer > 0) {
+                    const by = -bodyH - headR * 2 - 14 - bounce;
+                    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+                    ctx.beginPath();
+                    ctx.roundRect(-13, by - 11, 26, 20, 8);
+                    ctx.fill();
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText(v.bubble, 0, by + 3);
+                }
+
+                // HP Bar if hurt
+                if (v.hp < v.maxHp) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                    ctx.fillRect(-14, -bodyH - 26, 28, 4);
+                    ctx.fillStyle = '#22c55e';
+                    ctx.fillRect(-13, -bodyH - 25, 26 * (v.hp / v.maxHp), 2.5);
+                }
+
+                ctx.restore();
+            }
+
+            drawRaider(ctx, r) {
+                ctx.save();
+                ctx.translate(r.x, r.y);
+
+                const bounce = r.trappedTimer > 0 ? 0 : Math.abs(Math.sin(r.animPhase)) * 4;
+
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.35)';
+                ctx.beginPath();
+                ctx.ellipse(0, 5, r.radius * 0.85, r.radius * 0.45, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.save();
+                ctx.scale(r.facing, 1);
+
+                // Red war-painted Cannibal body
+                ctx.fillStyle = '#991b1b';
+                ctx.beginPath();
+                ctx.ellipse(0, -10 - bounce, 9, 11, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Skull mask / warpaint head
+                ctx.fillStyle = '#fecaca';
+                ctx.beginPath();
+                ctx.arc(0, -24 - bounce, r.isBoss ? 11 : 9, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Fierce red warpaint stripes
+                ctx.strokeStyle = '#dc2626';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-5, -25 - bounce);
+                ctx.lineTo(5, -25 - bounce);
+                ctx.stroke();
+
+                // Spiked Bone Club
+                ctx.fillStyle = '#e7e5e4';
+                ctx.fillRect(7, -24 - bounce, 5, 18);
+
+                ctx.restore();
+
+                // Net overlay if trapped!
+                if (r.trappedTimer > 0) {
+                    ctx.strokeStyle = '#facc15';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(0, -12, 18, 0, Math.PI * 2);
+                    ctx.moveTo(-14, -22);
+                    ctx.lineTo(14, -2);
+                    ctx.moveTo(14, -22);
+                    ctx.lineTo(-14, -2);
+                    ctx.stroke();
+                }
+
+                // Raider HP Bar
+                ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                ctx.fillRect(-16, -42, 32, 5);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(-15, -41, 30 * (r.hp / r.maxHp), 3);
+
+                ctx.restore();
+            }
+
+            drawFogOfWar(ctx) {
+                ctx.fillStyle = 'rgba(20, 20, 24, 0.82)';
+                for (let r = 0; r < this.fogRows; r++) {
+                    for (let c = 0; c < this.fogCols; c++) {
+                        if (this.fogGrid[r * this.fogCols + c] === 0) {
+                            const x = c * this.fogCellW;
+                            const y = r * this.fogCellH;
+                            ctx.fillRect(x - 1, y - 1, this.fogCellW + 2, this.fogCellH + 2);
+                        }
+                    }
+                }
+            }
+
+            renderMinimap() {
+                const mctx = this.minimapCtx;
+                const mw = this.minimapCanvas.width;
+                const mh = this.minimapCanvas.height;
+                const scaleX = mw / this.worldW;
+                const scaleY = mh / this.worldH;
+
+                mctx.fillStyle = '#365314';
+                mctx.fillRect(0, 0, mw, mh);
+
+                // Northern Ice cliff strip
+                mctx.fillStyle = '#bae6fd';
+                mctx.fillRect(0, 0, mw, 14);
+
+                // Resources
+                for (const n of this.nodes) {
+                    if (n.amount <= 0 || !this.isPointExplored(n.x, n.y)) continue;
+                    mctx.fillStyle = n.type === 'tree' ? '#22c55e' : (n.type === 'stone' ? '#a8a29e' : '#fb7185');
+                    mctx.fillRect(n.x * scaleX - 1, n.y * scaleY - 1, 2.5, 2.5);
+                }
+
+                // Buildings
+                for (const b of this.buildings) {
+                    mctx.fillStyle = '#38bdf8';
+                    mctx.fillRect(b.x * scaleX - 2.5, b.y * scaleY - 2.5, 5, 5);
+                }
+
+                // Villagers
+                for (const v of this.villagers) {
+                    mctx.fillStyle = '#fde047';
+                    mctx.fillRect(v.x * scaleX - 2, v.y * scaleY - 2, 4, 4);
+                }
+
+                // Raiders
+                for (const r of this.raiders) {
+                    mctx.fillStyle = '#ef4444';
+                    mctx.fillRect(r.x * scaleX - 2.5, r.y * scaleY - 2.5, 5, 5);
+                }
+
+                // Unexplored Fog on minimap
+                mctx.fillStyle = 'rgba(15, 15, 18, 0.85)';
+                const cellMW = mw / this.fogCols;
+                const cellMH = mh / this.fogRows;
+                for (let r = 0; r < this.fogRows; r++) {
+                    for (let c = 0; c < this.fogCols; c++) {
+                        if (this.fogGrid[r * this.fogCols + c] === 0) {
+                            mctx.fillRect(c * cellMW, r * cellMH, cellMW + 0.6, cellMH + 0.6);
+                        }
+                    }
+                }
+
+                // Camera Viewport Box
+                const viewW = (this.canvas.width / this.cam.zoom) * scaleX;
+                const viewH = (this.canvas.height / this.cam.zoom) * scaleY;
+                const viewX = this.cam.x * scaleX - viewW / 2;
+                const viewY = this.cam.y * scaleY - viewH / 2;
+                mctx.strokeStyle = '#ffffff';
+                mctx.lineWidth = 1.2;
+                mctx.strokeRect(viewX, viewY, viewW, viewH);
+            }
+
+            // --- USER INPUT & POINTER EVENTS ---
+            setupEvents() {
+                window.addEventListener('resize', () => this.resizeCanvas());
+
+                window.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                    if (e.code === 'Escape') this.cancelBuildMode();
+                    if (e.code === 'Space' && document.getElementById('setupModal').classList.contains('hidden')) {
+                        this.togglePause();
+                    }
+                });
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+
+                // Mouse / Touch on Main Canvas
+                this.canvas.addEventListener('pointerdown', (e) => {
+                    this.sfx.init();
+                    const worldPt = this.screenToWorld(e.clientX, e.clientY);
+                    this.mouseWorldX = worldPt.x;
+                    this.mouseWorldY = worldPt.y;
+
+                    this.cam.isDragging = true;
+                    this.cam.dragStartX = e.clientX;
+                    this.cam.dragStartY = e.clientY;
+                    this.cam.camStartX = this.cam.x;
+                    this.cam.camStartY = this.cam.y;
+                    this.cam.movedDuringDrag = false;
+                });
+
+                window.addEventListener('pointermove', (e) => {
+                    const worldPt = this.screenToWorld(e.clientX, e.clientY);
+                    this.mouseWorldX = worldPt.x;
+                    this.mouseWorldY = worldPt.y;
+
+                    if (this.cam.isDragging) {
+                        const dx = e.clientX - this.cam.dragStartX;
+                        const dy = e.clientY - this.cam.dragStartY;
+                        if (Math.hypot(dx, dy) > 6) {
+                            this.cam.movedDuringDrag = true;
+                            this.cam.x = this.cam.camStartX - dx / this.cam.zoom;
+                            this.cam.y = this.cam.camStartY - dy / this.cam.zoom;
+                            this.clampCamera();
+                        }
+                    }
+                });
+
+                window.addEventListener('pointerup', (e) => {
+                    if (!this.cam.isDragging) return;
+                    this.cam.isDragging = false;
+                    if (!this.cam.movedDuringDrag && e.target === this.canvas) {
+                        const worldPt = this.screenToWorld(e.clientX, e.clientY);
+                        this.handleWorldClick(worldPt.x, worldPt.y, e.shiftKey);
+                    }
+                });
+
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const delta = e.deltaY < 0 ? 0.12 : -0.12;
+                    this.zoomCamera(delta);
+                }, { passive: false });
+
+                // Minimap Click to jump camera
+                this.minimapCanvas.addEventListener('pointerdown', (e) => {
+                    const rect = this.minimapCanvas.getBoundingClientRect();
+                    const mx = e.clientX - rect.left;
+                    const my = e.clientY - rect.top;
+                    this.cam.x = (mx / rect.width) * this.worldW;
+                    this.cam.y = (my / rect.height) * this.worldH;
+                    this.clampCamera();
+                });
+            }
+
+            handleWorldClick(wx, wy, shiftKey = false) {
+                if (this.buildMode) {
+                    this.confirmBuildPlacement(wx, wy);
+                    return;
+                }
+
+                // 1. Check if clicked directly on a Villager
+                const clickedVil = this.villagers.find(v => Math.hypot(v.x - wx, v.y - wy) <= v.radius + 10);
+                if (clickedVil) {
+                    this.selectVillager(clickedVil, shiftKey);
+                    return;
+                }
+
+                // 2. Check if clicked on an Enemy Raider
+                const clickedRaider = this.raiders.find(r => Math.hypot(r.x - wx, r.y - wy) <= r.radius + 12);
+                if (clickedRaider && this.selectedVillagers.length > 0) {
+                    this.selectedVillagers.forEach(v => this.assignVillagerToObject(v, clickedRaider));
+                    this.sfx.play('select');
+                    return;
+                }
+
+                // 3. Check if clicked on Wildlife
+                const clickedWild = this.wildlife.find(w => Math.hypot(w.x - wx, w.y - wy) <= w.radius + 10);
+                if (clickedWild && this.selectedVillagers.length > 0) {
+                    this.selectedVillagers.forEach(v => this.assignVillagerToObject(v, clickedWild));
+                    this.sfx.play('select');
+                    return;
+                }
+
+                // 4. Check if clicked on a Resource Node / Relic
+                const clickedNode = this.nodes.find(n => n.amount > 0 && Math.hypot(n.x - wx, n.y - wy) <= n.radius + 10);
+                if (clickedNode && this.selectedVillagers.length > 0) {
+                    this.selectedVillagers.forEach(v => this.assignVillagerToObject(v, clickedNode));
+                    this.sfx.play('select');
+                    return;
+                }
+
+                // 5. Check if clicked on a Building
+                const clickedBld = this.buildings.find(b => Math.hypot(b.x - wx, b.y - wy) <= b.radius + 8);
+                if (clickedBld) {
+                    // If villagers are selected and building needs construction/repair or is a workstation, assign them AND show building info if none selected
+                    if (this.selectedVillagers.length > 0 && (!clickedBld.built || clickedBld.hp < clickedBld.maxHp || ['kitchen', 'gym', 'armoury', 'hut'].includes(clickedBld.type))) {
+                        this.selectedVillagers.forEach(v => this.assignVillagerToObject(v, clickedBld));
+                        this.selectedEntity = clickedBld;
+                        this.selectedVillagers = [];
+                        this.sfx.play('select');
+                        this.updateInspectorUI();
+                        return;
+                    }
+                    this.selectedEntity = clickedBld;
+                    this.selectedVillagers = [];
+                    this.sfx.play('select');
+                    this.updateInspectorUI();
+                    return;
+                }
+
+                // 6. Otherwise, if villagers are selected, command them to Move & Explore to that ground spot!
+                if (this.selectedVillagers.length > 0) {
+                    this.selectedVillagers.forEach((v, idx) => {
+                        if (v.isChild) return;
+                        v.task = 'move';
+                        v.targetX = wx + (idx % 3 - 1) * 24;
+                        v.targetY = wy + Math.floor(idx / 3) * 24;
+                        this.setBubble(v, '👣');
+                    });
+                    this.addFloatText(wx, wy, '👣 Move Here', '#bae6fd');
+                    this.updateInspectorUI();
+                }
+            }
+        }
+
+        // Start game when window loads
+        let game;
+        window.onload = function () {
+            game = new PrehistoricTribesGame();
+        };
+    </script>
+</body>
+</html>
