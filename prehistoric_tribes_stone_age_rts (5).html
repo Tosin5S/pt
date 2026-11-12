@@ -1,0 +1,3808 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Prehistoric Tribes - Stone Age RTS & Billion-Man War</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0c0a09;
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+        }
+        .font-cartoon {
+            font-family: 'Fredoka', cursive, sans-serif;
+            letter-spacing: 0.02em;
+        }
+        #gameCanvas {
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            touch-action: none;
+            cursor: grab;
+            z-index: 1;
+        }
+        #gameCanvas:active {
+            cursor: grabbing;
+        }
+        .stone-panel {
+            background: rgba(28, 25, 23, 0.90);
+            backdrop-filter: blur(8px);
+            border: 1.5px solid #57534e;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        }
+        .wood-btn {
+            background: linear-gradient(180deg, #b45309 0%, #78350f 100%);
+            border: 1.5px solid #fbbf24;
+            box-shadow: 0 2px 0 #451a03, inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            transition: transform 0.1s ease, filter 0.15s ease;
+        }
+        .wood-btn:hover {
+            filter: brightness(1.12);
+        }
+        .wood-btn:active {
+            transform: translateY(1.5px);
+            box-shadow: 0 0px 0 #451a03;
+        }
+        .stone-btn {
+            background: linear-gradient(180deg, #44403c 0%, #292524 100%);
+            border: 1.5px solid #78716c;
+            box-shadow: 0 2px 0 #1c1917, inset 0 1px 0 rgba(255, 255, 255, 0.15);
+            transition: transform 0.1s ease, filter 0.15s ease;
+        }
+        .stone-btn:hover {
+            filter: brightness(1.12);
+        }
+        .stone-btn:active {
+            transform: translateY(1.5px);
+            box-shadow: 0 0px 0 #1c1917;
+        }
+        .active-btn {
+            border-color: #fde047 !important;
+            box-shadow: 0 0 10px rgba(250, 204, 21, 0.65) !important;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        @media (orientation: portrait) {
+            #portrait-notice:not(.dismissed) {
+                display: flex !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-stone-100 select-none">
+
+    <!-- FULL-VIEWPORT INTERACTIVE WORLD CANVAS -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- DISMISSIBLE PORTRAIT ORIENTATION HELPER OVERLAY -->
+    <div id="portrait-notice" class="dismissed fixed inset-0 z-50 hidden bg-stone-950/90 backdrop-blur-md flex-col items-center justify-center p-6 text-center pointer-events-auto">
+        <div class="text-5xl mb-3 animate-bounce">📱🔄</div>
+        <h2 class="font-cartoon text-2xl text-amber-400 mb-2">Landscape Recommended</h2>
+        <p class="text-xs text-stone-300 max-w-xs mb-5">
+            Prehistoric Tribes features a massive 4800×3200 Stone Age world best viewed in wide landscape mode, or tap below to play right now!
+        </p>
+        <div class="flex gap-3">
+            <button onclick="game.lockLandscapeFullscreen()" class="wood-btn px-4 py-2 rounded-xl font-bold text-xs text-amber-100">
+                🔄 Go Landscape Fullscreen
+            </button>
+            <button onclick="document.getElementById('portrait-notice').classList.add('dismissed')" class="stone-btn px-4 py-2 rounded-xl font-bold text-xs text-stone-200">
+                ▶️ Play Anyway
+            </button>
+        </div>
+    </div>
+
+    <!-- TOP HUD BAR (pointer-events-none on wrapper, auto on children) -->
+    <header id="top-hud" class="fixed top-0 left-0 right-0 z-20 px-2 pt-1.5 pointer-events-none flex items-center justify-between gap-1.5 flex-wrap">
+        <!-- Left: Resources & Billion-Scale Empire Population -->
+        <div class="stone-panel rounded-xl px-2.5 py-1 pointer-events-auto flex items-center gap-2 sm:gap-3 overflow-x-auto no-scrollbar max-w-full">
+            <div class="flex items-center gap-1" title="Wood Logs">
+                <span class="text-sm">🪵</span>
+                <span id="resWood" class="text-xs font-bold text-amber-300">160</span>
+            </div>
+            <div class="flex items-center gap-1" title="Quarried Stone">
+                <span class="text-sm">🪨</span>
+                <span id="resStone" class="text-xs font-bold text-stone-300">130</span>
+            </div>
+            <div class="flex items-center gap-1" title="Raw Meat & Berries">
+                <span class="text-sm">🥩</span>
+                <span id="resRaw" class="text-xs font-bold text-rose-300">50</span>
+            </div>
+            <div class="flex items-center gap-1" title="Cooked Sabre-Tooth Ribs">
+                <span class="text-sm">🍖</span>
+                <span id="resCooked" class="text-xs font-bold text-orange-300">65</span>
+            </div>
+            <div class="flex items-center gap-1" title="Crafted Clubs & Bone Spears">
+                <span class="text-sm">🦴</span>
+                <span id="resWeapons" class="text-xs font-bold text-yellow-200">4</span>
+            </div>
+            <!-- Local Commanders / Garrison -->
+            <div class="flex items-center gap-1 border-l border-stone-700 pl-2" title="Commanders (+Cave Kids) / Housing Cap">
+                <span class="text-sm">🧑</span>
+                <span class="text-xs font-bold text-emerald-400">
+                    <span id="popAdults">7</span><span id="popKidsWrap" class="text-pink-400 text-[10px]"></span>/<span id="popMax" class="text-stone-400">15</span>
+                </span>
+            </div>
+            <!-- Billion-Scale Empire Population vs Rival Hordes -->
+            <div class="flex items-center gap-1.5 border-l border-stone-700 pl-2" title="Continental Empire Population & Mobilized Legion Troops vs Rival Cannibal Coalition">
+                <span class="text-sm">🌍</span>
+                <div class="leading-none">
+                    <div class="text-[10px] sm:text-[11px] font-bold text-cyan-300 flex items-center gap-1">
+                        <span id="empirePopText">1.42 Billion</span>
+                        <span id="legionSizeBadge" class="text-[9px] px-1 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-600/60">⚔️ 454M</span>
+                    </div>
+                    <div class="text-[8px] text-rose-400 font-semibold mt-0.5">💀 Hordes: <span id="rivalPopText">3.80B</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center: Raid Wave, Instant Battle, Billion Scale & Hero t101s -->
+        <div class="stone-panel rounded-xl px-2 py-1 pointer-events-auto flex items-center gap-1.5 shrink-0">
+            <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-stone-900/90 border border-stone-700">
+                <span class="text-xs">🥁</span>
+                <div class="text-[11px] font-bold text-red-400">W<span id="waveNum">1</span>: <span id="raidTimerText">01:30</span></div>
+                <button onclick="game.callWaveEarly()" class="px-1.5 py-0.5 rounded bg-red-800 hover:bg-red-600 text-[10px] font-bold text-amber-100 border border-red-400/70" title="Spawn a Cannibal Legion Wave right now for +40 Wood, +40 Stone & +200M Recruits!">
+                    ⚔️ Raid Now
+                </button>
+            </div>
+
+            <button onclick="game.cycleWarScale()" class="wood-btn px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-100 border-cyan-400 flex items-center gap-1" title="Cycle War Scale (Billions / Millions / Village)">
+                <span>🌍</span>
+                <span id="warScaleLabel">Scale: Billions</span>
+            </button>
+
+            <button id="btnWarHorn" onclick="game.toggleTownAlert()" class="stone-btn px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1" title="Sound the Mammoth War Horn! All Commanders & Billion-Man Legions charge!">
+                <span>📯</span>
+                <span id="warHornLabel" class="hidden sm:inline">War Horn</span>
+            </button>
+
+            <button onclick="game.focusT101s()" class="wood-btn px-2 py-1 rounded-lg text-[10px] font-bold text-amber-100 border-amber-300 flex items-center gap-1" title="Select & Zoom onto t101s — Bearer of The One Ring!">
+                <span>💍</span>
+                <span>t101s</span>
+            </button>
+
+            <button onclick="game.toggleDisciplineMode()" class="stone-btn px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1" title="Toggle between Smart Auto-Work AI and 2008 Review Butterfly-Chasing Mode">
+                <span id="disciplineIcon">🧠</span>
+                <span id="disciplineLabel" class="hidden md:inline">Smart AI</span>
+            </button>
+        </div>
+
+        <!-- Right: Speed, Save, Reset & Fullscreen -->
+        <div class="stone-panel rounded-xl px-2 py-1 pointer-events-auto flex items-center gap-1 shrink-0">
+            <button id="btnSpd1" onclick="game.setSpeed(1)" class="stone-btn active-btn px-2 py-0.5 rounded text-[10px] font-bold">1x</button>
+            <button id="btnSpd2" onclick="game.setSpeed(2)" class="stone-btn px-2 py-0.5 rounded text-[10px] font-bold">2x</button>
+            <button id="btnPause" onclick="game.togglePause()" class="stone-btn px-2 py-0.5 rounded text-[10px] font-bold">⏸️</button>
+            <button id="btnAudio" onclick="game.toggleAudio()" class="stone-btn px-2 py-0.5 rounded text-[10px] font-bold" title="Toggle Sound Effects">🔊</button>
+            <button onclick="game.saveGameToStorage(true)" class="stone-btn px-2 py-0.5 rounded text-[10px] font-bold text-emerald-300 border-emerald-600/70" title="Save Tribe Progress">
+                💾 <span id="saveStatusLabel" class="hidden sm:inline">Saved</span>
+            </button>
+            <button onclick="game.confirmResetSave()" class="stone-btn px-2 py-0.5 rounded text-[10px] font-bold text-rose-300 border-rose-700/70" title="Tap twice to reset to a fresh tribe">
+                🗑️ <span id="resetBtnLabel" class="hidden sm:inline">Reset</span>
+            </button>
+            <button onclick="game.lockLandscapeFullscreen()" class="wood-btn px-2 py-0.5 rounded text-[10px] font-bold text-amber-100" title="Fullscreen Landscape Mode">
+                ⛶
+            </button>
+        </div>
+    </header>
+
+    <!-- FLOATING BANNER TOAST -->
+    <div id="toast-banner" class="fixed top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-none transition-all duration-300 opacity-0 -translate-y-2">
+        <div class="stone-panel px-3.5 py-1.5 rounded-full border-amber-400/80 flex items-center gap-2 shadow-2xl">
+            <span id="bannerIcon" class="text-base">💍</span>
+            <span id="bannerText" class="text-xs font-bold text-amber-200">t101s wields The One Ring!</span>
+        </div>
+    </div>
+
+    <!-- BUILD PLACEMENT FLOATING CONFIRM BAR -->
+    <div id="buildConfirmBar" class="fixed top-24 left-1/2 -translate-x-1/2 z-30 hidden pointer-events-auto">
+        <div class="stone-panel px-3 py-1.5 rounded-xl border-amber-400 flex items-center gap-2 shadow-2xl">
+            <span id="buildPreviewTitle" class="text-xs font-bold text-amber-300">Place Fur Hut</span>
+            <button onclick="game.confirmBuildPlacement()" class="wood-btn px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-100">✅ Build Here</button>
+            <button onclick="game.cancelBuildMode()" class="stone-btn px-2.5 py-1 rounded-lg text-xs font-bold text-rose-300">✖ Cancel</button>
+        </div>
+    </div>
+
+    <!-- RIGHT-SIDE CAMERA SHORTCUTS & INTERACTIVE MINIMAP -->
+    <div id="camera-bar" class="fixed right-2 bottom-36 sm:bottom-32 z-20 pointer-events-none flex flex-col items-end gap-1.5">
+        <div class="flex flex-wrap justify-end gap-1 pointer-events-auto max-w-[210px]">
+            <button onclick="game.focusT101s()" class="stone-panel px-2 py-1 rounded-lg text-[10px] font-bold text-amber-200 border-amber-400 hover:bg-red-950/80">💍 t101s</button>
+            <button onclick="game.focusActiveDuel()" class="stone-panel px-2 py-1 rounded-lg text-[10px] font-bold text-rose-300 border-rose-500/70 hover:bg-rose-950/80">⚔️ Duel Zoom</button>
+            <button onclick="game.focusNextBender()" class="stone-panel px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-200 border-cyan-500/70 hover:bg-cyan-950/80">🌀 Bender</button>
+            <button onclick="game.focusCampfire()" class="stone-panel px-2 py-1 rounded-lg text-[10px] font-bold text-orange-200 border-orange-500/70 hover:bg-orange-950/80">🔥 Hearth</button>
+            <button onclick="game.resetWideView()" class="stone-panel px-2 py-1 rounded-lg text-[10px] font-bold text-emerald-200 border-emerald-500/70 hover:bg-emerald-950/80">🗺️ Wide 0.55x</button>
+        </div>
+        <!-- Interactive Minimap -->
+        <div class="stone-panel p-1 rounded-xl pointer-events-auto border-amber-500/50 shadow-xl">
+            <canvas id="minimapCanvas" width="136" height="90" class="rounded-lg block cursor-pointer"></canvas>
+        </div>
+    </div>
+
+    <!-- BOTTOM LANDSCAPE COMMAND DOCK (Fighting Styles + Roster + Inspector + Build Bar) -->
+    <footer id="bottom-dock" class="fixed bottom-0 left-0 right-0 z-20 px-2 pb-1.5 pt-0.5 pointer-events-none flex flex-col gap-1">
+        <!-- Row 1: Empire Fighting Style & Legion Formation Bar -->
+        <div class="flex items-center gap-1 overflow-x-auto no-scrollbar pointer-events-auto pr-36">
+            <span class="stone-panel px-2 py-0.5 rounded-lg text-[10px] font-bold text-amber-300 shrink-0">🥋 Army Style:</span>
+            <button onclick="game.setArmyFightingStyle('berserker')" id="armyStyle_berserker" class="stone-btn px-2 py-0.5 rounded-lg text-[10px] font-bold text-rose-300 shrink-0">🗡️ Berserk</button>
+            <button onclick="game.setArmyFightingStyle('phalanx')" id="armyStyle_phalanx" class="stone-btn px-2 py-0.5 rounded-lg text-[10px] font-bold text-sky-300 shrink-0">🛡️ Phalanx</button>
+            <button onclick="game.setArmyFightingStyle('kungfu')" id="armyStyle_kungfu" class="stone-btn px-2 py-0.5 rounded-lg text-[10px] font-bold text-emerald-300 shrink-0">🥋 Kung-Fu</button>
+            <button onclick="game.setArmyFightingStyle('archery')" id="armyStyle_archery" class="stone-btn px-2 py-0.5 rounded-lg text-[10px] font-bold text-amber-200 shrink-0">🏹 Sky-Volley</button>
+            <button onclick="game.setArmyFightingStyle('juggernaut')" id="armyStyle_juggernaut" class="stone-btn px-2 py-0.5 rounded-lg text-[10px] font-bold text-purple-300 shrink-0">🔨 Juggernaut</button>
+            <button onclick="game.cycleLegionFormation()" class="stone-panel border-cyan-500/70 px-2 py-0.5 rounded-lg text-[10px] font-bold text-cyan-200 shrink-0">
+                📐 <span id="formationLabel">Phalanx Square</span>
+            </button>
+            <button onclick="game.triggerAllOutCharge()" class="wood-btn px-2.5 py-0.5 rounded-lg text-[10px] font-bold text-red-100 border-red-400 shrink-0">
+                ⚔️ All-Out War!
+            </button>
+            <button onclick="game.selectAllWarriors()" class="stone-btn px-2 py-0.5 rounded-lg text-[10px] font-bold text-amber-200 shrink-0">
+                👥 Select All
+            </button>
+        </div>
+
+        <!-- Row 2: Tribe Roster Quick-Select Pills -->
+        <div id="tribeRosterBar" class="flex items-center gap-1 overflow-x-auto no-scrollbar pointer-events-auto pr-36"></div>
+
+        <!-- Row 3: Selected Unit / Building Inspector + Constructible Buildings Strip -->
+        <div class="flex flex-col md:flex-row items-stretch md:items-center gap-1.5 pointer-events-none">
+            <!-- Selected Entity Inspector Card -->
+            <div id="inspectorPanel" class="stone-panel rounded-xl px-2.5 py-1.5 pointer-events-auto flex items-center justify-between gap-2 md:w-[430px] shrink-0"></div>
+
+            <!-- Constructible Buildings Strip -->
+            <div class="stone-panel rounded-xl p-1 pointer-events-auto flex items-center gap-1 overflow-x-auto no-scrollbar flex-1">
+                <button onclick="game.startBuildMode('hut')" id="buildBtn_hut" class="wood-btn rounded-lg px-2 py-1 min-w-[74px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-[11px] font-bold text-amber-100 leading-tight">🛖 Fur Hut</div>
+                    <div class="text-[9px] text-amber-200 font-semibold">30🪵 15🪨</div>
+                    <div class="text-[8px] text-amber-100/80">+3 Pop / Kids</div>
+                </button>
+                <button onclick="game.startBuildMode('kitchen')" id="buildBtn_kitchen" class="wood-btn rounded-lg px-2 py-1 min-w-[74px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-[11px] font-bold text-amber-100 leading-tight">🍖 Kitchen</div>
+                    <div class="text-[9px] text-amber-200 font-semibold">35🪵 25🪨</div>
+                    <div class="text-[8px] text-amber-100/80">Roasts Ribs</div>
+                </button>
+                <button onclick="game.startBuildMode('armoury')" id="buildBtn_armoury" class="wood-btn rounded-lg px-2 py-1 min-w-[76px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-[11px] font-bold text-amber-100 leading-tight">🦴 Armoury</div>
+                    <div class="text-[9px] text-amber-200 font-semibold">45🪵 35🪨</div>
+                    <div class="text-[8px] text-amber-100/80">Clubs/Spears</div>
+                </button>
+                <button onclick="game.startBuildMode('gym')" id="buildBtn_gym" class="wood-btn rounded-lg px-2 py-1 min-w-[76px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-[11px] font-bold text-amber-100 leading-tight">🏋️ Stone Gym</div>
+                    <div class="text-[9px] text-amber-200 font-semibold">40🪵 50🪨</div>
+                    <div class="text-[8px] text-amber-100/80">+STR & +SPD</div>
+                </button>
+                <button onclick="game.startBuildMode('shrine')" id="buildBtn_shrine" class="wood-btn rounded-lg px-2 py-1 min-w-[78px] flex flex-col items-center text-center shrink-0 border-cyan-400">
+                    <div class="text-[11px] font-bold text-cyan-100 leading-tight">🌀 Shrine</div>
+                    <div class="text-[9px] text-amber-200 font-semibold">50🪵 65🪨</div>
+                    <div class="text-[8px] text-cyan-100/90">Awaken Bender</div>
+                </button>
+                <button onclick="game.startBuildMode('citadel')" id="buildBtn_citadel" class="wood-btn rounded-lg px-2 py-1 min-w-[82px] flex flex-col items-center text-center shrink-0 border-rose-400">
+                    <div class="text-[11px] font-bold text-rose-100 leading-tight">⚔️ Citadel</div>
+                    <div class="text-[9px] text-amber-200 font-semibold">70🪵 90🪨</div>
+                    <div class="text-[8px] text-rose-100/90">+Billions Pop</div>
+                </button>
+                <button onclick="game.startBuildMode('trap')" id="buildBtn_trap" class="wood-btn rounded-lg px-2 py-1 min-w-[72px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-[11px] font-bold text-amber-100 leading-tight">🕸️ Net Trap</div>
+                    <div class="text-[9px] text-amber-200 font-semibold">15🪵 5🪨</div>
+                    <div class="text-[8px] text-amber-100/80">Snares Foes</div>
+                </button>
+                <button onclick="game.startBuildMode('totem')" id="buildBtn_totem" class="wood-btn rounded-lg px-2 py-1 min-w-[74px] flex flex-col items-center text-center shrink-0">
+                    <div class="text-[11px] font-bold text-amber-100 leading-tight">🗿 Sun Totem</div>
+                    <div class="text-[9px] text-amber-200 font-semibold">60🪵 80🪨</div>
+                    <div class="text-[8px] text-amber-100/80">Heal Aura</div>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // ============================================================================
+        // PROCEDURAL WEB AUDIO SOUND SYNTHESIZER (Zero external audio dependencies)
+        // ============================================================================
+        class SoundFX {
+            constructor() {
+                this.enabled = true;
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume().catch(() => {});
+                }
+            }
+            play(type) {
+                if (!this.enabled) return;
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    if (type === 'select') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(520, now);
+                        osc.frequency.exponentialRampToValueAtTime(680, now + 0.07);
+                        gain.gain.setValueAtTime(0.12, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                        osc.start(now);
+                        osc.stop(now + 0.08);
+                    } else if (type === 'chop' || type === 'hammer') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(170, now);
+                        osc.frequency.exponentialRampToValueAtTime(65, now + 0.09);
+                        gain.gain.setValueAtTime(0.18, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
+                        osc.start(now);
+                        osc.stop(now + 0.09);
+                    } else if (type === 'bonk') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(140, now);
+                        osc.frequency.exponentialRampToValueAtTime(48, now + 0.12);
+                        gain.gain.setValueAtTime(0.20, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                        osc.start(now);
+                        osc.stop(now + 0.12);
+                    } else if (type === 'block') {
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(420, now);
+                        osc.frequency.exponentialRampToValueAtTime(210, now + 0.08);
+                        gain.gain.setValueAtTime(0.16, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
+                        osc.start(now);
+                        osc.stop(now + 0.09);
+                    } else if (type === 'dodge' || type === 'kick') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(460, now);
+                        osc.frequency.exponentialRampToValueAtTime(130, now + 0.11);
+                        gain.gain.setValueAtTime(0.18, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.11);
+                        osc.start(now);
+                        osc.stop(now + 0.11);
+                    } else if (type === 'volley') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(780, now);
+                        osc.frequency.exponentialRampToValueAtTime(290, now + 0.13);
+                        gain.gain.setValueAtTime(0.15, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+                        osc.start(now);
+                        osc.stop(now + 0.14);
+                    } else if (type === 'slam') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(92, now);
+                        osc.frequency.exponentialRampToValueAtTime(28, now + 0.28);
+                        gain.gain.setValueAtTime(0.26, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.29);
+                        osc.start(now);
+                        osc.stop(now + 0.29);
+                    } else if (type === 'horn') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(196, now);
+                        osc.frequency.linearRampToValueAtTime(261.6, now + 0.35);
+                        gain.gain.setValueAtTime(0.18, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.42);
+                        osc.start(now);
+                        osc.stop(now + 0.42);
+                    } else if (type === 'onering' || type === 'awaken') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(330, now);
+                        osc.frequency.exponentialRampToValueAtTime(660, now + 0.28);
+                        gain.gain.setValueAtTime(0.18, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.30);
+                        osc.start(now);
+                        osc.stop(now + 0.30);
+                    }
+                } catch (e) {}
+            }
+        }
+
+        // ============================================================================
+        // GAME SPECIFICATIONS: 6 FIGHTING STYLES, AVATAR BENDING & BUILDINGS
+        // ============================================================================
+        const FIGHTING_STYLE_ORDER = ['berserker', 'phalanx', 'kungfu', 'archery', 'juggernaut'];
+        const FIGHTING_STYLES = {
+            berserker: {
+                id: 'berserker',
+                name: 'Twin-Fang Berserker',
+                shortName: 'Berserk',
+                icon: '🗡️',
+                color: '#f43f5e',
+                range: 34,
+                atkInterval: 0.55,
+                dmgMult: 1.35,
+                blockChance: 0.20,
+                dodgeChance: 0.35,
+                speedMult: 1.25,
+                desc: 'Dual obsidian blades in both hands! Leaps into combat with whirlwind spin-slashes.'
+            },
+            phalanx: {
+                id: 'phalanx',
+                name: 'Phalanx Shield-Wall',
+                shortName: 'Phalanx',
+                icon: '🛡️',
+                color: '#38bdf8',
+                range: 42,
+                atkInterval: 0.88,
+                dmgMult: 1.15,
+                blockChance: 0.75,
+                dodgeChance: 0.14,
+                speedMult: 0.94,
+                desc: 'Megalith Tower Shield & Longpike! 75% Shield-Wall block rate & stun counter-bashes.'
+            },
+            kungfu: {
+                id: 'kungfu',
+                name: 'Crane & Mantis Kung-Fu',
+                shortName: 'Kung-Fu',
+                icon: '🥋',
+                color: '#10b981',
+                range: 38,
+                atkInterval: 0.60,
+                dmgMult: 1.28,
+                blockChance: 0.38,
+                dodgeChance: 0.52,
+                speedMult: 1.32,
+                desc: 'High articulated side-kicks, acrobatic backflip dodges & Emerald Chi Palm shockwaves!'
+            },
+            archery: {
+                id: 'archery',
+                name: 'Sky-Volley Bowman',
+                shortName: 'Sky-Volley',
+                icon: '🏹',
+                color: '#f59e0b',
+                range: 250,
+                atkInterval: 1.0,
+                dmgMult: 1.22,
+                blockChance: 0.15,
+                dodgeChance: 0.35,
+                speedMult: 1.12,
+                desc: 'Draws a curved horn bow and rains parabolic multi-arrow volleys across the sky!'
+            },
+            juggernaut: {
+                id: 'juggernaut',
+                name: 'Mammoth-Maul Juggernaut',
+                shortName: 'Juggernaut',
+                icon: '🔨',
+                color: '#c084fc',
+                range: 42,
+                atkInterval: 1.12,
+                dmgMult: 1.85,
+                blockChance: 0.42,
+                dodgeChance: 0.12,
+                speedMult: 0.90,
+                desc: 'Two-handed obsidian war-maul! Leaps & slams tectonic fissures that stun enemy squads.'
+            },
+            blood_ring: {
+                id: 'blood_ring',
+                name: 'Sovereign Ring Blood-Art',
+                shortName: 'One Ring',
+                icon: '💍',
+                color: '#dc2626',
+                range: 260,
+                atkInterval: 0.68,
+                dmgMult: 2.30,
+                blockChance: 0.68,
+                dodgeChance: 0.62,
+                speedMult: 1.55,
+                desc: 'Exclusive to t101s! Wields The One Ring in flight to Bloodbend & puppet enemy legions.'
+            }
+        };
+
+        const BENDING_ORDER = ['fire', 'earth', 'water', 'air'];
+        const BENDING_SPECS = {
+            fire: {
+                name: 'Firebender',
+                icon: '🔥',
+                color: '#f97316',
+                glow: '#fde047',
+                outfitColor: '#991b1b',
+                sashColor: '#facc15',
+                range: 210,
+                dmg: 22
+            },
+            earth: {
+                name: 'Earthbender',
+                icon: '🪨',
+                color: '#84cc16',
+                glow: '#bef264',
+                outfitColor: '#365314',
+                sashColor: '#eab308',
+                range: 200,
+                dmg: 26
+            },
+            water: {
+                name: 'Waterbender',
+                icon: '💧',
+                color: '#06b6d4',
+                glow: '#67e8f9',
+                outfitColor: '#1e3a8a',
+                sashColor: '#bae6fd',
+                range: 210,
+                dmg: 19
+            },
+            air: {
+                name: 'Airbender',
+                icon: '🌪️',
+                color: '#38bdf8',
+                glow: '#e0f2fe',
+                outfitColor: '#ea580c',
+                sashColor: '#fef08a',
+                range: 220,
+                dmg: 18
+            },
+            avatar: {
+                name: 'Tribal Avatar',
+                icon: '🌟',
+                color: '#22d3ee',
+                glow: '#ffffff',
+                outfitColor: '#581c87',
+                sashColor: '#fde047',
+                range: 260,
+                dmg: 38
+            },
+            blood: {
+                name: 'One Ring Bloodbender',
+                icon: '🩸',
+                color: '#dc2626',
+                glow: '#fbbf24',
+                outfitColor: '#450a0a',
+                sashColor: '#fbbf24',
+                range: 265,
+                dmg: 36
+            }
+        };
+
+        const BUILDING_SPECS = {
+            hearth: {
+                name: 'Tribal Hearth Campfire',
+                icon: '🔥',
+                wood: 0,
+                stone: 0,
+                radius: 36,
+                maxHp: 500,
+                buildTime: 10,
+                desc: 'Warm village hearth with 6 carved log benches where villagers sit and feast on roasted ribs.'
+            },
+            hut: {
+                name: 'Fur Hut',
+                icon: '🛖',
+                wood: 30,
+                stone: 15,
+                radius: 32,
+                maxHp: 220,
+                buildTime: 35,
+                popBonus: 3,
+                desc: 'Cozy mammoth-fur shelter. Increases housing cap by +3 and lets rested adults raise Cave Children!'
+            },
+            kitchen: {
+                name: 'Sabre-Rib Kitchen',
+                icon: '🍖',
+                wood: 35,
+                stone: 25,
+                radius: 32,
+                maxHp: 240,
+                buildTime: 40,
+                desc: 'Roasts 1 Raw Meat/Berries into 2 delicious Cooked Sabre-Tooth Ribs.'
+            },
+            armoury: {
+                name: 'Bone Armoury',
+                icon: '🦴',
+                wood: 45,
+                stone: 35,
+                radius: 34,
+                maxHp: 260,
+                buildTime: 45,
+                desc: 'Crafts Clubs and Bone Spears so your warriors hit much harder in battle.'
+            },
+            gym: {
+                name: 'Prehistoric Stone Gym',
+                icon: '🏋️',
+                wood: 40,
+                stone: 50,
+                radius: 36,
+                maxHp: 280,
+                buildTime: 50,
+                desc: 'Villagers press stone barbells overhead to permanently level up Strength (💪) and Speed (⚡)!'
+            },
+            shrine: {
+                name: 'Sacred Elemental Shrine',
+                icon: '🌀',
+                wood: 50,
+                stone: 65,
+                radius: 38,
+                maxHp: 350,
+                buildTime: 55,
+                desc: 'Ancient Elemental Sanctuary where villagers awaken Water 💧, Earth 🪨, Fire 🔥, Air 🌪️ or Avatar 🌟 powers!'
+            },
+            citadel: {
+                name: 'Imperial War Citadel',
+                icon: '⚔️',
+                wood: 70,
+                stone: 90,
+                radius: 44,
+                maxHp: 600,
+                buildTime: 65,
+                popBonus: 6,
+                desc: 'Continental War Academy! Mobilizes +500 Million recruits and drills Legion Squadrons in all 5 Fighting Styles.'
+            },
+            trap: {
+                name: 'Vine Net Trap',
+                icon: '🕸️',
+                wood: 15,
+                stone: 5,
+                radius: 22,
+                maxHp: 90,
+                buildTime: 18,
+                desc: 'Snares invading Cannibal Raiders in a vine net for 7 seconds so your warriors can strike freely!'
+            },
+            totem: {
+                name: 'Sun Spirit Totem',
+                icon: '🗿',
+                wood: 60,
+                stone: 80,
+                radius: 30,
+                maxHp: 380,
+                buildTime: 60,
+                desc: 'Sacred monument that radiates a golden healing aura to all nearby tribe members.'
+            }
+        };
+
+        const CAVEMAN_NAMES = [
+            'Grok', 'Thag', 'Korg', 'Boga', 'Zug', 'Tala', 'Oona', 'Roka',
+            'Tor', 'Ugga', 'Vana', 'Kala', 'Dako', 'Mira', 'Bram', 'Nola'
+        ];
+
+        // ============================================================================
+        // MAIN PREHISTORIC TRIBES GAME ENGINE
+        // ============================================================================
+        class PrehistoricTribesGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.miniCanvas = document.getElementById('minimapCanvas');
+                this.miniCtx = this.miniCanvas.getContext('2d');
+                this.sfx = new SoundFX();
+
+                this.worldW = 4800;
+                this.worldH = 3200;
+                this.riverPoints = [];
+                this.fords = [];
+                this.glacierCave = { x: 2400, y: 260 };
+
+                // Camera starts at wide 0.55x macro view centered on the village hearth
+                this.cam = {
+                    x: 2400,
+                    y: 560,
+                    zoom: 0.55,
+                    vx: 0,
+                    vy: 0,
+                    targetX: null,
+                    targetY: null,
+                    targetZoom: null
+                };
+
+                this.storageKey = 'prehistoric_tribes_playable_v3';
+                this.resetConfirmTimer = 0;
+                this.autoSaveTimer = 0;
+
+                this.speedMult = 1;
+                this.paused = false;
+                this.disciplineMode = 'smart'; // 'smart' or '2008'
+                this.townAlert = false;
+                this.gameTime = 0;
+
+                // Billion-Population Continental War Engine
+                this.warScaleTier = 'billions'; // 'billions', 'millions', 'village'
+                this.empirePopulation = 1420000000;
+                this.rivalPopulation = 3800000000;
+                this.legionFormation = 'square';
+
+                this.resources = {
+                    wood: 160,
+                    stone: 130,
+                    rawFood: 50,
+                    cookedFood: 65,
+                    weapons: 4
+                };
+
+                this.buildings = [];
+                this.nodes = [];
+                this.wildlife = [];
+                this.cannibalCamps = [];
+                this.raiders = [];
+                this.villagers = [];
+                this.particles = [];
+                this.floatTexts = [];
+                this.shockwaves = [];
+                this.elementalProjectiles = [];
+                this.arrowVolleys = [];
+                this.fissures = [];
+                this.butterflies = [];
+                this.targetMarkers = [];
+
+                this.selectedEntity = null;
+                this.selectedVillagers = [];
+                this.buildMode = null;
+                this.buildPreviewPos = { x: 2400, y: 620 };
+                this.benderFocusIndex = 0;
+
+                this.waveNumber = 1;
+                this.raidInterval = 90;
+                this.raidCountdown = 90;
+
+                // Pointer / Multi-touch state
+                this.pointers = new Map();
+                this.isDragging = false;
+                this.dragStartScreen = { x: 0, y: 0 };
+                this.lastDragScreen = { x: 0, y: 0 };
+                this.pinchStartDist = 0;
+                this.pinchStartZoom = 0.55;
+
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+                this.bindInputEvents();
+                this.bindLifecycleAutoSave();
+
+                // Load saved game or initialize a vibrant, action-ready world
+                if (!this.loadGameFromStorage()) {
+                    this.initNewWorld();
+                }
+
+                this.updateHUD();
+                this.updateInspectorUI();
+
+                this.lastFrameTime = performance.now();
+                requestAnimationFrame((ts) => this.loop(ts));
+            }
+
+            resizeCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            // ========================================================================
+            // INITIALIZE NEW WORLD (4800x3200 Valley + t101s + Benders + Vanguard)
+            // ========================================================================
+            initNewWorld() {
+                this.buildings = [];
+                this.nodes = [];
+                this.wildlife = [];
+                this.cannibalCamps = [];
+                this.raiders = [];
+                this.villagers = [];
+                this.particles = [];
+                this.floatTexts = [];
+                this.shockwaves = [];
+                this.elementalProjectiles = [];
+                this.arrowVolleys = [];
+                this.fissures = [];
+                this.butterflies = [];
+                this.targetMarkers = [];
+
+                this.resources = {
+                    wood: 160,
+                    stone: 130,
+                    rawFood: 50,
+                    cookedFood: 65,
+                    weapons: 4
+                };
+                this.warScaleTier = 'billions';
+                this.empirePopulation = 1420000000;
+                this.rivalPopulation = 3800000000;
+                this.legionFormation = 'square';
+                this.waveNumber = 1;
+                this.raidCountdown = 90;
+
+                this.generateRiverGeometry();
+
+                const cx = 2400;
+                const cy = 540;
+
+                // 1. Starter Village Buildings around the Hearth
+                this.buildings.push(
+                    { id: 'bld_hearth', type: 'hearth', x: cx, y: cy, hp: 500, maxHp: 500, built: true, progress: 1, radius: 36 },
+                    { id: 'bld_hut1', type: 'hut', x: cx - 150, y: cy - 45, hp: 220, maxHp: 220, built: true, progress: 1, radius: 32 },
+                    { id: 'bld_hut2', type: 'hut', x: cx + 150, y: cy - 45, hp: 220, maxHp: 220, built: true, progress: 1, radius: 32 },
+                    { id: 'bld_kitchen', type: 'kitchen', x: cx - 135, y: cy + 85, hp: 240, maxHp: 240, built: true, progress: 1, radius: 32 },
+                    { id: 'bld_gym', type: 'gym', x: cx + 145, y: cy + 85, hp: 280, maxHp: 280, built: true, progress: 1, radius: 36 },
+                    { id: 'bld_shrine', type: 'shrine', x: cx - 185, y: cy + 210, hp: 350, maxHp: 350, built: true, progress: 1, radius: 38 },
+                    { id: 'bld_citadel', type: 'citadel', x: cx + 195, y: cy + 210, hp: 600, maxHp: 600, built: true, progress: 1, radius: 44 },
+                    // One half-built Bone Armoury right near the hearth so players immediately see 3-stage timber scaffolding!
+                    { id: 'bld_armoury_scaf', type: 'armoury', x: cx + 10, y: cy + 165, hp: 140, maxHp: 260, built: false, progress: 0.45, radius: 34 }
+                );
+
+                // 2. Resource Clusters (Close to village + across the 4800x3200 valley)
+                const nearNodes = [
+                    { type: 'wood', x: cx - 290, y: cy - 30, amount: 160 },
+                    { type: 'wood', x: cx - 320, y: cy + 60, amount: 160 },
+                    { type: 'stone', x: cx + 290, y: cy - 20, amount: 180 },
+                    { type: 'stone', x: cx + 325, y: cy + 70, amount: 180 },
+                    { type: 'berry', x: cx - 60, y: cy - 135, amount: 120 },
+                    { type: 'berry', x: cx + 75, y: cy - 135, amount: 120 }
+                ];
+                nearNodes.forEach((n, idx) => {
+                    this.nodes.push({
+                        id: 'node_near_' + idx,
+                        type: n.type,
+                        x: n.x,
+                        y: n.y,
+                        amount: n.amount,
+                        maxAmount: n.amount,
+                        radius: 26
+                    });
+                });
+
+                for (let i = 0; i < 42; i++) {
+                    const nx = 280 + Math.random() * (this.worldW - 560);
+                    const ny = 360 + Math.random() * (this.worldH - 620);
+                    if (Math.hypot(nx - cx, ny - cy) < 380) continue;
+                    const types = ['wood', 'wood', 'stone', 'berry'];
+                    const t = types[i % types.length];
+                    this.nodes.push({
+                        id: 'node_' + i,
+                        type: t,
+                        x: nx,
+                        y: ny,
+                        amount: 150,
+                        maxAmount: 150,
+                        radius: 26
+                    });
+                }
+
+                // 3. Outer Cannibal Skull Camps
+                this.cannibalCamps = [
+                    { id: 'camp_west', name: 'Western Blood-Skull Stronghold', x: 580, y: 2620 },
+                    { id: 'camp_center', name: 'Southern Obsidian War-Camp', x: 2400, y: 2820 },
+                    { id: 'camp_east', name: 'Eastern Bone-Golem Citadel', x: 4220, y: 2580 }
+                ];
+
+                // 4. Prehistoric Wildlife Herds
+                const specs = [
+                    { type: 'mammoth', name: 'Woolly Mammoth', hp: 220, dmg: 16, speed: 42, meat: 65, radius: 24 },
+                    { type: 'sabre', name: 'Sabre-Tooth Tiger', hp: 120, dmg: 14, speed: 74, meat: 38, radius: 16 },
+                    { type: 'stag', name: 'Antlered Stag', hp: 70, dmg: 5, speed: 78, meat: 28, radius: 14 },
+                    { type: 'boar', name: 'Wild Tusker Boar', hp: 85, dmg: 8, speed: 62, meat: 30, radius: 14 }
+                ];
+                for (let i = 0; i < 16; i++) {
+                    const s = specs[i % specs.length];
+                    this.wildlife.push({
+                        id: 'wild_' + i,
+                        type: s.type,
+                        name: s.name,
+                        x: 450 + Math.random() * (this.worldW - 900),
+                        y: 780 + Math.random() * (this.worldH - 1100),
+                        hp: s.hp,
+                        maxHp: s.hp,
+                        dmg: s.dmg,
+                        speed: s.speed,
+                        meat: s.meat,
+                        radius: s.radius,
+                        facing: Math.random() < 0.5 ? 1 : -1,
+                        animPhase: Math.random() * 6,
+                        wanderTimer: 2 + Math.random() * 4,
+                        vx: 0,
+                        vy: 0
+                    });
+                }
+
+                // 5. Butterflies (for 2008 Review Easter Egg)
+                for (let i = 0; i < 12; i++) {
+                    this.butterflies.push({
+                        x: cx - 500 + Math.random() * 1000,
+                        y: cy - 250 + Math.random() * 700,
+                        phase: Math.random() * 6,
+                        color: ['#fbbf24', '#38bdf8', '#f472b6', '#a78bfa'][i % 4]
+                    });
+                }
+
+                // 6. Spawn 6 Articulated Tribe Members with all 5 Fighting Styles & Elemental Bending
+                for (let i = 0; i < 6; i++) {
+                    const ang = (i / 6) * Math.PI * 2;
+                    const vx = cx + Math.cos(ang) * 95;
+                    const vy = cy + Math.sin(ang) * 65;
+                    const v = this.createVillager(vx, vy, false, i % 2 === 1 ? 'female' : 'male');
+                    v.fightingStyle = FIGHTING_STYLE_ORDER[i % FIGHTING_STYLE_ORDER.length];
+                    v.weapon = i % 2 === 0 ? 'spear' : 'club';
+                    if (i === 0) {
+                        v.bending = 'earth';
+                        v.bubble = '🪨';
+                    } else if (i === 1) {
+                        v.bending = 'fire';
+                        v.bubble = '🔥';
+                    } else if (i === 2) {
+                        v.bending = 'water';
+                        v.bubble = '💧';
+                    } else if (i === 3) {
+                        v.bending = 'air';
+                        v.bubble = '🌪️';
+                    }
+                    // Assign lively starter tasks so the village is immediately bustling!
+                    if (i === 4) {
+                        const arm = this.buildings.find(b => b.id === 'bld_armoury_scaf');
+                        if (arm) this.assignVillagerToObject(v, arm);
+                    } else if (i === 5) {
+                        v.task = 'feast';
+                        v.seatIndex = 2;
+                    }
+                }
+
+                // 7. Spawn Unique Hero "t101s" (Bearer of The One Ring — Bloodbending & Levitation Flight)
+                const hero = this.spawnT101sHero(cx, cy + 52);
+
+                // 8. Spawn an initial Cannibal Scout Vanguard south of the village so combat is immediately testable
+                this.spawnRaiderSquad(cx + 260, cy + 310, 3);
+
+                this.selectVillager(hero, false);
+                this.cam.x = cx;
+                this.cam.y = cy + 60;
+                this.cam.zoom = 0.55;
+            }
+
+            generateRiverGeometry() {
+                this.riverPoints = [];
+                const steps = 32;
+                for (let i = 0; i <= steps; i++) {
+                    const t = i / steps;
+                    const rx = t * this.worldW;
+                    const ry = 1480 + Math.sin(t * Math.PI * 3.2) * 210;
+                    this.riverPoints.push({ x: rx, y: ry });
+                }
+                this.fords = [
+                    this.riverPoints[8],
+                    this.riverPoints[16],
+                    this.riverPoints[24]
+                ];
+            }
+
+            createVillager(x, y, isChild = false, gender = 'male') {
+                const idx = this.villagers.length;
+                const skinPalette = ['#e0ac69', '#d99b78', '#c68642', '#f1c27d'];
+                const furPalette = ['#92400e', '#78350f', '#b45309', '#57534e', '#3f6212'];
+                const v = {
+                    id: 'vil_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                    name: CAVEMAN_NAMES[idx % CAVEMAN_NAMES.length],
+                    gender,
+                    x,
+                    y,
+                    radius: isChild ? 11 : 14,
+                    isChild,
+                    growthProgress: isChild ? 0 : 100,
+                    hp: 120,
+                    maxHp: 120,
+                    hunger: 95,
+                    energy: 95,
+                    strLevel: 1,
+                    spdLevel: 1,
+                    gymXp: 0,
+                    weapon: 'club',
+                    fightingStyle: FIGHTING_STYLE_ORDER[idx % FIGHTING_STYLE_ORDER.length],
+                    bending: null,
+                    isT101s: false,
+                    hasTheOneRing: false,
+                    isLevitating: false,
+                    skySoar: false,
+                    hoverHeight: 0,
+                    hoverPhase: Math.random() * 6,
+                    surgeCooldown: 0,
+                    task: isChild ? 'growing' : 'idle',
+                    targetId: null,
+                    targetX: x,
+                    targetY: y,
+                    carryType: null,
+                    carryAmount: 0,
+                    actionTimer: 0,
+                    isMoving: false,
+                    isWorking: false,
+                    isSeated: false,
+                    eatCycle: Math.random() * 6,
+                    seatIndex: idx % 6,
+                    scaffoldSlotAngle: (idx * 1.5) % (Math.PI * 2),
+                    isBlocking: false,
+                    blockTimer: 0,
+                    dodgeTimer: 0,
+                    dodgeCooldown: 0,
+                    dodgeVx: 0,
+                    dodgeVy: 0,
+                    lungeOffset: 0,
+                    slashTimer: 0,
+                    kickTimer: 0,
+                    leapHeight: 0,
+                    stompTimer: 0,
+                    cheerTimer: 0,
+                    facing: 1,
+                    animPhase: Math.random() * 6,
+                    workPhase: 0,
+                    bendPhase: 0,
+                    bubble: '',
+                    bubbleTimer: 0,
+                    skinColor: skinPalette[idx % skinPalette.length],
+                    furColor: furPalette[idx % furPalette.length],
+                    hairColor: '#1c1917'
+                };
+                this.villagers.push(v);
+                return v;
+            }
+
+            spawnT101sHero(x, y) {
+                let hero = this.villagers.find(v => v.isT101s);
+                if (!hero) {
+                    hero = this.createVillager(x, y, false, 'male');
+                }
+                hero.name = 't101s';
+                hero.isT101s = true;
+                hero.hasTheOneRing = true;
+                hero.fightingStyle = 'blood_ring';
+                hero.bending = 'blood';
+                hero.isLevitating = true;
+                hero.skySoar = true;
+                hero.hoverHeight = 20;
+                hero.maxHp = 260;
+                hero.hp = 260;
+                hero.strLevel = 4;
+                hero.spdLevel = 4;
+                hero.weapon = 'spear';
+                hero.skinColor = '#f1c27d';
+                hero.furColor = '#450a0a';
+                hero.bubble = '💍';
+                hero.bubbleTimer = 5.0;
+                return hero;
+            }
+
+            spawnRaiderSquad(baseX, baseY, count = 3) {
+                for (let i = 0; i < count; i++) {
+                    const isBoss = (i === 0 && count >= 3);
+                    const style = isBoss ? 'juggernaut' : FIGHTING_STYLE_ORDER[(this.waveNumber + i) % FIGHTING_STYLE_ORDER.length];
+                    this.raiders.push({
+                        id: 'raid_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                        name: isBoss ? 'Cannibal Juggernaut Warlord' : `Cannibal ${FIGHTING_STYLES[style].shortName} Raider`,
+                        isBoss,
+                        fightingStyle: style,
+                        x: baseX + (Math.random() - 0.5) * 90,
+                        y: baseY + (Math.random() - 0.5) * 90,
+                        radius: isBoss ? 17 : 14,
+                        hp: (isBoss ? 180 : 95) + this.waveNumber * 15,
+                        maxHp: (isBoss ? 180 : 95) + this.waveNumber * 15,
+                        dmg: (isBoss ? 13 : 8) + this.waveNumber,
+                        speed: isBoss ? 56 : 64,
+                        trappedTimer: 0,
+                        attackCooldown: 0,
+                        isMoving: true,
+                        isAttacking: false,
+                        isBlocking: false,
+                        blockTimer: 0,
+                        dodgeTimer: 0,
+                        dodgeCooldown: 0,
+                        dodgeVx: 0,
+                        dodgeVy: 0,
+                        knockbackVx: 0,
+                        knockbackVy: 0,
+                        chillTimer: 0,
+                        stunTimer: 0,
+                        bloodPuppetTimer: 0,
+                        puppetHeight: 0,
+                        lungeOffset: 0,
+                        slashTimer: 0,
+                        kickTimer: 0,
+                        leapHeight: 0,
+                        facing: -1,
+                        animPhase: Math.random() * 6,
+                        workPhase: 0
+                    });
+                }
+            }
+
+            // ========================================================================
+            // DEFENSIVE LOCALSTORAGE SAVE & LOAD (prehistoric_tribes_playable_v3)
+            // ========================================================================
+            saveGameToStorage(showToast = false) {
+                try {
+                    const payload = {
+                        version: 3,
+                        savedAt: Date.now(),
+                        resources: this.resources,
+                        warScaleTier: this.warScaleTier,
+                        empirePopulation: this.empirePopulation,
+                        rivalPopulation: this.rivalPopulation,
+                        legionFormation: this.legionFormation,
+                        waveNumber: this.waveNumber,
+                        raidCountdown: this.raidCountdown,
+                        disciplineMode: this.disciplineMode,
+                        townAlert: this.townAlert,
+                        cam: { x: this.cam.x, y: this.cam.y, zoom: this.cam.zoom },
+                        buildings: this.buildings,
+                        nodes: this.nodes,
+                        wildlife: this.wildlife,
+                        raiders: this.raiders,
+                        villagers: this.villagers
+                    };
+                    localStorage.setItem(this.storageKey, JSON.stringify(payload));
+                    const lbl = document.getElementById('saveStatusLabel');
+                    if (lbl) lbl.textContent = 'Saved ✓';
+                    if (showToast) {
+                        this.sfx.play('select');
+                        this.showBanner('💾', 'Tribe, Empire Population & t101s saved to phone/browser storage!');
+                    }
+                } catch (e) {}
+            }
+
+            loadGameFromStorage() {
+                try {
+                    const raw = localStorage.getItem(this.storageKey);
+                    if (!raw) return false;
+                    const data = JSON.parse(raw);
+                    if (!data || !Array.isArray(data.villagers) || data.villagers.length === 0) return false;
+
+                    this.generateRiverGeometry();
+                    this.resources = {
+                        wood: Number(data.resources?.wood ?? 160),
+                        stone: Number(data.resources?.stone ?? 130),
+                        rawFood: Number(data.resources?.rawFood ?? 50),
+                        cookedFood: Number(data.resources?.cookedFood ?? 65),
+                        weapons: Number(data.resources?.weapons ?? 4)
+                    };
+                    this.warScaleTier = data.warScaleTier || 'billions';
+                    this.empirePopulation = Number(data.empirePopulation) || 1420000000;
+                    this.rivalPopulation = Number(data.rivalPopulation) || 3800000000;
+                    this.legionFormation = data.legionFormation || 'square';
+                    this.waveNumber = Number(data.waveNumber) || 1;
+                    this.raidCountdown = Number(data.raidCountdown) || 90;
+                    this.disciplineMode = data.disciplineMode || 'smart';
+                    this.townAlert = !!data.townAlert;
+
+                    if (data.cam) {
+                        this.cam.x = Number(data.cam.x) || 2400;
+                        this.cam.y = Number(data.cam.y) || 560;
+                        this.cam.zoom = Math.max(0.30, Math.min(1.65, Number(data.cam.zoom) || 0.55));
+                    }
+
+                    this.cannibalCamps = [
+                        { id: 'camp_west', name: 'Western Blood-Skull Stronghold', x: 580, y: 2620 },
+                        { id: 'camp_center', name: 'Southern Obsidian War-Camp', x: 2400, y: 2820 },
+                        { id: 'camp_east', name: 'Eastern Bone-Golem Citadel', x: 4220, y: 2580 }
+                    ];
+
+                    this.buildings = (data.buildings || []).map(b => ({
+                        id: b.id || ('bld_' + Math.random().toString(36).slice(2, 7)),
+                        type: BUILDING_SPECS[b.type] ? b.type : 'hut',
+                        x: Number(b.x) || 2400,
+                        y: Number(b.y) || 540,
+                        hp: Number(b.hp) || 200,
+                        maxHp: Number(b.maxHp) || 220,
+                        built: b.built !== undefined ? !!b.built : true,
+                        progress: Number(b.progress ?? 1),
+                        radius: BUILDING_SPECS[b.type]?.radius || 32
+                    }));
+
+                    this.nodes = (data.nodes || []).map(n => ({
+                        id: n.id || ('node_' + Math.random().toString(36).slice(2, 7)),
+                        type: n.type || 'wood',
+                        x: Number(n.x) || 2000,
+                        y: Number(n.y) || 600,
+                        amount: Number(n.amount ?? 120),
+                        maxAmount: Number(n.maxAmount ?? 150),
+                        radius: 26
+                    }));
+
+                    this.wildlife = (data.wildlife || []).map(w => ({
+                        id: w.id || ('wild_' + Math.random().toString(36).slice(2, 7)),
+                        type: w.type || 'mammoth',
+                        name: w.name || 'Woolly Mammoth',
+                        x: Number(w.x) || 1800,
+                        y: Number(w.y) || 1100,
+                        hp: Number(w.hp) || 120,
+                        maxHp: Number(w.maxHp) || 120,
+                        dmg: Number(w.dmg) || 10,
+                        speed: Number(w.speed) || 50,
+                        meat: Number(w.meat) || 40,
+                        radius: Number(w.radius) || 18,
+                        facing: w.facing || 1,
+                        animPhase: 0,
+                        wanderTimer: 2,
+                        vx: 0,
+                        vy: 0
+                    }));
+
+                    this.raiders = (data.raiders || []).map((r, idx) => ({
+                        id: r.id || ('raid_' + idx),
+                        name: r.name || 'Cannibal Raider',
+                        isBoss: !!r.isBoss,
+                        fightingStyle: FIGHTING_STYLES[r.fightingStyle] ? r.fightingStyle : FIGHTING_STYLE_ORDER[idx % FIGHTING_STYLE_ORDER.length],
+                        x: Number(r.x) || 2500,
+                        y: Number(r.y) || 850,
+                        radius: r.isBoss ? 17 : 14,
+                        hp: Number(r.hp) || 95,
+                        maxHp: Number(r.maxHp) || 95,
+                        dmg: Number(r.dmg) || 9,
+                        speed: Number(r.speed) || 62,
+                        trappedTimer: 0,
+                        attackCooldown: 0,
+                        isMoving: true,
+                        isAttacking: false,
+                        isBlocking: false,
+                        blockTimer: 0,
+                        dodgeTimer: 0,
+                        dodgeCooldown: 0,
+                        dodgeVx: 0,
+                        dodgeVy: 0,
+                        knockbackVx: 0,
+                        knockbackVy: 0,
+                        chillTimer: 0,
+                        stunTimer: 0,
+                        bloodPuppetTimer: 0,
+                        puppetHeight: 0,
+                        lungeOffset: 0,
+                        slashTimer: 0,
+                        kickTimer: 0,
+                        leapHeight: 0,
+                        facing: -1,
+                        animPhase: 0,
+                        workPhase: 0
+                    }));
+
+                    this.villagers = (data.villagers || []).map((v, idx) => {
+                        const isHero = !!v.isT101s || v.name === 't101s';
+                        return {
+                            id: v.id || ('vil_' + idx),
+                            name: isHero ? 't101s' : (v.name || CAVEMAN_NAMES[idx % CAVEMAN_NAMES.length]),
+                            gender: v.gender || 'male',
+                            x: Number(v.x) || 2400,
+                            y: Number(v.y) || 560,
+                            radius: v.isChild ? 11 : 14,
+                            isChild: !!v.isChild,
+                            growthProgress: Number(v.growthProgress ?? 100),
+                            hp: Number(v.hp) || (isHero ? 260 : 120),
+                            maxHp: Number(v.maxHp) || (isHero ? 260 : 120),
+                            hunger: Number(v.hunger ?? 90),
+                            energy: Number(v.energy ?? 90),
+                            strLevel: Number(v.strLevel) || (isHero ? 4 : 1),
+                            spdLevel: Number(v.spdLevel) || (isHero ? 4 : 1),
+                            gymXp: Number(v.gymXp) || 0,
+                            weapon: v.weapon || 'club',
+                            fightingStyle: isHero ? 'blood_ring' : (FIGHTING_STYLES[v.fightingStyle] ? v.fightingStyle : FIGHTING_STYLE_ORDER[idx % FIGHTING_STYLE_ORDER.length]),
+                            bending: isHero ? 'blood' : (v.bending || null),
+                            isT101s: isHero,
+                            hasTheOneRing: isHero,
+                            isLevitating: isHero,
+                            skySoar: isHero ? (v.skySoar !== false) : false,
+                            hoverHeight: isHero ? 20 : 0,
+                            hoverPhase: 0,
+                            surgeCooldown: 0,
+                            task: v.task || 'idle',
+                            targetId: v.targetId || null,
+                            targetX: Number(v.targetX ?? v.x ?? 2400),
+                            targetY: Number(v.targetY ?? v.y ?? 560),
+                            carryType: v.carryType || null,
+                            carryAmount: Number(v.carryAmount) || 0,
+                            actionTimer: 0,
+                            isMoving: false,
+                            isWorking: false,
+                            isSeated: false,
+                            eatCycle: Math.random() * 6,
+                            seatIndex: idx % 6,
+                            scaffoldSlotAngle: (idx * 1.5) % (Math.PI * 2),
+                            isBlocking: false,
+                            blockTimer: 0,
+                            dodgeTimer: 0,
+                            dodgeCooldown: 0,
+                            dodgeVx: 0,
+                            dodgeVy: 0,
+                            lungeOffset: 0,
+                            slashTimer: 0,
+                            kickTimer: 0,
+                            leapHeight: 0,
+                            stompTimer: 0,
+                            cheerTimer: 0,
+                            facing: v.facing || 1,
+                            animPhase: Math.random() * 6,
+                            workPhase: 0,
+                            bendPhase: 0,
+                            bubble: isHero ? '💍' : '',
+                            bubbleTimer: 3,
+                            skinColor: v.skinColor || '#e0ac69',
+                            furColor: v.furColor || '#92400e',
+                            hairColor: '#1c1917'
+                        };
+                    });
+
+                    // Ensure t101s always exists
+                    if (!this.villagers.some(v => v.isT101s)) {
+                        this.spawnT101sHero(2400, 590);
+                    }
+                    const hero = this.villagers.find(v => v.isT101s) || this.villagers[0];
+                    if (hero) this.selectVillager(hero, false);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            confirmResetSave() {
+                const lbl = document.getElementById('resetBtnLabel');
+                if (this.resetConfirmTimer <= 0) {
+                    this.resetConfirmTimer = 4.0;
+                    if (lbl) lbl.textContent = 'Tap 2x!';
+                    this.showBanner('⚠️', 'Tap Reset once more within 4s to start a fresh Stone Age world.');
+                    return;
+                }
+                this.resetConfirmTimer = 0;
+                if (lbl) lbl.textContent = 'Reset';
+                try {
+                    localStorage.removeItem(this.storageKey);
+                } catch (e) {}
+                this.initNewWorld();
+                this.updateHUD();
+                this.updateInspectorUI();
+                this.showBanner('🌅', 'Fresh Stone Age Valley initialized! t101s & your tribe are ready.');
+            }
+
+            bindLifecycleAutoSave() {
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') this.saveGameToStorage(false);
+                });
+                window.addEventListener('pagehide', () => this.saveGameToStorage(false));
+                window.addEventListener('beforeunload', () => this.saveGameToStorage(false));
+            }
+
+            // ========================================================================
+            // TOUCH & MOUSE INPUT (1-Finger Tap/Drag, 2-Finger Pinch, Minimap Tap)
+            // ========================================================================
+            bindInputEvents() {
+                const c = this.canvas;
+
+                c.addEventListener('pointerdown', (e) => {
+                    this.sfx.init();
+                    c.setPointerCapture(e.pointerId);
+                    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                    this.cam.targetX = null;
+                    this.cam.targetY = null;
+                    this.cam.targetZoom = null;
+
+                    if (this.pointers.size === 1) {
+                        this.isDragging = false;
+                        this.dragStartScreen = { x: e.clientX, y: e.clientY };
+                        this.lastDragScreen = { x: e.clientX, y: e.clientY };
+                        this.cam.vx = 0;
+                        this.cam.vy = 0;
+                    } else if (this.pointers.size === 2) {
+                        const pts = Array.from(this.pointers.values());
+                        this.pinchStartDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+                        this.pinchStartZoom = this.cam.zoom;
+                    }
+                });
+
+                c.addEventListener('pointermove', (e) => {
+                    if (!this.pointers.has(e.pointerId)) return;
+                    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+                    if (this.pointers.size === 2) {
+                        const pts = Array.from(this.pointers.values());
+                        const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+                        if (this.pinchStartDist > 12) {
+                            const ratio = dist / this.pinchStartDist;
+                            this.cam.zoom = Math.max(0.30, Math.min(1.65, this.pinchStartZoom * ratio));
+                        }
+                        this.isDragging = true;
+                        return;
+                    }
+
+                    if (this.pointers.size === 1) {
+                        const dx = e.clientX - this.lastDragScreen.x;
+                        const dy = e.clientY - this.lastDragScreen.y;
+                        const totalMove = Math.hypot(e.clientX - this.dragStartScreen.x, e.clientY - this.dragStartScreen.y);
+
+                        if (totalMove > 7) {
+                            this.isDragging = true;
+                        }
+
+                        if (this.isDragging) {
+                            if (this.buildMode) {
+                                const wp = this.screenToWorld(e.clientX, e.clientY);
+                                this.buildPreviewPos.x = Math.max(80, Math.min(this.worldW - 80, wp.x));
+                                this.buildPreviewPos.y = Math.max(120, Math.min(this.worldH - 80, wp.y));
+                            } else {
+                                this.cam.x -= dx / this.cam.zoom;
+                                this.cam.y -= dy / this.cam.zoom;
+                                this.cam.vx = (-dx / this.cam.zoom) * 0.65;
+                                this.cam.vy = (-dy / this.cam.zoom) * 0.65;
+                                this.clampCamera();
+                            }
+                        }
+                        this.lastDragScreen = { x: e.clientX, y: e.clientY };
+                    }
+                });
+
+                const endPointer = (e) => {
+                    if (this.pointers.has(e.pointerId)) {
+                        this.pointers.delete(e.pointerId);
+                    }
+                    if (this.pointers.size === 0 && !this.isDragging) {
+                        this.handleCanvasTap(e.clientX, e.clientY);
+                    }
+                };
+
+                c.addEventListener('pointerup', endPointer);
+                c.addEventListener('pointercancel', endPointer);
+
+                // Mouse wheel zoom
+                c.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const factor = e.deltaY < 0 ? 1.12 : 0.89;
+                    this.cam.zoom = Math.max(0.30, Math.min(1.65, this.cam.zoom * factor));
+                }, { passive: false });
+
+                // Minimap tap & drag
+                const jumpMinimap = (e) => {
+                    const rect = this.miniCanvas.getBoundingClientRect();
+                    const mx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                    const my = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+                    this.cam.x = mx * this.worldW;
+                    this.cam.y = my * this.worldH;
+                    this.cam.targetX = null;
+                    this.cam.targetY = null;
+                    this.clampCamera();
+                };
+                let miniDown = false;
+                this.miniCanvas.addEventListener('pointerdown', (e) => {
+                    miniDown = true;
+                    jumpMinimap(e);
+                });
+                this.miniCanvas.addEventListener('pointermove', (e) => {
+                    if (miniDown) jumpMinimap(e);
+                });
+                window.addEventListener('pointerup', () => { miniDown = false; });
+            }
+
+            screenToWorld(sx, sy) {
+                return {
+                    x: this.cam.x + (sx - this.canvas.width / 2) / this.cam.zoom,
+                    y: this.cam.y + (sy - this.canvas.height / 2) / this.cam.zoom
+                };
+            }
+
+            clampCamera() {
+                this.cam.x = Math.max(120, Math.min(this.worldW - 120, this.cam.x));
+                this.cam.y = Math.max(120, Math.min(this.worldH - 120, this.cam.y));
+            }
+
+            smoothFocusCamera(wx, wy, zoom = 1.25) {
+                this.cam.targetX = wx;
+                this.cam.targetY = wy;
+                this.cam.targetZoom = zoom;
+            }
+
+            handleCanvasTap(sx, sy) {
+                const wp = this.screenToWorld(sx, sy);
+
+                // 1. If in Build Mode, move build preview to tapped spot
+                if (this.buildMode) {
+                    this.buildPreviewPos.x = Math.max(80, Math.min(this.worldW - 80, wp.x));
+                    this.buildPreviewPos.y = Math.max(120, Math.min(this.worldH - 80, wp.y));
+                    return;
+                }
+
+                // Touch-friendly hitbox padding scaled by zoom
+                const pad = Math.max(14, 24 / this.cam.zoom);
+
+                // 2. Did the player tap a Villager?
+                for (let i = this.villagers.length - 1; i >= 0; i--) {
+                    const v = this.villagers[i];
+                    const hoverY = v.y - (v.isT101s ? v.hoverHeight : 0);
+                    if (Math.hypot(wp.x - v.x, wp.y - hoverY) <= v.radius + pad) {
+                        this.sfx.play('select');
+                        this.selectVillager(v, false);
+                        return;
+                    }
+                }
+
+                // 3. Did the player tap an Enemy Cannibal Raider?
+                for (const r of this.raiders) {
+                    if (Math.hypot(wp.x - r.x, wp.y - r.y) <= r.radius + pad) {
+                        if (this.selectedVillagers.length > 0) {
+                            this.sfx.play('horn');
+                            this.selectedVillagers.forEach(v => this.assignVillagerToObject(v, r));
+                            this.spawnTargetMarker(r.x, r.y, '#ef4444');
+                            this.addFloatText(r.x, r.y - 26, '⚔️ Attack!', '#f87171');
+                        } else {
+                            this.selectedEntity = { kind: 'raider', ref: r };
+                            this.updateInspectorUI();
+                        }
+                        return;
+                    }
+                }
+
+                // 4. Did the player tap a Building?
+                for (const b of this.buildings) {
+                    if (Math.hypot(wp.x - b.x, wp.y - b.y) <= b.radius + pad * 0.7) {
+                        if (this.selectedVillagers.length > 0 && (!b.built || b.hp < b.maxHp || ['hearth', 'gym', 'shrine', 'kitchen', 'armoury', 'hut', 'citadel'].includes(b.type))) {
+                            this.sfx.play('select');
+                            this.selectedVillagers.forEach(v => this.assignVillagerToObject(v, b));
+                            this.spawnTargetMarker(b.x, b.y, '#fbbf24');
+                        }
+                        this.selectedEntity = { kind: 'building', ref: b };
+                        this.updateInspectorUI();
+                        return;
+                    }
+                }
+
+                // 5. Did the player tap a Resource Node?
+                for (const n of this.nodes) {
+                    if (n.amount > 0 && Math.hypot(wp.x - n.x, wp.y - n.y) <= n.radius + pad * 0.7) {
+                        if (this.selectedVillagers.length > 0) {
+                            this.sfx.play('chop');
+                            this.selectedVillagers.forEach(v => this.assignVillagerToObject(v, n));
+                            this.spawnTargetMarker(n.x, n.y, '#4ade80');
+                        } else {
+                            this.selectedEntity = { kind: 'node', ref: n };
+                            this.updateInspectorUI();
+                        }
+                        return;
+                    }
+                }
+
+                // 6. Did the player tap Wildlife?
+                for (const w of this.wildlife) {
+                    if (Math.hypot(wp.x - w.x, wp.y - w.y) <= w.radius + pad * 0.7) {
+                        if (this.selectedVillagers.length > 0) {
+                            this.sfx.play('select');
+                            this.selectedVillagers.forEach(v => this.assignVillagerToObject(v, w));
+                            this.spawnTargetMarker(w.x, w.y, '#fb923c');
+                            this.addFloatText(w.x, w.y - 24, '🏹 Hunt!', '#fb923c');
+                        }
+                        return;
+                    }
+                }
+
+                // 7. Tapped open ground: Move selected villager(s) to that destination!
+                if (this.selectedVillagers.length > 0) {
+                    this.sfx.play('select');
+                    this.selectedVillagers.forEach((v, idx) => {
+                        if (v.isChild) return;
+                        const angle = (idx / Math.max(1, this.selectedVillagers.length)) * Math.PI * 2;
+                        const spread = idx === 0 ? 0 : 22;
+                        v.task = 'move';
+                        v.isSeated = false;
+                        v.targetX = Math.max(60, Math.min(this.worldW - 60, wp.x + Math.cos(angle) * spread));
+                        v.targetY = Math.max(100, Math.min(this.worldH - 60, wp.y + Math.sin(angle) * spread));
+                        this.setBubble(v, v.isT101s ? '🪽' : '👣', 2.0);
+                    });
+                    this.spawnTargetMarker(wp.x, wp.y, '#38bdf8');
+                    this.updateInspectorUI();
+                }
+            }
+
+            spawnTargetMarker(x, y, color = '#38bdf8') {
+                this.targetMarkers.push({ x, y, color, radius: 6, maxRadius: 34, life: 0.45, maxLife: 0.45 });
+            }
+
+            // ========================================================================
+            // SELECTION, CAMERA SHORTCUTS & HERO / BENDER COMMANDS
+            // ========================================================================
+            selectVillager(v, append = false) {
+                if (!v) return;
+                if (append) {
+                    if (!this.selectedVillagers.some(sv => sv.id === v.id)) {
+                        this.selectedVillagers.push(v);
+                    }
+                } else {
+                    this.selectedVillagers = [v];
+                }
+                this.selectedEntity = { kind: 'villager', ref: v };
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            selectVillagerById(id) {
+                const v = this.villagers.find(vil => vil.id === id);
+                if (v) {
+                    this.sfx.play('select');
+                    this.selectVillager(v, false);
+                    this.smoothFocusCamera(v.x, v.y, Math.max(this.cam.zoom, 0.95));
+                }
+            }
+
+            selectAllWarriors() {
+                const adults = this.villagers.filter(v => !v.isChild);
+                this.selectedVillagers = adults;
+                if (adults[0]) this.selectedEntity = { kind: 'villager', ref: adults[0] };
+                this.sfx.play('horn');
+                this.showBanner('👥', `Selected all ${adults.length} Commanders (${this.formatShortMacro(this.empirePopulation * 0.35)} Legion Troops)! Tap anywhere to march or attack.`);
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            focusT101s() {
+                let hero = this.villagers.find(v => v.isT101s);
+                if (!hero) hero = this.spawnT101sHero(2400, 580);
+                this.sfx.play('onering');
+                this.selectVillager(hero, false);
+                this.smoothFocusCamera(hero.x, hero.y - 10, 1.32);
+                this.showBanner('💍', 't101s — Bearer of The One Ring! Tap enemies to Bloodbend or toggle Sky-Soar flight.');
+            }
+
+            focusCampfire() {
+                const hearth = this.buildings.find(b => b.type === 'hearth') || { x: 2400, y: 540 };
+                // Seat 2 idle villagers at the hearth so the player sees rib-feasting immediately
+                const idles = this.villagers.filter(v => !v.isChild && !v.isT101s).slice(0, 2);
+                idles.forEach((v, idx) => {
+                    v.task = 'feast';
+                    v.seatIndex = idx * 2;
+                });
+                this.smoothFocusCamera(hearth.x, hearth.y, 1.32);
+                this.showBanner('🔥', 'Tribal Hearth Campfire: Watch villagers sit on carved logs and feast on Sabre-Tooth Ribs!');
+            }
+
+            focusNextBender() {
+                const benders = this.villagers.filter(v => v.bending);
+                if (benders.length === 0) return;
+                this.benderFocusIndex = (this.benderFocusIndex + 1) % benders.length;
+                const b = benders[this.benderFocusIndex];
+                this.selectVillager(b, false);
+                this.smoothFocusCamera(b.x, b.y, 1.30);
+                this.showBanner(BENDING_SPECS[b.bending].icon, `${b.name} — ${BENDING_SPECS[b.bending].name}!`);
+            }
+
+            focusActiveDuel() {
+                if (this.raiders.length === 0) {
+                    const hearth = this.buildings.find(b => b.type === 'hearth') || { x: 2400, y: 540 };
+                    this.spawnRaiderSquad(hearth.x + 230, hearth.y + 140, 4);
+                }
+                const target = this.raiders[0];
+                const adults = this.villagers.filter(v => !v.isChild);
+                adults.forEach((v, idx) => {
+                    this.assignVillagerToObject(v, this.raiders[idx % this.raiders.length]);
+                });
+                this.smoothFocusCamera(target.x - 40, target.y, 1.25);
+                this.showBanner('⚔️', 'Legion Duel Clash! Watch Berserkers, Phalanx, Kung-Fu, Sky-Volley, Juggernauts & t101s in action!');
+            }
+
+            resetWideView() {
+                const hearth = this.buildings.find(b => b.type === 'hearth') || { x: 2400, y: 540 };
+                this.smoothFocusCamera(hearth.x, hearth.y + 80, 0.55);
+                this.showBanner('🗺️', 'Wide 0.55x Macro Camera View restored!');
+            }
+
+            lockLandscapeFullscreen() {
+                try {
+                    const el = document.documentElement;
+                    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+                    if (screen.orientation && screen.orientation.lock) {
+                        screen.orientation.lock('landscape').catch(() => {});
+                    }
+                    document.getElementById('portrait-notice').classList.add('dismissed');
+                } catch (e) {}
+            }
+
+            // ========================================================================
+            // FIGHTING STYLES, T101S RING POWERS, BENDING & BILLION-WAR CONTROLS
+            // ========================================================================
+            formatMacroPop(num) {
+                if (num >= 1e9) return (num / 1e9).toFixed(2) + ' Billion';
+                if (num >= 1e6) return (num / 1e6).toFixed(1) + ' Million';
+                if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+                return Math.floor(num).toString();
+            }
+
+            formatShortMacro(num) {
+                if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+                if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+                if (num >= 1e3) return (num / 1e3).toFixed(0) + 'K';
+                return Math.floor(num).toString();
+            }
+
+            getCommanderTroopCount(v) {
+                if (!v || v.isChild) return 0;
+                const adults = Math.max(1, this.villagers.filter(vil => !vil.isChild).length);
+                const share = (this.empirePopulation * 0.32) / adults;
+                return Math.max(1, Math.round(share * (v.isT101s ? 1.6 : 1.0)));
+            }
+
+            cycleWarScale() {
+                const order = ['billions', 'millions', 'village'];
+                this.warScaleTier = order[(order.indexOf(this.warScaleTier) + 1) % order.length];
+                if (this.warScaleTier === 'billions') {
+                    this.empirePopulation = Math.max(1420000000, this.empirePopulation * 50);
+                    this.rivalPopulation = Math.max(3800000000, this.rivalPopulation * 50);
+                } else if (this.warScaleTier === 'millions') {
+                    this.empirePopulation = 48000000;
+                    this.rivalPopulation = 120000000;
+                } else {
+                    this.empirePopulation = this.villagers.length * 1000;
+                    this.rivalPopulation = 25000;
+                }
+                this.sfx.play('horn');
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            cycleVillagerFightingStyle(v) {
+                const target = v || this.selectedVillagers[0];
+                if (!target || target.isChild) return;
+                if (target.isT101s) {
+                    this.showBanner('💍', 't101s commands the exclusive Sovereign Ring Blood-Art (Bloodbending & Flight)!');
+                    return;
+                }
+                const nextIdx = (FIGHTING_STYLE_ORDER.indexOf(target.fightingStyle) + 1) % FIGHTING_STYLE_ORDER.length;
+                target.fightingStyle = FIGHTING_STYLE_ORDER[nextIdx];
+                const spec = FIGHTING_STYLES[target.fightingStyle];
+                this.sfx.play('select');
+                this.spawnShockwave(target.x, target.y - 8, spec.color, 26);
+                this.addFloatText(target.x, target.y - 26, `${spec.icon} ${spec.name}!`, spec.color);
+                this.saveGameToStorage(false);
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            setArmyFightingStyle(styleId) {
+                const spec = FIGHTING_STYLES[styleId];
+                if (!spec) return;
+                this.villagers.forEach(v => {
+                    if (!v.isChild && !v.isT101s) {
+                        v.fightingStyle = styleId;
+                        this.spawnShockwave(v.x, v.y - 6, spec.color, 22);
+                    }
+                });
+                FIGHTING_STYLE_ORDER.forEach(k => {
+                    const btn = document.getElementById('armyStyle_' + k);
+                    if (btn) btn.classList.toggle('active-btn', k === styleId);
+                });
+                this.sfx.play('horn');
+                this.showBanner(spec.icon, `All Empire Legions switched to ${spec.name}!`);
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            cycleLegionFormation() {
+                const order = ['square', 'wedge', 'skirmish'];
+                const names = { square: 'Phalanx Square', wedge: 'Wedge Charge', skirmish: 'Skirmish Line' };
+                this.legionFormation = order[(order.indexOf(this.legionFormation) + 1) % order.length];
+                const el = document.getElementById('formationLabel');
+                if (el) el.textContent = names[this.legionFormation];
+                this.sfx.play('select');
+                this.showBanner('📐', `Legion Formation: ${names[this.legionFormation]}`);
+            }
+
+            triggerAllOutCharge() {
+                this.sfx.play('horn');
+                if (this.raiders.length === 0) {
+                    const hearth = this.buildings.find(b => b.type === 'hearth') || { x: 2400, y: 540 };
+                    this.spawnRaiderSquad(hearth.x + 250, hearth.y + 180, 5);
+                }
+                const adults = this.villagers.filter(v => !v.isChild);
+                adults.forEach((v, idx) => {
+                    const r = this.raiders[idx % this.raiders.length];
+                    if (r) this.assignVillagerToObject(v, r);
+                });
+                if (this.raiders[0]) {
+                    this.smoothFocusCamera(this.raiders[0].x - 30, this.raiders[0].y, 1.15);
+                }
+                this.showBanner('⚔️', `ALL-OUT WAR! ${this.formatMacroPop(this.empirePopulation * 0.32)} troops charging!`);
+            }
+
+            toggleT101sFlight(v) {
+                const hero = v || this.villagers.find(vil => vil.isT101s);
+                if (!hero) return;
+                hero.skySoar = !hero.skySoar;
+                hero.hoverHeight = hero.skySoar ? 24 : 13;
+                this.sfx.play('onering');
+                this.spawnShockwave(hero.x, hero.y - hero.hoverHeight, '#fbbf24', 34);
+                this.addFloatText(hero.x, hero.y - 38, hero.skySoar ? '🪽 SKY-SOAR FLIGHT!' : '🩸 HOVER STANCE', '#fde047');
+                this.updateInspectorUI();
+            }
+
+            triggerT101sDominion(v) {
+                const hero = v || this.villagers.find(vil => vil.isT101s);
+                if (!hero) return;
+                this.sfx.play('onering');
+                this.spawnShockwave(hero.x, hero.y - 16, '#dc2626', 140);
+                this.spawnShockwave(hero.x, hero.y - 16, '#fbbf24', 95);
+
+                // If no raiders are near, summon a squad to demonstrate Blood Moon Dominion!
+                if (this.raiders.length === 0) {
+                    this.spawnRaiderSquad(hero.x + 120, hero.y + 60, 4);
+                }
+
+                let hitCount = 0;
+                this.raiders.forEach(r => {
+                    if (Math.hypot(r.x - hero.x, r.y - hero.y) < 360) {
+                        r.bloodPuppetTimer = 4.2;
+                        r.puppetHeight = 24;
+                        r.stunTimer = 4.2;
+                        r.hp -= 48;
+                        hitCount++;
+                        this.spawnParticleBurst(r.x, r.y - 20, '#dc2626', 12, 65);
+                    }
+                });
+                if (this.warScaleTier === 'billions' && hitCount > 0) {
+                    const crushed = hitCount * 220000000;
+                    this.rivalPopulation = Math.max(0, this.rivalPopulation - crushed);
+                    this.addFloatText(hero.x, hero.y - 44, `💍 ONE RING DOMINION! -${this.formatShortMacro(crushed)} HORDES!`, '#fbbf24');
+                } else {
+                    this.addFloatText(hero.x, hero.y - 44, '💍 ONE RING BLOOD DOMINION!', '#fbbf24');
+                }
+                // Heal all tribe members
+                this.villagers.forEach(ally => {
+                    ally.hp = Math.min(ally.maxHp, ally.hp + 35);
+                });
+            }
+
+            awakenOrSurgeVillager(v) {
+                const target = v || this.selectedVillagers[0];
+                if (!target || target.isChild) return;
+                if (target.isT101s) {
+                    this.triggerT101sDominion(target);
+                    return;
+                }
+                this.sfx.play('awaken');
+                if (!target.bending) {
+                    target.bending = BENDING_ORDER[Math.floor(Math.random() * BENDING_ORDER.length)];
+                    const spec = BENDING_SPECS[target.bending];
+                    this.spawnShockwave(target.x, target.y - 10, spec.color, 45);
+                    this.addFloatText(target.x, target.y - 28, `${spec.icon} Awakened ${spec.name}!`, spec.glow);
+                } else if (target.bending !== 'avatar') {
+                    target.bending = 'avatar';
+                    target.maxHp = 200;
+                    target.hp = 200;
+                    this.spawnShockwave(target.x, target.y - 10, '#22d3ee', 65);
+                    this.addFloatText(target.x, target.y - 30, '🌟 AVATAR STATE AWAKENED!', '#ffffff');
+                } else {
+                    // Elemental Cataclysm Surge
+                    this.spawnShockwave(target.x, target.y - 10, '#22d3ee', 110);
+                    this.raiders.forEach(r => {
+                        if (Math.hypot(r.x - target.x, r.y - target.y) < 300) {
+                            r.hp -= 55;
+                            r.stunTimer = 2.5;
+                        }
+                    });
+                    this.addFloatText(target.x, target.y - 32, '🌟 FOUR-ELEMENT CATACLYSM!', '#67e8f9');
+                }
+                this.saveGameToStorage(false);
+                this.updateHUD();
+                this.updateInspectorUI();
+            }
+
+            commandSelectedVillager(cmd) {
+                const v = this.selectedVillagers[0];
+                if (!v || v.isChild) return;
+                if (cmd === 'eat') {
+                    const hearth = this.buildings.find(b => b.type === 'hearth');
+                    if (hearth) {
+                        v.task = 'feast';
+                        this.sfx.play('select');
+                        this.addFloatText(v.x, v.y - 24, '🍖 Heading to Campfire!', '#fb923c');
+                    }
+                } else if (cmd === 'gym') {
+                    const gym = this.buildings.find(b => b.built && (b.type === 'gym' || b.type === 'citadel'));
+                    if (gym) {
+                        this.assignVillagerToObject(v, gym);
+                        this.sfx.play('select');
+                    }
+                }
+                this.updateInspectorUI();
+            }
+
+            assignVillagerToObject(v, obj) {
+                if (!v || v.isChild || !obj) return;
+                v.isSeated = false;
+                v.targetId = obj.id;
+                v.targetX = obj.x;
+                v.targetY = obj.y;
+
+                if (obj.id.startsWith('raid_')) {
+                    v.task = 'attack';
+                    this.setBubble(v, v.isT101s ? '🩸' : FIGHTING_STYLES[v.fightingStyle]?.icon || '⚔️');
+                } else if (obj.id.startsWith('wild_')) {
+                    v.task = 'hunt';
+                    this.setBubble(v, '🏹');
+                } else if (obj.id.startsWith('node_')) {
+                    v.task = obj.type === 'wood' ? 'chop' : (obj.type === 'stone' ? 'mine' : 'forage');
+                    this.setBubble(v, obj.type === 'wood' ? '🪓' : (obj.type === 'stone' ? '⛏️' : '🍓'));
+                } else if (obj.id.startsWith('bld_')) {
+                    if (!obj.built || obj.hp < obj.maxHp) {
+                        v.task = 'build';
+                        this.setBubble(v, '🔨');
+                    } else if (obj.type === 'hearth') {
+                        v.task = 'feast';
+                        this.setBubble(v, '🍖');
+                    } else if (obj.type === 'gym' || obj.type === 'citadel') {
+                        v.task = 'gym';
+                        this.setBubble(v, '🏋️');
+                    } else if (obj.type === 'shrine') {
+                        this.awakenOrSurgeVillager(v);
+                    } else if (obj.type === 'kitchen') {
+                        v.task = 'cook';
+                        this.setBubble(v, '🍖');
+                    } else if (obj.type === 'armoury') {
+                        v.task = 'craft';
+                        this.setBubble(v, '🦴');
+                    } else if (obj.type === 'hut') {
+                        v.task = 'rest';
+                        this.setBubble(v, '💤');
+                    }
+                }
+            }
+
+            // ========================================================================
+            // BUILDING PLACEMENT & CONSTRUCTION
+            // ========================================================================
+            startBuildMode(type) {
+                const spec = BUILDING_SPECS[type];
+                if (!spec) return;
+                if (this.resources.wood < spec.wood || this.resources.stone < spec.stone) {
+                    this.showBanner('⚠️', `Need ${spec.wood}🪵 and ${spec.stone}🪨 to build ${spec.name}!`);
+                    return;
+                }
+                this.buildMode = type;
+                this.buildPreviewPos = { x: this.cam.x, y: this.cam.y };
+                const bar = document.getElementById('buildConfirmBar');
+                const title = document.getElementById('buildPreviewTitle');
+                if (bar && title) {
+                    title.textContent = `${spec.icon} Place ${spec.name} (${spec.wood}🪵 ${spec.stone}🪨)`;
+                    bar.classList.remove('hidden');
+                }
+            }
+
+            cancelBuildMode() {
+                this.buildMode = null;
+                const bar = document.getElementById('buildConfirmBar');
+                if (bar) bar.classList.add('hidden');
+            }
+
+            confirmBuildPlacement() {
+                if (!this.buildMode) return;
+                const spec = BUILDING_SPECS[this.buildMode];
+                if (this.resources.wood < spec.wood || this.resources.stone < spec.stone) {
+                    this.cancelBuildMode();
+                    return;
+                }
+                this.resources.wood -= spec.wood;
+                this.resources.stone -= spec.stone;
+
+                const newBld = {
+                    id: 'bld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                    type: this.buildMode,
+                    x: this.buildPreviewPos.x,
+                    y: this.buildPreviewPos.y,
+                    hp: Math.round(spec.maxHp * 0.25),
+                    maxHp: spec.maxHp,
+                    built: false,
+                    progress: 0.05,
+                    radius: spec.radius
+                };
+                this.buildings.push(newBld);
+                this.sfx.play('hammer');
+
+                // Automatically send closest 2 villagers to hammer the timber scaffolding!
+                const builders = this.villagers
+                    .filter(v => !v.isChild && !v.isT101s)
+                    .sort((a, b) => Math.hypot(a.x - newBld.x, a.y - newBld.y) - Math.hypot(b.x - newBld.x, b.y - newBld.y))
+                    .slice(0, 2);
+                builders.forEach(b => this.assignVillagerToObject(b, newBld));
+
+                this.cancelBuildMode();
+                this.saveGameToStorage(false);
+                this.updateHUD();
+                this.showBanner('🔨', `Constructing ${spec.name}! Builders are hammering the timber scaffolding.`);
+            }
+
+            // ========================================================================
+            // RAID WAVES, WAR HORN & TOP BAR CONTROLS
+            // ========================================================================
+            callWaveEarly() {
+                this.resources.wood += 40;
+                this.resources.stone += 40;
+                this.empirePopulation += 200000000;
+                this.triggerCannibalRaid();
+            }
+
+            triggerCannibalRaid() {
+                this.sfx.play('horn');
+                const camp = this.cannibalCamps[this.waveNumber % this.cannibalCamps.length];
+                const hearth = this.buildings.find(b => b.type === 'hearth') || { x: 2400, y: 540 };
+                // Spawn raiders close enough to march into the village quickly
+                const spawnX = hearth.x + (camp.x - hearth.x) * 0.28;
+                const spawnY = hearth.y + 380;
+                const count = Math.min(9, 3 + this.waveNumber);
+                this.spawnRaiderSquad(spawnX, spawnY, count);
+                this.showBanner('🥁', `CANNIBAL RAID WAVE ${this.waveNumber}! Enemy Legions approaching from ${camp.name}!`);
+                this.waveNumber++;
+                this.raidCountdown = this.raidInterval;
+                this.updateHUD();
+            }
+
+            toggleTownAlert() {
+                this.townAlert = !this.townAlert;
+                this.sfx.play('horn');
+                const btn = document.getElementById('btnWarHorn');
+                if (btn) btn.classList.toggle('active-btn', this.townAlert);
+                if (this.townAlert) {
+                    this.triggerAllOutCharge();
+                } else {
+                    this.showBanner('📯', 'War Horn stood down. Villagers returning to village duties.');
+                }
+            }
+
+            toggleDisciplineMode() {
+                this.disciplineMode = this.disciplineMode === 'smart' ? '2008' : 'smart';
+                document.getElementById('disciplineIcon').textContent = this.disciplineMode === 'smart' ? '🧠' : '🦋';
+                document.getElementById('disciplineLabel').textContent = this.disciplineMode === 'smart' ? 'Smart AI' : '2008 AI';
+                this.showBanner(
+                    this.disciplineMode === 'smart' ? '🧠' : '🦋',
+                    this.disciplineMode === 'smart'
+                        ? 'Smart Auto-Work AI enabled!'
+                        : '2008 Pocket Gamer Review Mode: Cavemen occasionally get distracted by butterflies!'
+                );
+            }
+
+            setSpeed(mult) {
+                this.speedMult = mult;
+                this.paused = false;
+                document.getElementById('btnSpd1').classList.toggle('active-btn', mult === 1);
+                document.getElementById('btnSpd2').classList.toggle('active-btn', mult === 2);
+                document.getElementById('btnPause').classList.remove('active-btn');
+            }
+
+            togglePause() {
+                this.paused = !this.paused;
+                document.getElementById('btnPause').classList.toggle('active-btn', this.paused);
+            }
+
+            toggleAudio() {
+                this.sfx.enabled = !this.sfx.enabled;
+                document.getElementById('btnAudio').textContent = this.sfx.enabled ? '🔊' : '🔇';
+            }
+
+            getMaxPop() {
+                let cap = 6;
+                for (const b of this.buildings) {
+                    if (b.built && BUILDING_SPECS[b.type]?.popBonus) {
+                        cap += BUILDING_SPECS[b.type].popBonus;
+                    }
+                }
+                return cap;
+            }
+
+            setBubble(v, icon, duration = 3.0) {
+                v.bubble = icon;
+                v.bubbleTimer = duration;
+            }
+
+            showBanner(icon, text) {
+                const wrap = document.getElementById('toast-banner');
+                document.getElementById('bannerIcon').textContent = icon;
+                document.getElementById('bannerText').textContent = text;
+                wrap.classList.remove('opacity-0', '-translate-y-2');
+                clearTimeout(this._bannerTimeout);
+                this._bannerTimeout = setTimeout(() => {
+                    wrap.classList.add('opacity-0', '-translate-y-2');
+                }, 3600);
+            }
+
+            addFloatText(x, y, text, color = '#fde047') {
+                this.floatTexts.push({ x, y, text, color, life: 1.35, maxLife: 1.35 });
+            }
+
+            spawnShockwave(x, y, color = '#fde047', maxRadius = 38) {
+                this.shockwaves.push({ x, y, color, radius: 4, maxRadius, life: 0.35, maxLife: 0.35 });
+            }
+
+            spawnParticleBurst(x, y, color, count = 8, speed = 55) {
+                for (let i = 0; i < count; i++) {
+                    const a = Math.random() * Math.PI * 2;
+                    const s = (0.3 + Math.random() * 0.7) * speed;
+                    this.particles.push({
+                        x,
+                        y,
+                        vx: Math.cos(a) * s,
+                        vy: Math.sin(a) * s - 15,
+                        color,
+                        size: 2 + Math.random() * 2.2,
+                        life: 0.35 + Math.random() * 0.25
+                    });
+                }
+            }
+
+            // ========================================================================
+            // MAIN SIMULATION LOOP (Wrapped in defensive try/catch)
+            // ========================================================================
+            loop(ts) {
+                try {
+                    const rawDt = Math.min(0.05, (ts - this.lastFrameTime) / 1000);
+                    this.lastFrameTime = ts;
+
+                    this.updateCamera(rawDt);
+
+                    if (!this.paused) {
+                        this.updateSimulation(rawDt * this.speedMult);
+                    }
+
+                    this.render();
+                } catch (err) {
+                    console.error('Frame recovery:', err);
+                }
+                requestAnimationFrame((nextTs) => this.loop(nextTs));
+            }
+
+            updateCamera(dt) {
+                if (this.cam.targetX !== null && this.cam.targetY !== null) {
+                    this.cam.x += (this.cam.targetX - this.cam.x) * Math.min(1, dt * 7);
+                    this.cam.y += (this.cam.targetY - this.cam.y) * Math.min(1, dt * 7);
+                    if (this.cam.targetZoom !== null) {
+                        this.cam.zoom += (this.cam.targetZoom - this.cam.zoom) * Math.min(1, dt * 7);
+                    }
+                    if (Math.hypot(this.cam.targetX - this.cam.x, this.cam.targetY - this.cam.y) < 3) {
+                        this.cam.targetX = null;
+                        this.cam.targetY = null;
+                        this.cam.targetZoom = null;
+                    }
+                } else if (!this.isDragging && (Math.abs(this.cam.vx) > 0.2 || Math.abs(this.cam.vy) > 0.2)) {
+                    this.cam.x += this.cam.vx;
+                    this.cam.y += this.cam.vy;
+                    this.cam.vx *= 0.88;
+                    this.cam.vy *= 0.88;
+                    this.clampCamera();
+                }
+            }
+
+            updateSimulation(dt) {
+                this.gameTime += dt;
+
+                if (this.resetConfirmTimer > 0) {
+                    this.resetConfirmTimer = Math.max(0, this.resetConfirmTimer - dt);
+                    if (this.resetConfirmTimer <= 0) {
+                        const lbl = document.getElementById('resetBtnLabel');
+                        if (lbl) lbl.textContent = 'Reset';
+                    }
+                }
+
+                // Auto-save every 8 seconds
+                this.autoSaveTimer += dt;
+                if (this.autoSaveTimer >= 8.0) {
+                    this.autoSaveTimer = 0;
+                    this.saveGameToStorage(false);
+                }
+
+                // Exponential Empire Population Growth
+                const citadels = this.buildings.filter(b => b.built && b.type === 'citadel').length;
+                if (this.warScaleTier === 'billions') {
+                    this.empirePopulation += (6500000 + citadels * 22000000) * dt;
+                } else if (this.warScaleTier === 'millions') {
+                    this.empirePopulation += (120000 + citadels * 380000) * dt;
+                }
+
+                // Raid countdown
+                this.raidCountdown -= dt;
+                if (this.raidCountdown <= 0) {
+                    this.triggerCannibalRaid();
+                }
+
+                // Totem healing aura
+                for (const b of this.buildings) {
+                    if (b.built && b.type === 'totem') {
+                        for (const v of this.villagers) {
+                            if (Math.hypot(v.x - b.x, v.y - b.y) < 220) {
+                                v.hp = Math.min(v.maxHp, v.hp + 3.5 * dt);
+                            }
+                        }
+                    }
+                }
+
+                // Update Butterflies
+                for (const bf of this.butterflies) {
+                    bf.phase += dt * 4;
+                    bf.x += Math.cos(bf.phase * 0.7) * 18 * dt;
+                    bf.y += Math.sin(bf.phase * 1.1) * 14 * dt;
+                }
+
+                // Update Wildlife
+                for (let i = this.wildlife.length - 1; i >= 0; i--) {
+                    const w = this.wildlife[i];
+                    if (w.hp <= 0) {
+                        this.resources.rawFood += w.meat;
+                        this.addFloatText(w.x, w.y - 18, `+${w.meat}🥩`, '#fb923c');
+                        this.wildlife.splice(i, 1);
+                        continue;
+                    }
+                    w.wanderTimer -= dt;
+                    if (w.wanderTimer <= 0) {
+                        w.wanderTimer = 3 + Math.random() * 4;
+                        const ang = Math.random() * Math.PI * 2;
+                        w.vx = Math.cos(ang) * w.speed * 0.4;
+                        w.vy = Math.sin(ang) * w.speed * 0.4;
+                        if (Math.abs(w.vx) > 1) w.facing = w.vx >= 0 ? 1 : -1;
+                    }
+                    w.x = Math.max(200, Math.min(this.worldW - 200, w.x + w.vx * dt));
+                    w.y = Math.max(400, Math.min(this.worldH - 200, w.y + w.vy * dt));
+                    w.animPhase += dt * 5;
+                }
+
+                // Update Cannibal Raiders
+                this.updateRaiders(dt);
+
+                // Update Villagers
+                this.updateVillagers(dt);
+
+                // Update Projectiles, Arrow Volleys & Fissures
+                this.updateProjectilesAndVolleys(dt);
+
+                // Update Particles, Shockwaves, Target Markers & Float Texts
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.vy += 65 * dt;
+                    p.life -= dt;
+                    if (p.life <= 0) this.particles.splice(i, 1);
+                }
+                for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+                    const s = this.shockwaves[i];
+                    s.life -= dt;
+                    s.radius = s.maxRadius * (1 - Math.max(0, s.life / s.maxLife));
+                    if (s.life <= 0) this.shockwaves.splice(i, 1);
+                }
+                for (let i = this.targetMarkers.length - 1; i >= 0; i--) {
+                    const m = this.targetMarkers[i];
+                    m.life -= dt;
+                    if (m.life <= 0) this.targetMarkers.splice(i, 1);
+                }
+                for (let i = this.floatTexts.length - 1; i >= 0; i--) {
+                    const f = this.floatTexts[i];
+                    f.y -= 22 * dt;
+                    f.life -= dt;
+                    if (f.life <= 0) this.floatTexts.splice(i, 1);
+                }
+
+                // Throttled HUD refresh
+                this._hudTick = (this._hudTick || 0) + dt;
+                if (this._hudTick >= 0.25) {
+                    this._hudTick = 0;
+                    this.updateHUD();
+                    this.updateInspectorUI();
+                }
+            }
+
+            updateRaiders(dt) {
+                for (let i = this.raiders.length - 1; i >= 0; i--) {
+                    const r = this.raiders[i];
+                    if (r.hp <= 0) {
+                        this.sfx.play('bonk');
+                        this.spawnParticleBurst(r.x, r.y - 10, '#ef4444', 10, 60);
+                        this.resources.wood += 12;
+                        const macroLoss = this.warScaleTier === 'billions' ? 95000000 : 1200;
+                        this.rivalPopulation = Math.max(0, this.rivalPopulation - macroLoss);
+                        this.addFloatText(r.x, r.y - 22, this.warScaleTier === 'billions' ? `-${this.formatShortMacro(macroLoss)} Hordes! +12🪵` : 'Raider Defeated! +12🪵', '#4ade80');
+                        this.raiders.splice(i, 1);
+                        continue;
+                    }
+
+                    if (r.blockTimer > 0) r.blockTimer = Math.max(0, r.blockTimer - dt);
+                    else r.isBlocking = false;
+                    if (r.slashTimer > 0) r.slashTimer = Math.max(0, r.slashTimer - dt);
+                    if (r.kickTimer > 0) r.kickTimer = Math.max(0, r.kickTimer - dt);
+                    if (r.leapHeight > 0) r.leapHeight = Math.max(0, r.leapHeight - dt * 36);
+                    if (r.lungeOffset > 0) r.lungeOffset = Math.max(0, r.lungeOffset - dt * 28);
+                    if (r.dodgeCooldown > 0) r.dodgeCooldown = Math.max(0, r.dodgeCooldown - dt);
+                    if (r.stunTimer > 0) r.stunTimer = Math.max(0, r.stunTimer - dt);
+
+                    // Check Vine Net Traps
+                    for (let bIdx = this.buildings.length - 1; bIdx >= 0; bIdx--) {
+                        const b = this.buildings[bIdx];
+                        if (b.built && b.type === 'trap' && Math.hypot(r.x - b.x, r.y - b.y) < 30) {
+                            r.trappedTimer = 7.0;
+                            this.addFloatText(r.x, r.y - 24, '🕸️ SNARED!', '#a3e635');
+                            this.buildings.splice(bIdx, 1);
+                            break;
+                        }
+                    }
+
+                    if (r.trappedTimer > 0) {
+                        r.trappedTimer -= dt;
+                        r.isMoving = false;
+                        continue;
+                    }
+
+                    // Mid-Air Bloodbending Puppet Physics (controlled by t101s's One Ring!)
+                    if (r.bloodPuppetTimer > 0) {
+                        r.bloodPuppetTimer -= dt;
+                        r.puppetHeight = 22 + Math.sin(this.gameTime * 9) * 4;
+                        r.workPhase += dt * 15;
+                        // Force puppeted raider to strike adjacent cannibals!
+                        const other = this.raiders.find(o => o.id !== r.id && Math.hypot(o.x - r.x, o.y - r.y) < 65);
+                        if (other && Math.random() < dt * 2.5) {
+                            other.hp -= 12;
+                            this.addFloatText(other.x, other.y - 22, '🩸 PUPPET STRIKE!', '#f87171');
+                        }
+                        if (r.bloodPuppetTimer <= 0) {
+                            r.puppetHeight = 0;
+                            this.spawnShockwave(r.x, r.y, '#dc2626', 28);
+                        }
+                        continue;
+                    } else {
+                        r.puppetHeight = 0;
+                    }
+
+                    // Knockback / Sidestep Dodge velocity
+                    if (Math.hypot(r.knockbackVx, r.knockbackVy) > 5) {
+                        r.x += r.knockbackVx * dt;
+                        r.y += r.knockbackVy * dt;
+                        r.knockbackVx *= 0.85;
+                        r.knockbackVy *= 0.85;
+                    }
+
+                    if (r.stunTimer > 0) continue;
+
+                    // Find closest adult villager or building
+                    let target = null;
+                    let bestDist = Infinity;
+                    for (const v of this.villagers) {
+                        if (v.isChild) continue;
+                        const d = Math.hypot(v.x - r.x, v.y - r.y);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            target = v;
+                        }
+                    }
+
+                    if (target) {
+                        const dx = target.x - r.x;
+                        const dy = target.y - r.y;
+                        const dist = Math.hypot(dx, dy);
+                        r.facing = dx >= 0 ? 1 : -1;
+
+                        if (dist > 36) {
+                            r.isMoving = true;
+                            r.isAttacking = false;
+                            r.x += (dx / dist) * r.speed * dt;
+                            r.y += (dy / dist) * r.speed * dt;
+                            r.animPhase += dt * 8;
+                        } else {
+                            r.isMoving = false;
+                            r.isAttacking = true;
+                            r.workPhase += dt * 11;
+                            r.attackCooldown -= dt;
+                            if (r.attackCooldown <= 0) {
+                                r.attackCooldown = 1.05;
+                                r.lungeOffset = 7.5;
+                                r.slashTimer = 0.25;
+                                this.resolveDuelStrike(r, target, r.dmg, true);
+                            }
+                        }
+                    }
+                }
+            }
+
+            updateVillagers(dt) {
+                for (let i = this.villagers.length - 1; i >= 0; i--) {
+                    const v = this.villagers[i];
+
+                    if (v.hp <= 0) {
+                        if (v.isT101s) {
+                            // The One Ring revives t101s at the Hearth!
+                            v.hp = v.maxHp;
+                            this.spawnShockwave(v.x, v.y, '#fbbf24', 55);
+                            this.addFloatText(v.x, v.y - 30, '💍 THE ONE RING DEFIES DEATH!', '#fde047');
+                        } else {
+                            this.villagers.splice(i, 1);
+                            continue;
+                        }
+                    }
+
+                    if (v.bubbleTimer > 0) v.bubbleTimer = Math.max(0, v.bubbleTimer - dt);
+                    if (v.blockTimer > 0) v.blockTimer = Math.max(0, v.blockTimer - dt);
+                    else v.isBlocking = false;
+                    if (v.slashTimer > 0) v.slashTimer = Math.max(0, v.slashTimer - dt);
+                    if (v.kickTimer > 0) v.kickTimer = Math.max(0, v.kickTimer - dt);
+                    if (v.leapHeight > 0) v.leapHeight = Math.max(0, v.leapHeight - dt * 36);
+                    if (v.lungeOffset > 0) v.lungeOffset = Math.max(0, v.lungeOffset - dt * 28);
+                    if (v.stompTimer > 0) v.stompTimer = Math.max(0, v.stompTimer - dt);
+                    if (v.cheerTimer > 0) v.cheerTimer = Math.max(0, v.cheerTimer - dt);
+                    if (v.dodgeCooldown > 0) v.dodgeCooldown = Math.max(0, v.dodgeCooldown - dt);
+
+                    if (v.isT101s) {
+                        v.hoverPhase += dt * 4.2;
+                        v.hoverHeight = (v.skySoar ? 22 : 13) + Math.sin(v.hoverPhase) * 3.2;
+                    }
+                    if (v.bending) {
+                        v.bendPhase = (v.bendPhase || 0) + dt * 5.5;
+                    }
+
+                    // Cave Child growth
+                    if (v.isChild) {
+                        v.growthProgress += dt * 2.5;
+                        if (v.growthProgress >= 100) {
+                            v.isChild = false;
+                            v.radius = 14;
+                            v.task = 'idle';
+                            if (Math.random() < 0.35) {
+                                v.bending = BENDING_ORDER[Math.floor(Math.random() * BENDING_ORDER.length)];
+                            }
+                            this.addFloatText(v.x, v.y - 24, `🎉 ${v.name} grew up!`, '#4ade80');
+                        }
+                        continue;
+                    }
+
+                    // Hunger & Energy gradual drain
+                    v.hunger = Math.max(10, v.hunger - dt * 0.35);
+                    v.energy = Math.max(10, v.energy - dt * 0.25);
+
+                    // Auto-defend if a Cannibal Raider is nearby
+                    if (v.task !== 'attack' && v.task !== 'move') {
+                        const nearRaider = this.raiders.find(r => Math.hypot(r.x - v.x, r.y - v.y) < 280);
+                        if (nearRaider) {
+                            this.assignVillagerToObject(v, nearRaider);
+                        }
+                    }
+
+                    // 2008 Pocket Gamer Easter Egg: occasional butterfly distraction
+                    if (this.disciplineMode === '2008' && v.task !== 'attack' && v.task !== 'wander2008' && Math.random() < dt * 0.04) {
+                        v.task = 'wander2008';
+                        v.actionTimer = 4.5;
+                        this.setBubble(v, '🦋', 4.5);
+                        this.addFloatText(v.x, v.y - 22, 'Ooh, butterfly!', '#f472b6');
+                    }
+
+                    this.updateVillagerTask(v, dt);
+                }
+            }
+
+            moveVillagerToward(v, tx, ty, dt) {
+                const dx = tx - v.x;
+                const dy = ty - v.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < 4) {
+                    v.isMoving = false;
+                    return true;
+                }
+                v.facing = dx >= 0 ? 1 : -1;
+                v.isMoving = true;
+                v.isSeated = false;
+                const styleMult = FIGHTING_STYLES[v.fightingStyle]?.speedMult || 1.0;
+                const flightMult = v.isT101s ? (v.skySoar ? 1.50 : 1.22) : 1.0;
+                const spd = (72 + (v.spdLevel - 1) * 12) * styleMult * flightMult;
+                v.x += (dx / dist) * Math.min(dist, spd * dt);
+                v.y += (dy / dist) * Math.min(dist, spd * dt);
+                v.animPhase += dt * 9;
+                return false;
+            }
+
+            updateVillagerTask(v, dt) {
+                if (v.task === 'wander2008') {
+                    const bf = this.butterflies[0] || { x: v.x + 40, y: v.y - 30 };
+                    this.moveVillagerToward(v, bf.x, bf.y, dt);
+                    v.actionTimer -= dt;
+                    if (v.actionTimer <= 0) v.task = 'idle';
+                    return;
+                }
+
+                if (v.task === 'move') {
+                    v.isWorking = false;
+                    if (this.moveVillagerToward(v, v.targetX, v.targetY, dt)) {
+                        v.task = 'idle';
+                    }
+                    return;
+                }
+
+                // Combat Attack Task (6 Fighting Styles + Bending + t101s Bloodbending)
+                if (v.task === 'attack') {
+                    let raider = this.raiders.find(r => r.id === v.targetId);
+                    if (!raider) {
+                        raider = this.raiders[0];
+                        if (raider) v.targetId = raider.id;
+                        else {
+                            v.task = 'idle';
+                            v.isWorking = false;
+                            return;
+                        }
+                    }
+
+                    const styleSpec = FIGHTING_STYLES[v.fightingStyle] || FIGHTING_STYLES.berserker;
+                    const dist = Math.hypot(raider.x - v.x, raider.y - v.y);
+                    const engageRange = v.bending
+                        ? Math.max(BENDING_SPECS[v.bending].range, styleSpec.range)
+                        : (raider.radius + v.radius + styleSpec.range);
+
+                    if (dist > engageRange) {
+                        if ((v.fightingStyle === 'berserker' || v.fightingStyle === 'juggernaut') && dist < 120 && v.leapHeight <= 0) {
+                            v.leapHeight = 13;
+                        }
+                        this.moveVillagerToward(v, raider.x, raider.y, dt);
+                    } else {
+                        v.isMoving = false;
+                        v.isWorking = true;
+                        v.facing = raider.x >= v.x ? 1 : -1;
+                        v.workPhase += dt * (v.fightingStyle === 'berserker' ? 18 : 12);
+                        v.actionTimer += dt;
+
+                        if (v.actionTimer >= styleSpec.atkInterval) {
+                            v.actionTimer = 0;
+                            if (v.isT101s || v.bending === 'blood') {
+                                this.performBendingAttack(v, raider);
+                            } else if (v.fightingStyle === 'archery') {
+                                this.spawnArrowVolley(v, raider, 7);
+                                if (v.bending) this.performBendingAttack(v, raider);
+                            } else {
+                                if (v.fightingStyle === 'kungfu') {
+                                    v.kickTimer = 0.34;
+                                    v.lungeOffset = 9;
+                                } else if (v.fightingStyle === 'juggernaut') {
+                                    v.leapHeight = 12;
+                                    v.slashTimer = 0.28;
+                                    v.lungeOffset = 7;
+                                } else {
+                                    v.slashTimer = 0.26;
+                                    v.lungeOffset = 8;
+                                }
+                                const baseDmg = Math.round((9 + v.strLevel * 3 + (v.weapon === 'spear' ? 12 : 6)) * styleSpec.dmgMult);
+                                this.resolveDuelStrike(v, raider, baseDmg, false);
+                                if (v.bending) this.performBendingAttack(v, raider);
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                // Campfire Seated Rib-Feasting Task
+                if (v.task === 'feast') {
+                    const hearth = this.buildings.find(b => b.type === 'hearth') || { x: 2400, y: 540 };
+                    const seatAng = (v.seatIndex / 6) * Math.PI * 2;
+                    const sx = hearth.x + Math.cos(seatAng) * 44;
+                    const sy = hearth.y + Math.sin(seatAng) * 32;
+                    if (!this.moveVillagerToward(v, sx, sy, dt)) return;
+
+                    v.isSeated = true;
+                    v.isWorking = true;
+                    v.facing = hearth.x >= v.x ? 1 : -1;
+                    v.eatCycle += dt * 5.2;
+                    v.hunger = Math.min(100, v.hunger + dt * 14);
+                    v.hp = Math.min(v.maxHp, v.hp + dt * 8);
+                    if (v.hunger >= 99) {
+                        v.isSeated = false;
+                        v.task = 'idle';
+                    }
+                    return;
+                }
+
+                // Building & Scaffolding Hammering Task
+                if (v.task === 'build') {
+                    const bld = this.buildings.find(b => b.id === v.targetId);
+                    if (!bld || (bld.built && bld.hp >= bld.maxHp)) {
+                        v.task = 'idle';
+                        v.isWorking = false;
+                        return;
+                    }
+                    const px = bld.x + Math.cos(v.scaffoldSlotAngle) * (bld.radius + 14);
+                    const py = bld.y + Math.sin(v.scaffoldSlotAngle) * (bld.radius + 10);
+                    if (!this.moveVillagerToward(v, px, py, dt)) return;
+
+                    v.isWorking = true;
+                    v.facing = bld.x >= v.x ? 1 : -1;
+                    v.workPhase += dt * 12;
+                    const buildMult = v.bending === 'earth' ? 1.6 : 1.0;
+                    if (!bld.built) {
+                        bld.progress = Math.min(1, bld.progress + (dt / BUILDING_SPECS[bld.type].buildTime) * 3.2 * buildMult);
+                        bld.hp = Math.min(bld.maxHp, Math.round(bld.maxHp * bld.progress));
+                        if (bld.progress >= 1) {
+                            bld.built = true;
+                            bld.hp = bld.maxHp;
+                            this.sfx.play('awaken');
+                            this.spawnShockwave(bld.x, bld.y, '#fde047', 50);
+                            this.addFloatText(bld.x, bld.y - 28, `✅ ${BUILDING_SPECS[bld.type].name} Built!`, '#4ade80');
+                            v.task = 'idle';
+                        }
+                    } else {
+                        bld.hp = Math.min(bld.maxHp, bld.hp + dt * 25 * buildMult);
+                    }
+                    return;
+                }
+
+                // Stone Gym Barbell Training Task
+                if (v.task === 'gym') {
+                    const gym = this.buildings.find(b => b.id === v.targetId) || this.buildings.find(b => b.built && b.type === 'gym');
+                    if (!gym) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    if (!this.moveVillagerToward(v, gym.x, gym.y + 18, dt)) return;
+                    v.isWorking = true;
+                    v.workPhase += dt * 7;
+                    v.gymXp += dt * 25;
+                    if (v.gymXp >= 100) {
+                        v.gymXp = 0;
+                        v.strLevel = Math.min(5, v.strLevel + 1);
+                        v.spdLevel = Math.min(5, v.spdLevel + 1);
+                        this.sfx.play('awaken');
+                        this.addFloatText(v.x, v.y - 26, `💪 Level Up! STR ${v.strLevel} ⚡SPD ${v.spdLevel}`, '#4ade80');
+                        v.task = 'idle';
+                    }
+                    return;
+                }
+
+                // Resource Gathering (Chop Wood / Mine Stone / Forage Berries)
+                if (v.task === 'chop' || v.task === 'mine' || v.task === 'forage') {
+                    const node = this.nodes.find(n => n.id === v.targetId && n.amount > 0);
+                    if (!node) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    if (!this.moveVillagerToward(v, node.x, node.y + 12, dt)) return;
+                    v.isWorking = true;
+                    v.workPhase += dt * 10;
+                    v.actionTimer += dt;
+                    if (v.actionTimer >= 1.2) {
+                        v.actionTimer = 0;
+                        const gain = 8 + v.strLevel * 2;
+                        node.amount = Math.max(0, node.amount - gain);
+                        if (v.task === 'chop') {
+                            this.resources.wood += gain;
+                            this.addFloatText(v.x, v.y - 22, `+${gain}🪵`, '#fbbf24');
+                        } else if (v.task === 'mine') {
+                            this.resources.stone += gain;
+                            this.addFloatText(v.x, v.y - 22, `+${gain}🪨`, '#d6d3d1');
+                        } else {
+                            this.resources.rawFood += gain;
+                            this.addFloatText(v.x, v.y - 22, `+${gain}🥩`, '#fb7185');
+                        }
+                    }
+                    return;
+                }
+
+                // Hunting Wildlife
+                if (v.task === 'hunt') {
+                    const beast = this.wildlife.find(w => w.id === v.targetId);
+                    if (!beast) {
+                        v.task = 'idle';
+                        return;
+                    }
+                    if (Math.hypot(beast.x - v.x, beast.y - v.y) > 48) {
+                        this.moveVillagerToward(v, beast.x, beast.y, dt);
+                    } else {
+                        v.isMoving = false;
+                        v.isWorking = true;
+                        v.workPhase += dt * 12;
+                        v.actionTimer += dt;
+                        if (v.actionTimer >= 0.85) {
+                            v.actionTimer = 0;
+                            beast.hp -= 18 + v.strLevel * 4;
+                            this.addFloatText(beast.x, beast.y - 18, '🏹 Hit!', '#fde047');
+                        }
+                    }
+                    return;
+                }
+
+                // Smart Auto-Work AI when idle
+                v.isWorking = false;
+                if (this.disciplineMode === 'smart' && !v.isT101s) {
+                    const unbuilt = this.buildings.find(b => !b.built || b.hp < b.maxHp);
+                    if (unbuilt) {
+                        this.assignVillagerToObject(v, unbuilt);
+                        return;
+                    }
+                    if (v.hunger < 45) {
+                        v.task = 'feast';
+                        return;
+                    }
+                    const nearestNode = this.nodes.find(n => n.amount > 0 && Math.hypot(n.x - v.x, n.y - v.y) < 550);
+                    if (nearestNode && Math.random() < dt * 0.5) {
+                        this.assignVillagerToObject(v, nearestNode);
+                    }
+                }
+            }
+
+            // ========================================================================
+            // COMBAT RESOLUTION: 6 FIGHTING STYLES, BENDING & ARROW VOLLEYS
+            // ========================================================================
+            resolveDuelStrike(attacker, defender, rawDmg, isRaiderAttacking) {
+                const dx = defender.x - attacker.x;
+                const dy = defender.y - attacker.y;
+                const dist = Math.max(1, Math.hypot(dx, dy));
+                const defStyle = FIGHTING_STYLES[defender.fightingStyle] || FIGHTING_STYLES.berserker;
+                const atkStyle = FIGHTING_STYLES[attacker.fightingStyle] || FIGHTING_STYLES.berserker;
+
+                // 1. Sidestep / Kung-Fu Backflip Dodge
+                if ((defender.dodgeCooldown || 0) <= 0 && Math.random() < (defStyle.dodgeChance || 0.22)) {
+                    defender.dodgeCooldown = 1.8;
+                    if (defender.fightingStyle === 'kungfu') defender.leapHeight = 12;
+                    this.sfx.play('dodge');
+                    this.addFloatText(defender.x, defender.y - 24, defender.fightingStyle === 'kungfu' ? '🤸 KUNG-FU FLIP!' : '💨 DODGE!', '#38bdf8');
+                    return;
+                }
+
+                // 2. Phalanx Tower-Shield / Buckler Block
+                if (Math.random() < (defStyle.blockChance || 0.25)) {
+                    defender.isBlocking = true;
+                    defender.blockTimer = 0.48;
+                    const reduced = Math.max(1, Math.round(rawDmg * (defender.fightingStyle === 'phalanx' ? 0.15 : 0.30)));
+                    defender.hp -= reduced;
+                    this.sfx.play('block');
+                    this.spawnShockwave((attacker.x + defender.x) / 2, (attacker.y + defender.y) / 2 - 10, '#38bdf8', 24);
+                    this.addFloatText(defender.x, defender.y - 24, defender.fightingStyle === 'phalanx' ? `🛡️ PHALANX BASH! (-${reduced})` : `🛡️ BLOCK! (-${reduced})`, '#fde047');
+                    if (defender.fightingStyle === 'phalanx') attacker.stunTimer = 0.7;
+                    return;
+                }
+
+                // 3. Direct Hit + Fighting Style Special Physics
+                defender.hp -= rawDmg;
+                if (attacker.fightingStyle === 'kungfu') {
+                    this.sfx.play('kick');
+                    defender.knockbackVx = (dx / dist) * 135;
+                    defender.knockbackVy = (dy / dist) * 135;
+                    this.spawnShockwave(defender.x, defender.y - 10, '#10b981', 26);
+                } else if (attacker.fightingStyle === 'juggernaut') {
+                    this.sfx.play('slam');
+                    defender.stunTimer = 0.85;
+                    defender.leapHeight = 13;
+                    this.fissures.push({
+                        x1: attacker.x,
+                        y1: attacker.y,
+                        x2: defender.x + (dx / dist) * 32,
+                        y2: defender.y + (dy / dist) * 32,
+                        life: 1.3,
+                        maxLife: 1.3
+                    });
+                    this.spawnShockwave(defender.x, defender.y, '#c084fc', 38);
+                } else {
+                    this.sfx.play('bonk');
+                }
+
+                this.spawnParticleBurst(defender.x, defender.y - 12, atkStyle.color, 7, 50);
+
+                if (this.warScaleTier === 'billions') {
+                    const cas = Math.round(rawDmg * 850000);
+                    if (isRaiderAttacking) this.empirePopulation = Math.max(1000000, this.empirePopulation - cas * 0.25);
+                    else this.rivalPopulation = Math.max(0, this.rivalPopulation - cas);
+                    this.addFloatText(defender.x, defender.y - 22, `${atkStyle.icon} -${this.formatShortMacro(cas)}!`, isRaiderAttacking ? '#ef4444' : atkStyle.color);
+                } else {
+                    this.addFloatText(defender.x, defender.y - 20, `-${rawDmg}💥`, isRaiderAttacking ? '#ef4444' : '#fde047');
+                }
+            }
+
+            performBendingAttack(v, target) {
+                if (!v.bending || !target) return;
+                if (v.isT101s || v.bending === 'blood') {
+                    this.sfx.play('onering');
+                    target.bloodPuppetTimer = 2.6;
+                    target.puppetHeight = 22;
+                    target.hp -= 32;
+                    v.hp = Math.min(v.maxHp, v.hp + 10);
+                    this.spawnShockwave(target.x, target.y - 20, '#dc2626', 28);
+                    if (this.warScaleTier === 'billions') {
+                        const pup = 160000000;
+                        this.rivalPopulation = Math.max(0, this.rivalPopulation - pup);
+                        this.addFloatText(target.x, target.y - 34, `🩸 BLOODBENDS ${this.formatShortMacro(pup)}!`, '#fbbf24');
+                    } else {
+                        this.addFloatText(target.x, target.y - 34, '🩸 PUPPET!', '#fbbf24');
+                    }
+                    return;
+                }
+
+                const el = v.bending === 'avatar' ? BENDING_ORDER[Math.floor(Math.random() * 4)] : v.bending;
+                if (el === 'earth') v.stompTimer = 0.42;
+                const spec = BENDING_SPECS[el];
+                const dx = target.x - v.x;
+                const dy = target.y - v.y;
+                const dist = Math.max(1, Math.hypot(dx, dy));
+                this.elementalProjectiles.push({
+                    element: el,
+                    x: v.x,
+                    y: v.y - 12,
+                    vx: (dx / dist) * 260,
+                    vy: (dy / dist) * 260,
+                    dmg: spec.dmg,
+                    color: spec.color,
+                    life: 1.1
+                });
+            }
+
+            spawnArrowVolley(shooter, target, count = 7) {
+                this.sfx.play('volley');
+                for (let i = 0; i < count; i++) {
+                    const tx = target.x + (Math.random() - 0.5) * 44;
+                    const ty = target.y + (Math.random() - 0.5) * 34;
+                    const dist = Math.max(40, Math.hypot(tx - shooter.x, ty - shooter.y));
+                    this.arrowVolleys.push({
+                        x0: shooter.x,
+                        y0: shooter.y - 14,
+                        x1: tx,
+                        y1: ty,
+                        arcHeight: 42 + dist * 0.22,
+                        elapsed: -i * 0.03,
+                        duration: Math.max(0.38, Math.min(0.8, dist / 310)),
+                        dmg: 7
+                    });
+                }
+            }
+
+            updateProjectilesAndVolleys(dt) {
+                for (let i = this.elementalProjectiles.length - 1; i >= 0; i--) {
+                    const p = this.elementalProjectiles[i];
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.life -= dt;
+                    const hit = this.raiders.find(r => Math.hypot(r.x - p.x, r.y - p.y) < 28);
+                    if (hit) {
+                        hit.hp -= p.dmg;
+                        if (p.element === 'earth') hit.stunTimer = 1.1;
+                        if (p.element === 'air') {
+                            hit.knockbackVx = p.vx * 0.6;
+                            hit.knockbackVy = p.vy * 0.6;
+                        }
+                        this.spawnShockwave(hit.x, hit.y - 10, p.color, 28);
+                        this.elementalProjectiles.splice(i, 1);
+                        continue;
+                    }
+                    if (p.life <= 0) this.elementalProjectiles.splice(i, 1);
+                }
+
+                for (let i = this.fissures.length - 1; i >= 0; i--) {
+                    this.fissures[i].life -= dt;
+                    if (this.fissures[i].life <= 0) this.fissures.splice(i, 1);
+                }
+
+                for (let i = this.arrowVolleys.length - 1; i >= 0; i--) {
+                    const a = this.arrowVolleys[i];
+                    a.elapsed += dt;
+                    if (a.elapsed >= a.duration) {
+                        const hit = this.raiders.find(r => Math.hypot(r.x - a.x1, r.y - a.y1) < 36);
+                        if (hit) hit.hp -= a.dmg;
+                        this.arrowVolleys.splice(i, 1);
+                    }
+                }
+            }
+
+            // ========================================================================
+            // HUD & INSPECTOR UPDATES
+            // ========================================================================
+            updateHUD() {
+                document.getElementById('resWood').textContent = Math.floor(this.resources.wood);
+                document.getElementById('resStone').textContent = Math.floor(this.resources.stone);
+                document.getElementById('resRaw').textContent = Math.floor(this.resources.rawFood);
+                document.getElementById('resCooked').textContent = Math.floor(this.resources.cookedFood);
+                document.getElementById('resWeapons').textContent = Math.floor(this.resources.weapons);
+
+                const adults = this.villagers.filter(v => !v.isChild).length;
+                const kids = this.villagers.filter(v => v.isChild).length;
+                document.getElementById('popAdults').textContent = adults;
+                document.getElementById('popKidsWrap').textContent = kids > 0 ? `(+${kids}👶)` : '';
+                document.getElementById('popMax').textContent = this.getMaxPop();
+
+                document.getElementById('empirePopText').textContent = this.formatMacroPop(this.empirePopulation);
+                document.getElementById('legionSizeBadge').textContent = `⚔️ ${this.formatShortMacro(this.empirePopulation * 0.32)}`;
+                document.getElementById('rivalPopText').textContent = this.formatShortMacro(this.rivalPopulation);
+                document.getElementById('warScaleLabel').textContent =
+                    this.warScaleTier === 'billions' ? 'Scale: Billions' : (this.warScaleTier === 'millions' ? 'Scale: Millions' : 'Scale: Village');
+
+                document.getElementById('waveNum').textContent = this.waveNumber;
+                const mins = Math.floor(Math.max(0, this.raidCountdown) / 60);
+                const secs = Math.floor(Math.max(0, this.raidCountdown) % 60);
+                document.getElementById('raidTimerText').textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+                const rosterEl = document.getElementById('tribeRosterBar');
+                if (rosterEl) {
+                    rosterEl.innerHTML = this.villagers.map(v => {
+                        const isSel = this.selectedVillagers.some(sv => sv.id === v.id);
+                        const styleIcon = FIGHTING_STYLES[v.fightingStyle]?.icon || '⚔️';
+                        const bendIcon = v.isT101s ? '💍' : (v.bending ? BENDING_SPECS[v.bending]?.icon : '');
+                        return `<button onclick="game.selectVillagerById('${v.id}')" class="stone-panel px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 shrink-0 ${isSel ? 'border-amber-400 bg-amber-950/80 text-amber-200' : 'text-stone-200'}">
+                            <span>${bendIcon || styleIcon}</span>
+                            <span>${v.name}</span>
+                        </button>`;
+                    }).join('');
+                }
+            }
+
+            updateInspectorUI() {
+                const panel = document.getElementById('inspectorPanel');
+                if (!panel) return;
+
+                if (this.selectedVillagers.length > 0) {
+                    const v = this.selectedVillagers[0];
+                    const styleSpec = FIGHTING_STYLES[v.fightingStyle] || FIGHTING_STYLES.berserker;
+                    const bendSpec = v.bending ? BENDING_SPECS[v.bending] : null;
+                    const troops = this.formatShortMacro(this.getCommanderTroopCount(v));
+
+                    const specialButtons = v.isT101s
+                        ? `<button onclick="game.toggleT101sFlight()" class="wood-btn px-2 py-1 rounded-lg text-[10px] font-bold text-amber-100 border-amber-300">${v.skySoar ? '🪽 Soaring' : '🪽 Sky-Soar'}</button>
+                           <button onclick="game.triggerT101sDominion()" class="wood-btn px-2 py-1 rounded-lg text-[10px] font-bold text-red-100 border-red-400">💍 Dominion</button>`
+                        : `<button onclick="game.cycleVillagerFightingStyle()" class="wood-btn px-2 py-1 rounded-lg text-[10px] font-bold text-amber-100 border-amber-400">🥋 Style</button>
+                           <button onclick="game.awakenOrSurgeVillager()" class="stone-btn px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-200 border-cyan-400">${v.bending ? '🌀 Surge' : '✨ Awaken'}</button>`;
+
+                    panel.innerHTML = `
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                            <div class="w-8 h-8 rounded-lg ${v.isT101s ? 'bg-red-950 border-amber-400' : 'bg-stone-800 border-amber-500/60'} border flex flex-col items-center justify-center shrink-0">
+                                <span class="text-xs leading-none">${v.isT101s ? '💍' : styleSpec.icon}</span>
+                                <span class="text-[8px] font-bold text-amber-300">${troops}</span>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1 flex-wrap leading-none">
+                                    <span class="font-cartoon text-xs text-amber-300 truncate">${v.name}</span>
+                                    <span class="text-[9px] px-1 py-0.5 rounded bg-stone-800 border border-stone-600 text-amber-200 font-bold">${styleSpec.icon} ${styleSpec.shortName}</span>
+                                    ${bendSpec ? `<span class="text-[9px] px-1 py-0.5 rounded bg-cyan-950 border border-cyan-500/60 text-cyan-200 font-bold">${bendSpec.icon} ${bendSpec.name}</span>` : ''}
+                                    <span class="text-[9px] text-emerald-400 font-bold">💪${v.strLevel} ⚡${v.spdLevel}</span>
+                                </div>
+                                <div class="text-[9px] text-stone-300 truncate mt-0.5">HP ${Math.ceil(v.hp)}/${v.maxHp} • Commands ${troops} Legion Troops</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                            ${specialButtons}
+                            <button onclick="game.commandSelectedVillager('eat')" class="stone-btn px-1.5 py-1 rounded-lg text-[10px]" title="Feast at Campfire">🍖</button>
+                            <button onclick="game.commandSelectedVillager('gym')" class="stone-btn px-1.5 py-1 rounded-lg text-[10px]" title="Train at Stone Gym">🏋️</button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                if (this.selectedEntity && this.selectedEntity.kind === 'building') {
+                    const b = this.selectedEntity.ref;
+                    const spec = BUILDING_SPECS[b.type] || BUILDING_SPECS.hut;
+                    panel.innerHTML = `
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                            <div class="text-xl">${spec.icon}</div>
+                            <div class="min-w-0 flex-1">
+                                <div class="font-cartoon text-xs text-amber-300">${spec.name} ${b.built ? '' : `(${Math.floor(b.progress * 100)}%)`}</div>
+                                <div class="text-[9px] text-stone-300 truncate">${spec.desc}</div>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                panel.innerHTML = `<div class="text-[10px] text-stone-300">Tap any Villager, Building, Resource, or Ground spot to command your Stone Age Empire!</div>`;
+            }
+
+            // ========================================================================
+            // WORLD & ARTICULATED CHARACTER RENDERING
+            // ========================================================================
+            render() {
+                const ctx = this.ctx;
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+
+                ctx.fillStyle = '#142615';
+                ctx.fillRect(0, 0, w, h);
+
+                ctx.save();
+                ctx.translate(w / 2, h / 2);
+                ctx.scale(this.cam.zoom, this.cam.zoom);
+                ctx.translate(-this.cam.x, -this.cam.y);
+
+                this.drawValleyTerrain(ctx);
+                this.drawTectonicFissures(ctx);
+
+                // Depth-sort all world entities by Y coordinate
+                const renderList = [];
+                for (const n of this.nodes) {
+                    if (n.amount > 0) renderList.push({ y: n.y, draw: () => this.drawResourceNode(ctx, n) });
+                }
+                for (const b of this.buildings) {
+                    renderList.push({ y: b.y, draw: () => this.drawBuilding(ctx, b) });
+                }
+                for (const wl of this.wildlife) {
+                    renderList.push({ y: wl.y, draw: () => this.drawWildlife(ctx, wl) });
+                }
+                for (const r of this.raiders) {
+                    renderList.push({ y: r.y, draw: () => this.drawRaider(ctx, r) });
+                }
+                for (const v of this.villagers) {
+                    renderList.push({ y: v.y, draw: () => this.drawVillager(ctx, v) });
+                }
+
+                renderList.sort((a, b) => a.y - b.y);
+                for (const item of renderList) item.draw();
+
+                // Build preview ghost
+                if (this.buildMode) {
+                    const spec = BUILDING_SPECS[this.buildMode];
+                    ctx.save();
+                    ctx.translate(this.buildPreviewPos.x, this.buildPreviewPos.y);
+                    ctx.fillStyle = 'rgba(74, 222, 128, 0.28)';
+                    ctx.strokeStyle = '#4ade80';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, spec.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.font = '22px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(spec.icon, 0, 8);
+                    ctx.restore();
+                }
+
+                this.drawEffectsAndProjectiles(ctx);
+
+                ctx.restore();
+
+                this.renderMinimap();
+            }
+
+            drawValleyTerrain(ctx) {
+                // Lush valley floor gradient
+                const grad = ctx.createLinearGradient(0, 0, 0, this.worldH);
+                grad.addColorStop(0, '#cbd5e1');   // Northern Thawing Glacier
+                grad.addColorStop(0.11, '#1e3f20'); // Pine foothills
+                grad.addColorStop(0.55, '#244923'); // Sunlit central valley
+                grad.addColorStop(1, '#3b2818');   // Southern badlands
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, this.worldW, this.worldH);
+
+                // Subtle ground grid lines for scale clarity
+                ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+                ctx.lineWidth = 2;
+                for (let x = 0; x <= this.worldW; x += 240) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, this.worldH);
+                    ctx.stroke();
+                }
+
+                // Northern Ancestral Ice Cave
+                ctx.save();
+                ctx.translate(this.glacierCave.x, this.glacierCave.y);
+                ctx.fillStyle = '#94a3b8';
+                ctx.beginPath();
+                ctx.arc(0, 0, 120, Math.PI, 0);
+                ctx.fill();
+                ctx.fillStyle = '#0f172a';
+                ctx.beginPath();
+                ctx.arc(0, 0, 68, Math.PI, 0);
+                ctx.fill();
+                ctx.font = 'bold 14px Fredoka, sans-serif';
+                ctx.fillStyle = '#e2e8f0';
+                ctx.textAlign = 'center';
+                ctx.fillText('❄️ ANCESTRAL GLACIER CAVE', 0, -85);
+                ctx.restore();
+
+                // Winding Turquoise River
+                if (this.riverPoints.length > 1) {
+                    ctx.save();
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.strokeStyle = '#ca8a04';
+                    ctx.lineWidth = 96;
+                    ctx.beginPath();
+                    this.riverPoints.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+                    ctx.stroke();
+
+                    ctx.strokeStyle = '#0284c7';
+                    ctx.lineWidth = 74;
+                    ctx.stroke();
+
+                    // Shallow stone stepping-stone fords
+                    for (const f of this.fords) {
+                        if (!f) continue;
+                        ctx.fillStyle = '#a8a29e';
+                        for (let s = -28; s <= 28; s += 14) {
+                            ctx.beginPath();
+                            ctx.arc(f.x + s, f.y + (s % 2) * 5, 9, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+                    ctx.restore();
+                }
+
+                // Outer Cannibal Skull Camps
+                for (const camp of this.cannibalCamps) {
+                    ctx.save();
+                    ctx.translate(camp.x, camp.y);
+                    ctx.fillStyle = 'rgba(127, 29, 29, 0.45)';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 85, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.font = 'bold 14px Fredoka, sans-serif';
+                    ctx.fillStyle = '#fca5a5';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('💀 ' + camp.name, 0, -55);
+                    ctx.restore();
+                }
+            }
+
+            drawTectonicFissures(ctx) {
+                for (const f of this.fissures) {
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, f.life / f.maxLife);
+                    ctx.strokeStyle = '#c084fc';
+                    ctx.lineWidth = 4.5;
+                    ctx.beginPath();
+                    ctx.moveTo(f.x1, f.y1);
+                    ctx.lineTo((f.x1 + f.x2) / 2 + 6, (f.y1 + f.y2) / 2 - 5);
+                    ctx.lineTo(f.x2, f.y2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+
+            drawResourceNode(ctx, n) {
+                ctx.save();
+                ctx.translate(n.x, n.y);
+                ctx.fillStyle = 'rgba(0,0,0,0.28)';
+                ctx.beginPath();
+                ctx.ellipse(0, 6, 20, 9, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (n.type === 'wood') {
+                    ctx.fillStyle = '#78350f';
+                    ctx.fillRect(-5, -14, 10, 20);
+                    ctx.fillStyle = '#15803d';
+                    ctx.beginPath();
+                    ctx.arc(0, -24, 19, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#22c55e';
+                    ctx.beginPath();
+                    ctx.arc(-5, -28, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (n.type === 'stone') {
+                    ctx.fillStyle = '#78716c';
+                    ctx.beginPath();
+                    ctx.arc(-4, -6, 16, 0, Math.PI * 2);
+                    ctx.arc(9, -3, 13, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.fillStyle = '#16a34a';
+                    ctx.beginPath();
+                    ctx.arc(0, -8, 16, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#f43f5e';
+                    [[-6, -10], [5, -12], [2, -4], [-4, -3]].forEach(([bx, by]) => {
+                        ctx.beginPath();
+                        ctx.arc(bx, by, 3.2, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                }
+                ctx.restore();
+            }
+
+            drawBuilding(ctx, b) {
+                ctx.save();
+                ctx.translate(b.x, b.y);
+
+                // Warm Hearth Campfire with 6 carved log seats & roasting rib spit
+                if (b.type === 'hearth') {
+                    const flick = Math.sin(this.gameTime * 12) * 3;
+                    const glow = ctx.createRadialGradient(0, 0, 6, 0, 0, 95 + flick);
+                    glow.addColorStop(0, 'rgba(251, 146, 60, 0.42)');
+                    glow.addColorStop(1, 'rgba(251, 146, 60, 0)');
+                    ctx.fillStyle = glow;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 95 + flick, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // 6 Carved Log Benches around the fire
+                    for (let i = 0; i < 6; i++) {
+                        const a = (i / 6) * Math.PI * 2;
+                        ctx.save();
+                        ctx.translate(Math.cos(a) * 44, Math.sin(a) * 32);
+                        ctx.rotate(a + Math.PI / 2);
+                        ctx.fillStyle = '#78350f';
+                        ctx.strokeStyle = '#451a03';
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.roundRect(-11, -4, 22, 8, 3);
+                        ctx.fill();
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+
+                    // Fire ring stones & flames
+                    ctx.fillStyle = '#f97316';
+                    ctx.beginPath();
+                    ctx.arc(0, -4, 13 + flick * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#fde047';
+                    ctx.beginPath();
+                    ctx.arc(0, -6, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                    return;
+                }
+
+                // Ground shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.35)';
+                ctx.beginPath();
+                ctx.ellipse(0, 8, b.radius, b.radius * 0.48, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Building body
+                if (b.type === 'hut') {
+                    ctx.fillStyle = '#92400e';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 28, Math.PI, 0);
+                    ctx.lineTo(28, 10);
+                    ctx.lineTo(-28, 10);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = '#1c1917';
+                    ctx.beginPath();
+                    ctx.arc(0, 10, 9, Math.PI, 0);
+                    ctx.fill();
+                } else if (b.type === 'shrine') {
+                    ctx.fillStyle = '#1e3a8a';
+                    ctx.beginPath();
+                    ctx.roundRect(-28, -22, 56, 32, 8);
+                    ctx.fill();
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                } else if (b.type === 'citadel') {
+                    ctx.fillStyle = '#44403c';
+                    ctx.beginPath();
+                    ctx.roundRect(-36, -26, 72, 38, 6);
+                    ctx.fill();
+                    ctx.strokeStyle = '#f43f5e';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                } else {
+                    ctx.fillStyle = '#78350f';
+                    ctx.beginPath();
+                    ctx.roundRect(-26, -20, 52, 30, 6);
+                    ctx.fill();
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 1.8;
+                    ctx.stroke();
+                }
+
+                // 3-Stage Timber Scaffolding if under construction or repair!
+                if (!b.built || b.hp < b.maxHp) {
+                    ctx.strokeStyle = '#d97706';
+                    ctx.lineWidth = 2.2;
+                    ctx.strokeRect(-b.radius * 0.8, -26, b.radius * 1.6, 34);
+                    ctx.beginPath();
+                    ctx.moveTo(-b.radius * 0.8, -26);
+                    ctx.lineTo(b.radius * 0.8, 8);
+                    ctx.moveTo(b.radius * 0.8, -26);
+                    ctx.lineTo(-b.radius * 0.8, 8);
+                    ctx.stroke();
+                }
+
+                ctx.font = 'bold 11px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#fde68a';
+                ctx.fillText(`${BUILDING_SPECS[b.type]?.icon || '🛖'} ${BUILDING_SPECS[b.type]?.name || b.type}`, 0, -32);
+                ctx.restore();
+            }
+
+            drawWildlife(ctx, w) {
+                ctx.save();
+                ctx.translate(w.x, w.y);
+                ctx.scale(w.facing, 1);
+                ctx.fillStyle = w.type === 'mammoth' ? '#78350f' : (w.type === 'sabre' ? '#d97706' : '#a16207');
+                ctx.beginPath();
+                ctx.ellipse(0, -10, w.radius, w.radius * 0.68, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // ========================================================================
+            // ARTICULATED HUMAN CHARACTER RENDERER (Real Head, Torso, 2-Segment Arms & Legs)
+            // ========================================================================
+            drawArticulatedHuman(ctx, cfg) {
+                const {
+                    scale = 1.0,
+                    facing = 1,
+                    isMoving = false,
+                    isWorking = false,
+                    isSeated = false,
+                    eatCycle = 0,
+                    isBlocking = false,
+                    lungeOffset = 0,
+                    slashTimer = 0,
+                    kickTimer = 0,
+                    leapHeight = 0,
+                    stompTimer = 0,
+                    fightingStyle = 'berserker',
+                    bending = null,
+                    isT101s = false,
+                    hasTheOneRing = false,
+                    hoverOffset = 0,
+                    bloodPuppetLift = 0,
+                    task = 'idle',
+                    walkPhase = 0,
+                    workPhase = 0,
+                    skinColor = '#e0ac69',
+                    outfitColor = '#92400e',
+                    isCannibal = false,
+                    weapon = 'club'
+                } = cfg;
+
+                const bendSpec = bending ? BENDING_SPECS[bending] : null;
+                const activeOutfit = bendSpec ? bendSpec.outfitColor : outfitColor;
+
+                ctx.save();
+                if (hoverOffset > 0 || bloodPuppetLift > 0 || leapHeight > 0) {
+                    ctx.translate(0, -(hoverOffset + bloodPuppetLift + leapHeight));
+                }
+                ctx.scale(facing * scale, scale);
+                if (lungeOffset > 0) ctx.translate(lungeOffset * 0.55, 0);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                const stride = isMoving ? Math.sin(walkPhase) : 0;
+                const bob = isSeated ? 3.5 : (isMoving ? Math.abs(Math.cos(walkPhase)) * 1.8 : 0);
+                const hipY = -10 + bob;
+                const shoulderY = -21 + bob;
+
+                // 1. Compute 2-Segment Articulated Legs (Hip -> Knee -> Foot)
+                const computeLeg = (dir) => {
+                    if (isSeated) {
+                        return { hx: 0, hy: hipY, kx: 5.5, ky: hipY + 1, fx: 6.5, fy: hipY + 7 };
+                    }
+                    if (kickTimer > 0 && dir > 0) {
+                        // Kung-Fu High Side-Kick!
+                        const ext = Math.sin((kickTimer / 0.34) * Math.PI);
+                        return { hx: 0, hy: hipY, kx: 4.5 * ext, ky: hipY - 2 * ext, fx: 11 * ext, fy: hipY - 4.5 * ext };
+                    }
+                    if (stompTimer > 0 && dir > 0) {
+                        const lift = Math.sin((stompTimer / 0.42) * Math.PI) * 4.5;
+                        return { hx: 0, hy: hipY, kx: 4, ky: hipY + 3 - lift, fx: 4.5, fy: -lift };
+                    }
+                    const sw = stride * dir * 5.2;
+                    return { hx: 0, hy: hipY, kx: sw * 0.6 + 1, ky: hipY + 5, fx: sw, fy: 0 };
+                };
+
+                const backLeg = computeLeg(-1);
+                const frontLeg = computeLeg(1);
+
+                const drawLeg = (leg, dark) => {
+                    ctx.strokeStyle = dark ? '#b88655' : skinColor;
+                    ctx.lineWidth = 3.2;
+                    ctx.beginPath();
+                    ctx.moveTo(leg.hx, leg.hy);
+                    ctx.lineTo(leg.kx, leg.ky);
+                    ctx.lineTo(leg.fx, leg.fy);
+                    ctx.stroke();
+                    // Foot
+                    ctx.lineWidth = 2.6;
+                    ctx.beginPath();
+                    ctx.moveTo(leg.fx - 1, leg.fy);
+                    ctx.lineTo(leg.fx + 3.2, leg.fy);
+                    ctx.stroke();
+                };
+
+                drawLeg(backLeg, true);
+
+                // 2. Torso & Tunic
+                ctx.fillStyle = activeOutfit;
+                ctx.strokeStyle = '#1c1917';
+                ctx.lineWidth = 1.3;
+                ctx.beginPath();
+                ctx.roundRect(-4.5, shoulderY, 9, 12, 3);
+                ctx.fill();
+                ctx.stroke();
+
+                drawLeg(frontLeg, false);
+
+                // 3. Head, Eyes & Hair
+                const headY = shoulderY - 5.2;
+                ctx.fillStyle = skinColor;
+                ctx.beginPath();
+                ctx.arc(0, headY, 5.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Hair / Topknot
+                ctx.fillStyle = '#1c1917';
+                ctx.beginPath();
+                ctx.arc(-1, headY - 1.5, 5.0, Math.PI * 0.85, Math.PI * 2.05);
+                ctx.fill();
+
+                // Eyes (Glowing for Avatar or t101s)
+                ctx.fillStyle = isT101s ? '#fbbf24' : (bending === 'avatar' ? '#67e8f9' : '#1c1917');
+                ctx.beginPath();
+                ctx.arc(2.4, headY - 0.6, 1.1, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 4. Articulated Front Arm, Hand, Weapons, Shield & The One Ring!
+                const swing = isWorking ? Math.sin(workPhase) * 5.5 : -stride * 3.5;
+                let elX = 2.5;
+                let elY = shoulderY + 4;
+                let haX = 6.5 + swing * 0.6;
+                let haY = shoulderY + 2 - swing * 0.5;
+
+                if (isSeated) {
+                    const bite = (Math.sin(eatCycle) + 1) * 0.5;
+                    elX = 3.5;
+                    elY = shoulderY + 4;
+                    haX = 5.5 - bite * 2.5;
+                    haY = shoulderY + 2 - bite * 6.5;
+                }
+
+                ctx.strokeStyle = skinColor;
+                ctx.lineWidth = 3.0;
+                ctx.beginPath();
+                ctx.moveTo(0, shoulderY + 2);
+                ctx.lineTo(elX, elY);
+                ctx.lineTo(haX, haY);
+                ctx.stroke();
+
+                // Hand
+                ctx.fillStyle = skinColor;
+                ctx.beginPath();
+                ctx.arc(haX, haY, 2.0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // THE ONE RING on t101s's right hand (the ONLY ring in the game!)
+                if (hasTheOneRing && isT101s) {
+                    ctx.save();
+                    ctx.translate(haX, haY);
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 2.0;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 3.6, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.fillStyle = '#dc2626';
+                    ctx.beginPath();
+                    ctx.arc(2.4, -1, 1.7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                // Held Item / Fighting Style Weapon in Hand
+                ctx.save();
+                ctx.translate(haX, haY);
+                if (isSeated) {
+                    // Roasted Sabre-Tooth Rib
+                    ctx.fillStyle = '#c2410c';
+                    ctx.beginPath();
+                    ctx.ellipse(1, -2, 3.5, 2.2, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (task === 'build') {
+                    // Stone Mallet
+                    ctx.strokeStyle = '#fde68a';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 3);
+                    ctx.lineTo(0, -8);
+                    ctx.stroke();
+                    ctx.fillStyle = '#78716c';
+                    ctx.fillRect(-3.5, -11, 7, 4.5);
+                } else if (!isT101s) {
+                    if (fightingStyle === 'juggernaut') {
+                        ctx.strokeStyle = '#78350f';
+                        ctx.lineWidth = 2.4;
+                        ctx.beginPath();
+                        ctx.moveTo(0, 4);
+                        ctx.lineTo(0, -14);
+                        ctx.stroke();
+                        ctx.fillStyle = '#581c87';
+                        ctx.fillRect(-5, -17, 10, 6);
+                    } else if (fightingStyle === 'phalanx') {
+                        ctx.strokeStyle = '#fde68a';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(0, 5);
+                        ctx.lineTo(0, -18);
+                        ctx.stroke();
+                    } else if (fightingStyle === 'archery') {
+                        ctx.strokeStyle = '#d97706';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(-1, 0, 7, -Math.PI * 0.48, Math.PI * 0.48);
+                        ctx.stroke();
+                    } else if (fightingStyle === 'berserker' || weapon !== 'none' || isCannibal) {
+                        ctx.fillStyle = isCannibal ? '#ef4444' : '#f43f5e';
+                        ctx.beginPath();
+                        ctx.moveTo(0, 2);
+                        ctx.lineTo(2.5, -11);
+                        ctx.lineTo(-1.5, -11);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                }
+                ctx.restore();
+
+                // Phalanx / Parry Shield
+                if (isBlocking || fightingStyle === 'phalanx') {
+                    ctx.fillStyle = isCannibal ? '#7f1d1d' : '#1e3a8a';
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 1.6;
+                    ctx.beginPath();
+                    ctx.roundRect(2.5, shoulderY - 1, 5.5, 12, 2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+
+                // Slash / Kick Arc
+                if (slashTimer > 0 || kickTimer > 0) {
+                    ctx.strokeStyle = kickTimer > 0 ? '#10b981' : '#fde047';
+                    ctx.lineWidth = 2.6;
+                    ctx.beginPath();
+                    ctx.arc(3, shoulderY + 2, 13, -Math.PI * 0.45, Math.PI * 0.35);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+
+            drawLegionSquadron(ctx, commander, isCannibal = false) {
+                if (commander.isChild || commander.isSeated || this.warScaleTier === 'village') return;
+                const offsets = this.legionFormation === 'wedge'
+                    ? [[-14, -9], [-14, 9], [-26, -16], [-26, 0], [-26, 16]]
+                    : [[-18, -10], [-18, 10], [-32, -12], [-32, 12], [12, -12]];
+
+                for (let i = 0; i < offsets.length; i++) {
+                    const [ox, oy] = offsets[i];
+                    ctx.save();
+                    ctx.translate(ox * commander.facing, oy);
+                    ctx.globalAlpha = 0.85;
+                    this.drawArticulatedHuman(ctx, {
+                        scale: 0.50,
+                        facing: commander.facing,
+                        isMoving: commander.isMoving,
+                        isWorking: commander.isWorking || commander.isAttacking,
+                        isBlocking: commander.isBlocking,
+                        slashTimer: commander.slashTimer || 0,
+                        kickTimer: commander.kickTimer || 0,
+                        fightingStyle: commander.fightingStyle,
+                        hoverOffset: commander.isT101s ? commander.hoverHeight * 0.5 : 0,
+                        bloodPuppetLift: commander.puppetHeight ? commander.puppetHeight * 0.7 : 0,
+                        walkPhase: (commander.animPhase || 0) + i * 0.5,
+                        workPhase: (commander.workPhase || 0) + i * 0.3,
+                        skinColor: commander.skinColor || '#d99b78',
+                        outfitColor: isCannibal ? '#991b1b' : (commander.furColor || '#92400e'),
+                        isCannibal
+                    });
+                    ctx.restore();
+                }
+            }
+
+            drawVillager(ctx, v) {
+                ctx.save();
+                ctx.translate(v.x, v.y);
+
+                this.drawLegionSquadron(ctx, v, false);
+
+                const isSelected = this.selectedVillagers.some(sv => sv.id === v.id);
+                if (isSelected) {
+                    ctx.strokeStyle = '#fde047';
+                    ctx.lineWidth = 2.4;
+                    ctx.beginPath();
+                    ctx.ellipse(0, 2, 16, 8, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Ground shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.32)';
+                ctx.beginPath();
+                ctx.ellipse(0, 2, 9, 4.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                const hoverOffset = v.isT101s ? v.hoverHeight : 0;
+
+                this.drawArticulatedHuman(ctx, {
+                    scale: v.isChild ? 0.68 : (v.isT101s ? 1.12 : 1.0),
+                    facing: v.facing,
+                    isMoving: v.isMoving,
+                    isWorking: v.isWorking,
+                    isSeated: v.isSeated,
+                    eatCycle: v.eatCycle,
+                    isBlocking: v.isBlocking,
+                    lungeOffset: v.lungeOffset,
+                    slashTimer: v.slashTimer,
+                    kickTimer: v.kickTimer,
+                    leapHeight: v.leapHeight,
+                    stompTimer: v.stompTimer,
+                    fightingStyle: v.fightingStyle,
+                    bending: v.bending,
+                    isT101s: v.isT101s,
+                    hasTheOneRing: v.hasTheOneRing,
+                    hoverOffset,
+                    task: v.task,
+                    walkPhase: v.animPhase,
+                    workPhase: v.workPhase,
+                    skinColor: v.skinColor,
+                    outfitColor: v.furColor,
+                    weapon: v.weapon
+                });
+
+                const troops = !v.isChild ? this.formatShortMacro(this.getCommanderTroopCount(v)) : '';
+                if (v.isT101s) {
+                    const by = -hoverOffset - 34;
+                    ctx.fillStyle = 'rgba(69, 10, 10, 0.92)';
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.roundRect(-58, by - 11, 116, 15, 6);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.font = 'bold 9.5px Inter, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#fde047';
+                    ctx.fillText(`💍 t101s • ${troops} 🪽`, 0, by);
+                } else {
+                    const styleIcon = FIGHTING_STYLES[v.fightingStyle]?.icon || '';
+                    const bendIcon = v.bending ? BENDING_SPECS[v.bending]?.icon : '';
+                    ctx.font = 'bold 9px Inter, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#fef3c7';
+                    ctx.fillText(`${styleIcon}${bendIcon} ${v.name} (${troops})`, 0, 13);
+                }
+
+                ctx.restore();
+            }
+
+            drawRaider(ctx, r) {
+                ctx.save();
+                ctx.translate(r.x, r.y);
+
+                this.drawLegionSquadron(ctx, r, true);
+
+                ctx.fillStyle = 'rgba(0,0,0,0.35)';
+                ctx.beginPath();
+                ctx.ellipse(0, 2, 9, 4.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                this.drawArticulatedHuman(ctx, {
+                    scale: r.isBoss ? 1.22 : 1.0,
+                    facing: r.facing,
+                    isMoving: r.isMoving,
+                    isWorking: r.isAttacking,
+                    isBlocking: r.isBlocking,
+                    lungeOffset: r.lungeOffset,
+                    slashTimer: r.slashTimer,
+                    kickTimer: r.kickTimer,
+                    leapHeight: r.leapHeight,
+                    fightingStyle: r.fightingStyle,
+                    bloodPuppetLift: r.puppetHeight || 0,
+                    task: 'attack',
+                    walkPhase: r.animPhase,
+                    workPhase: r.workPhase,
+                    skinColor: '#fca5a5',
+                    outfitColor: '#7f1d1d',
+                    isCannibal: true
+                });
+
+                // HP bar
+                ctx.fillStyle = '#1c1917';
+                ctx.fillRect(-14, -34 - (r.puppetHeight || 0), 28, 4);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(-14, -34 - (r.puppetHeight || 0), 28 * Math.max(0, r.hp / r.maxHp), 4);
+                ctx.restore();
+            }
+
+            drawEffectsAndProjectiles(ctx) {
+                // Target tap markers
+                for (const m of this.targetMarkers) {
+                    const t = 1 - m.life / m.maxLife;
+                    ctx.save();
+                    ctx.strokeStyle = m.color;
+                    ctx.globalAlpha = Math.max(0, m.life / m.maxLife);
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(m.x, m.y, 6 + t * m.maxRadius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Elemental Bending Projectiles
+                for (const p of this.elementalProjectiles) {
+                    ctx.save();
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                // Sky-Volley Parabolic Arrows
+                for (const a of this.arrowVolleys) {
+                    if (a.elapsed < 0) continue;
+                    const t = Math.min(1, a.elapsed / a.duration);
+                    const ax = a.x0 + (a.x1 - a.x0) * t;
+                    const ay = a.y0 + (a.y1 - a.y0) * t - Math.sin(t * Math.PI) * a.arcHeight;
+                    ctx.save();
+                    ctx.strokeStyle = '#fde047';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(ax - 5, ay - 2);
+                    ctx.lineTo(ax + 5, ay + 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Shockwaves
+                for (const s of this.shockwaves) {
+                    ctx.save();
+                    ctx.strokeStyle = s.color;
+                    ctx.globalAlpha = Math.max(0, s.life / s.maxLife);
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Particles
+                for (const p of this.particles) {
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Floating Combat / Resource Texts
+                for (const f of this.floatTexts) {
+                    ctx.save();
+                    ctx.font = 'bold 12px Fredoka, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                    ctx.fillText(f.text, f.x + 1, f.y + 1);
+                    ctx.fillStyle = f.color;
+                    ctx.fillText(f.text, f.x, f.y);
+                    ctx.restore();
+                }
+            }
+
+            renderMinimap() {
+                const mctx = this.miniCtx;
+                const mw = this.miniCanvas.width;
+                const mh = this.miniCanvas.height;
+                const sx = mw / this.worldW;
+                const sy = mh / this.worldH;
+
+                mctx.fillStyle = '#1b361a';
+                mctx.fillRect(0, 0, mw, mh);
+
+                // River line
+                mctx.strokeStyle = '#0284c7';
+                mctx.lineWidth = 3;
+                mctx.beginPath();
+                this.riverPoints.forEach((p, i) => i === 0 ? mctx.moveTo(p.x * sx, p.y * sy) : mctx.lineTo(p.x * sx, p.y * sy));
+                mctx.stroke();
+
+                // Buildings
+                mctx.fillStyle = '#fbbf24';
+                for (const b of this.buildings) {
+                    mctx.fillRect(b.x * sx - 2, b.y * sy - 2, 4, 4);
+                }
+
+                // Villagers & t101s
+                for (const v of this.villagers) {
+                    mctx.fillStyle = v.isT101s ? '#fde047' : '#4ade80';
+                    mctx.beginPath();
+                    mctx.arc(v.x * sx, v.y * sy, v.isT101s ? 3 : 2, 0, Math.PI * 2);
+                    mctx.fill();
+                }
+
+                // Raiders
+                mctx.fillStyle = '#ef4444';
+                for (const r of this.raiders) {
+                    mctx.beginPath();
+                    mctx.arc(r.x * sx, r.y * sy, 2.3, 0, Math.PI * 2);
+                    mctx.fill();
+                }
+
+                // Camera viewport rectangle
+                const vw = (this.canvas.width / this.cam.zoom) * sx;
+                const vh = (this.canvas.height / this.cam.zoom) * sy;
+                mctx.strokeStyle = '#ffffff';
+                mctx.lineWidth = 1.2;
+                mctx.strokeRect(this.cam.x * sx - vw / 2, this.cam.y * sy - vh / 2, vw, vh);
+            }
+        }
+
+        // Start the game cleanly once the DOM is ready
+        let game = null;
+        window.addEventListener('DOMContentLoaded', () => {
+            game = new PrehistoricTribesGame();
+        });
+    </script>
+</body>
+</html>
