@@ -129,6 +129,9 @@
                     <button onclick="game.toggleDiplomacyPanel()" class="stone-btn px-2 py-0.5 rounded-lg text-[10px] font-bold text-amber-200 border-amber-400 shrink-0">
                         👑 All Tribes (<span id="allTribesBtnCount">5</span>)
                     </button>
+                    <button onclick="game.toggleChroniclePanel()" class="imperial-btn px-2 py-0.5 rounded-lg text-[10px] font-bold text-amber-200 border-yellow-400 shrink-0">
+                        📖 Books (<span id="chronicleCountLabel">3</span>)
+                    </button>
                     <button onclick="game.triggerGreatComet()" class="ring-btn px-2 py-0.5 rounded-lg text-[10px] font-bold text-rose-200 shrink-0">
                         ☄️ Great Comet
                     </button>
@@ -314,6 +317,24 @@
                 </div>
             </div>
 
+            <!-- CHRONICLE BOOKS MODAL (HISTORY OF RING, HEROES, TRIBES & EMPIRES) -->
+            <div id="chroniclePanel" class="hidden self-center w-full max-w-2xl stone-panel rounded-xl p-3 pointer-events-auto shadow-2xl border border-amber-400/60">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="text-xs font-extrabold text-amber-300">📖 World Chronicle Books — Living History</div>
+                    <button onclick="game.toggleChroniclePanel()" class="stone-btn px-2 py-0.5 rounded text-[10px] font-bold text-stone-200">✖ Close</button>
+                </div>
+                <div class="flex items-center gap-1.5 mb-2">
+                    <button onclick="game.selectChronicleBook('ring')" class="ring-btn px-2.5 py-1 rounded-lg text-[10px] font-bold text-yellow-200">💍 Book of the One Ring</button>
+                    <button onclick="game.selectChronicleBook('heroes')" class="stone-btn px-2.5 py-1 rounded-lg text-[10px] font-bold text-rose-200">⚔️ Heroes &amp; Fighters</button>
+                    <button onclick="game.selectChronicleBook('empires')" class="wood-btn px-2.5 py-1 rounded-lg text-[10px] font-bold text-emerald-200">🏛️ Tribes &amp; Empires</button>
+                </div>
+                <div id="chronicleEntries" class="flex flex-col gap-1.5 max-h-52 overflow-y-auto no-scrollbar mb-2 text-[11px]"></div>
+                <div class="flex items-center gap-1.5 border-t border-stone-700 pt-2">
+                    <input id="chronicleCustomInput" type="text" placeholder="Inscribe a legend into this book..." class="flex-1 bg-stone-900/90 border border-stone-600 rounded px-2 py-1 text-[11px] text-amber-100" />
+                    <button onclick="game.inscribeCustomChronicle()" class="ring-btn px-2.5 py-1 rounded-lg text-[10px] font-bold text-yellow-100">✍️ Inscribe</button>
+                </div>
+            </div>
+
             <!-- FLOATING ANNOUNCEMENT BANNER -->
             <div id="eventBanner" class="self-center stone-panel px-3 py-1 rounded-full border border-amber-400/60 text-[11px] font-bold text-amber-200 shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none">
                 <span id="eventBannerIcon">💍</span> <span id="eventBannerText">Welcome to Prehistoric Tribes!</span>
@@ -361,6 +382,9 @@
                 </div>
 
                 <div id="unitActionGroup" class="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                    <button onclick="game.toggleRingOnSelected()" class="ring-btn px-2 py-1 rounded-lg text-[10px] font-bold text-yellow-200 border-yellow-300 shrink-0">
+                        💍 <span id="ringToggleBtnText">Remove Ring</span>
+                    </button>
                     <button onclick="game.triggerHeroTeleport()" class="ring-btn px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-200 border-cyan-300 shrink-0">
                         🌀 <span id="teleportBtnText">Teleport: ON</span>
                     </button>

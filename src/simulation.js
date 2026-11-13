@@ -79,6 +79,20 @@ export class PrehistoricPlanetaryGame {
         this.totalTribesFounded = 0;
         this.totalTribeMigrations = 0;
         this.totemMonuments = [];
+        this.worldYear = 1;
+        this.oneRing = {
+            bearerId: null,
+            x: 780,
+            y: 2320,
+            dropped: false,
+            history: []
+        };
+        this.chronicles = {
+            ring: [],
+            heroes: [],
+            empires: []
+        };
+        this.activeChronicleBook = 'ring';
 
         this.ringControlSpareMode = true;
         this.heroTeleportOnTap = true;
@@ -206,9 +220,13 @@ export class PrehistoricPlanetaryGame {
             fightingStyle: isT101s ? 'onering' : styles[Math.floor(Math.random() * styles.length)],
             bender: isT101s ? 'avatar' : (Math.random() < 0.28 ? ['fire', 'water', 'earth', 'air'][Math.floor(Math.random() * 4)] : null),
             skySoar: isT101s,
-            invincible: isT101s,
+            invincible: false,
             lightningSpeed: isT101s,
             mountType: isT101s ? 'drake' : null,
+            age: isT101s ? 26 : (18 + Math.floor(Math.random() * 14)),
+            maxAge: isT101s ? 115 : (72 + Math.floor(Math.random() * 24)),
+            kills: 0,
+            hasOneRing: false,
             childScale: 1.0,
             profession: prof.title,
             wage: prof.wage,
@@ -259,6 +277,11 @@ export class PrehistoricPlanetaryGame {
             facing: -1,
             isBoss,
             aiOwnerId,
+            age: isBoss ? 48 : (20 + Math.floor(Math.random() * 16)),
+            maxAge: isBoss ? 140 : (70 + Math.floor(Math.random() * 20)),
+            kills: 0,
+            hasOneRing: false,
+            childScale: 1.0,
             hp: isBoss ? 1650 : 190,
             maxHp: isBoss ? 1650 : 190,
             attack: isBoss ? 52 : 19,
@@ -358,6 +381,9 @@ export class PrehistoricPlanetaryGame {
         const hero = this.createVillager(840, 2330, 't101s', true);
         this.villagers.push(hero);
         this.selectedIds = [hero.id];
+        this.equipOneRing(hero, 'Forged & claimed at the dawn of Aethelgard', true);
+        this.addChronicle('heroes', 'Rise of Sovereign t101s', 't101s rose in the Cradle of Aethelgard, bearing the One Ring. Yet even heroes are mortal — should t101s fall, a new legend will begin.');
+        this.addChronicle('empires', 'Founding of Aethelgard Empire', 'The Aethelgard Empire united 120 pioneers along the Sacred River, surrounded by rival tribes across 6 continents.');
 
         const firstNames = [
             'Ayla', 'Torak', 'Kael', 'Zuko', 'Korra', 'Toph', 'Sokka', 'Katara',
@@ -1270,6 +1296,7 @@ export class PrehistoricPlanetaryGame {
         };
         this.aiPlayers.push(newTribe);
         this.totalTribesFounded++;
+        this.addChronicle('empires', `Rise of ${tribeName}`, `${founder.name} departed and founded ${tribeName} at (${Math.round(founderX)}, ${Math.round(founderY)}) in Year ${this.worldYear}.`);
 
         // Build the new Tribe's Capital Town Center & Watchtower
         this.buildings.push({
@@ -1679,18 +1706,136 @@ export class PrehistoricPlanetaryGame {
 
         target.hp -= dmg;
         target.hitFlash = 0.18;
-        const kbForce = (u.isT101s ? 240 : 145) * (u.comboStep === 2 ? 1.4 : 1.0);
+        const kbForce = (u.hasOneRing || u.isT101s ? 240 : 145) * (u.comboStep === 2 ? 1.4 : 1.0);
         this.applyKnockback(target, u.x, u.y, kbForce);
 
         if (target.hp <= 0) {
+            u.kills = (u.kills || 0) + 1;
             const bounty = target.isBoss ? 180 : 16;
             u.walletGold = (u.walletGold || 0) + bounty;
             this.resources.gold += Math.round(bounty * 0.5);
             if (target.isBoss) {
                 this.housedRelics++;
                 this.showBanner('🏆', `${u.name} slew ${target.name} & claimed an Ancient Relic (+${bounty}🪙)!`);
+                this.addChronicle('heroes', `${u.name} Slew ${target.name}`, `At age ${Math.floor(u.age || 20)}, ${u.name} vanquished the mighty ${target.name} in single combat (Total kills: ${u.kills}).`);
+            } else if (u.kills === 5 || u.kills === 15) {
+                this.addChronicle('heroes', `Legend of ${u.name}`, `${u.name} (${u.tribeName || 'Aethelgard'}) has felled ${u.kills} foes in battle, earning renown across the continents.`);
             }
+            this.handleUnitDeath(target, `Slain by ${u.name}`, u, true);
             this.updateHUD();
+        }
+    }
+
+    addChronicle(bookKey, title, story) {
+        if (!this.chronicles[bookKey]) this.chronicles[bookKey] = [];
+        this.chronicles[bookKey].unshift({
+            year: this.worldYear || 1,
+            title,
+            story
+        });
+        if (this.chronicles[bookKey].length > 80) {
+            this.chronicles[bookKey].length = 80;
+        }
+    }
+
+    getRingBearer() {
+        if (!this.oneRing || this.oneRing.bearerId === null) return null;
+        return this.villagers.find(v => v.id === this.oneRing.bearerId)
+            || this.enemies.find(e => e.id === this.oneRing.bearerId)
+            || null;
+    }
+
+    equipOneRing(unit, reason = 'Claimed the One Ring', silent = false) {
+        if (!unit || unit.hp <= 0) return;
+        const prev = this.getRingBearer();
+        if (prev && prev.id !== unit.id) {
+            this.removeOneRing(`Passed to ${unit.name}`, true);
+        }
+        if (!unit._preRingStats) {
+            unit._preRingStats = {
+                attack: unit.attack || 20,
+                maxHp: unit.maxHp || 200,
+                lightningSpeed: !!unit.lightningSpeed,
+                skySoar: !!unit.skySoar
+            };
+        }
+        unit.hasOneRing = true;
+        unit.maxHp = Math.round(unit._preRingStats.maxHp * 2.2);
+        unit.hp = Math.min(unit.maxHp, unit.hp + Math.round(unit.maxHp * 0.4));
+        unit.attack = Math.round(unit._preRingStats.attack * 2.4);
+        unit.lightningSpeed = true;
+        unit.skySoar = true;
+        this.oneRing.bearerId = unit.id;
+        this.oneRing.dropped = false;
+        this.oneRing.x = unit.x;
+        this.oneRing.y = unit.y;
+        this.oneRing.history.unshift({ year: this.worldYear, text: `${unit.name}: ${reason}` });
+        this.addChronicle('ring', `${unit.name} Claims the One Ring`, `In Year ${this.worldYear}, ${unit.name} (${unit.tribeName || (unit.isBoss ? 'World Boss' : 'Rival Raider')}) placed the One Ring upon their hand (${reason}).`);
+        if (!silent) {
+            this.parryRings.push({ x: unit.x, y: unit.y, radius: 12, maxRadius: 110, color: '#facc15', life: 0.55 });
+            this.spawnFloatText(unit.x, unit.y - 36, `💍 ${unit.name} CLAIMS THE ONE RING!`, '#fde047');
+            this.showBanner('💍', `${unit.name} now wields the One Ring! (${reason})`);
+            this.sfx.play('ring');
+        }
+        this.updateInspector();
+    }
+
+    removeOneRing(reason = 'Removed from hand', silent = false) {
+        const bearer = this.getRingBearer();
+        if (!bearer) return;
+        if (bearer._preRingStats) {
+            bearer.maxHp = bearer._preRingStats.maxHp;
+            bearer.hp = Math.min(bearer.hp, bearer.maxHp);
+            bearer.attack = bearer._preRingStats.attack;
+            bearer.lightningSpeed = bearer._preRingStats.lightningSpeed;
+            bearer.skySoar = bearer._preRingStats.skySoar;
+        }
+        bearer.hasOneRing = false;
+        this.oneRing.bearerId = null;
+        this.oneRing.dropped = true;
+        this.oneRing.x = bearer.x;
+        this.oneRing.y = bearer.y;
+        this.addChronicle('ring', `Ring Removed from ${bearer.name}`, `In Year ${this.worldYear}, the One Ring left ${bearer.name}'s hand (${reason}) and fell at (${Math.round(bearer.x)}, ${Math.round(bearer.y)}).`);
+        if (!silent) {
+            this.spawnFloatText(bearer.x, bearer.y - 30, '💍 Ring Dropped!', '#facc15');
+            this.showBanner('💍', `The One Ring was removed from ${bearer.name} (${reason})!`);
+        }
+        this.updateInspector();
+    }
+
+    toggleRingOnSelected() {
+        const u = this.getSelectedUnit();
+        if (!u) {
+            this.showBanner('💍', 'Select a living unit first to equip or remove the One Ring!');
+            return;
+        }
+        if (u.hasOneRing) {
+            this.removeOneRing('Voluntarily removed by Sovereign command');
+        } else {
+            this.equipOneRing(u, 'Bestowed upon a chosen bearer');
+        }
+    }
+
+    handleUnitDeath(u, cause = 'Fell in battle', killer = null, isEnemy = false) {
+        if (!u || u._deadHandled) return;
+        u._deadHandled = true;
+        if (u.hasOneRing) {
+            this.removeOneRing(cause, true);
+            this.parryRings.push({ x: u.x, y: u.y, radius: 14, maxRadius: 130, color: '#facc15', life: 0.7 });
+            this.showBanner('💀', `${u.name} fell (${cause}) — the One Ring lies unclaimed on the ground!`);
+        }
+        const ageStr = `${Math.floor(u.age || 20)} years`;
+        if (u.isT101s) {
+            this.addChronicle('heroes', `Fall of Hero t101s`, `After ${ageStr}, Sovereign t101s died (${cause}) with ${u.kills || 0} victories. Thus the true story of the Ring-Wars begins!`);
+            this.showBanner('💀', `HERO FALLEN: t101s died (${cause})! The One Ring is up for grabs — a new legend begins!`);
+        } else if (u.hasOneRing || (u.kills || 0) >= 3 || u.isBoss) {
+            this.addChronicle('heroes', `Death of ${u.name}`, `${u.name} (${isEnemy ? 'Foe' : (u.tribeName || 'Aethelgard')}) perished at age ${ageStr} (${cause}) with ${u.kills || 0} kills.`);
+        }
+        if (!isEnemy && u.tribeId && u.tribeId !== 'player') {
+            const remaining = this.villagers.filter(v => !v._deadHandled && v.tribeId === u.tribeId).length;
+            if (remaining === 0) {
+                this.addChronicle('empires', `Fall of ${u.tribeName}`, `The last citizen of ${u.tribeName} perished in Year ${this.worldYear}, passing into history.`);
+            }
         }
     }
 
@@ -1788,6 +1933,7 @@ export class PrehistoricPlanetaryGame {
 
         dt = Math.min(0.08, dt * this.simSpeed);
         this.time += dt;
+        this.worldYear = Math.floor(1 + this.time / 12);
 
         // Advance 3-stage construction progress for any blueprints under construction
         for (let i = 0; i < this.buildings.length; i++) {
@@ -1858,7 +2004,8 @@ export class PrehistoricPlanetaryGame {
                     heir.fightingStyle = parent.fightingStyle;
                     heir.bender = parent.bender;
                     heir.walletGold = 25;
-                    heir.childScale = 0.68;
+                    heir.age = 0;
+                    heir.childScale = 0.55;
                     heir.mindDesire = `👶 Apprentice Heir of ${parent.name}`;
                     heir.thoughtBubble = '👶 Born to the Tribe!';
                     heir.thoughtTimer = 4.0;
@@ -1898,9 +2045,28 @@ export class PrehistoricPlanetaryGame {
             if (u.dodgeAnim > 0) u.dodgeAnim = Math.max(0, u.dodgeAnim - dt * 1.8);
             if (u.blockAnim > 0) u.blockAnim = Math.max(0, u.blockAnim - dt * 2.0);
 
-            // Personal Needs, Child Growth & Wage Tick
-            if (u.childScale && u.childScale < 1.0) {
-                u.childScale = Math.min(1.0, u.childScale + dt * 0.015);
+            // Personal Needs, Aging, Child Growth & Natural/Combat Death
+            u.age = (u.age ?? 20) + (dt / 12) * (u.hasOneRing ? 0.25 : 1.0);
+            if (u.age < 18) {
+                u.childScale = 0.55 + 0.45 * (u.age / 18);
+            } else {
+                u.childScale = 1.0;
+            }
+            if ((u.hp <= 0 && !u.invincible) || (!u.invincible && u.age >= (u.maxAge || 90))) {
+                const cause = u.hp <= 0 ? 'Fell in battle' : 'Passed away peacefully of old age';
+                this.handleUnitDeath(u, cause, null, false);
+                this.villagers.splice(i, 1);
+                continue;
+            }
+            if (this.oneRing.dropped && u.age >= 12) {
+                const ringDist = wrappedDist(u.x, u.y, this.oneRing.x, this.oneRing.y);
+                if (ringDist < 28) {
+                    this.equipOneRing(u, 'Recovered from the battlefield');
+                } else if (ringDist < 420 && !u.targetEntity && u.directOrderTimer <= 0) {
+                    u.targetX = this.oneRing.x;
+                    u.targetY = this.oneRing.y;
+                    u.mindDesire = '💍 Rushing to claim the One Ring!';
+                }
             }
             u.hunger = Math.min(100, (u.hunger || 0) + dt * 0.8);
             u.socialNeed = Math.min(100, (u.socialNeed || 0) + dt * 0.9);
@@ -1968,36 +2134,66 @@ export class PrehistoricPlanetaryGame {
         }
 
         // Update Hostile Raiders & Bosses
+        const ringBearer = this.getRingBearer();
+        const friendlyRingBearer = ringBearer && this.villagers.includes(ringBearer) ? ringBearer : null;
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
-            if (e.hp <= 0) {
+            e.age = (e.age ?? 24) + (dt * enemyTimeScale / 12) * (e.hasOneRing ? 0.25 : 1.0);
+            if (e.hp <= 0 || e.age >= (e.maxAge || 85)) {
+                this.handleUnitDeath(e, e.hp <= 0 ? 'Slain in combat' : 'Died of old age', null, true);
                 this.enemies.splice(i, 1);
                 continue;
             }
             if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
             if (e.attackCooldown > 0) e.attackCooldown = Math.max(0, e.attackCooldown - dt * enemyTimeScale);
+            if (this.oneRing.dropped && !e.controlledByRing) {
+                const rd = wrappedDist(e.x, e.y, this.oneRing.x, this.oneRing.y);
+                if (rd < 28) {
+                    this.equipOneRing(e, 'Seized by a hostile warrior!');
+                } else if (rd < 520) {
+                    const dx = wrapDX(e.x, this.oneRing.x);
+                    const dy = this.oneRing.y - e.y;
+                    const spd = (e.speed || 90) * enemyTimeScale;
+                    e.facing = dx >= 0 ? 1 : -1;
+                    e.x = wrapX(e.x + (dx / rd) * spd * dt);
+                    e.y = Math.max(1320, Math.min(WORLD_H - 160, e.y + (dy / rd) * spd * dt));
+                    this.resolveUnitPhysics(e, dt * enemyTimeScale, true);
+                    continue;
+                }
+            }
             if (!e.controlledByRing && this.villagers.length > 0) {
                 let nearest = null;
                 let bestD = 360;
-                for (let j = 0; j < this.villagers.length; j++) {
-                    const v = this.villagers[j];
-                    const d = wrappedDist(e.x, e.y, v.x, v.y);
-                    if (d < bestD) { bestD = d; nearest = v; }
+                if (friendlyRingBearer && wrappedDist(e.x, e.y, friendlyRingBearer.x, friendlyRingBearer.y) < 650) {
+                    nearest = friendlyRingBearer;
+                    bestD = wrappedDist(e.x, e.y, friendlyRingBearer.x, friendlyRingBearer.y);
+                } else {
+                    for (let j = 0; j < this.villagers.length; j++) {
+                        const v = this.villagers[j];
+                        const d = wrappedDist(e.x, e.y, v.x, v.y);
+                        if (d < bestD) { bestD = d; nearest = v; }
+                    }
                 }
                 if (nearest) {
                     const dx = wrapDX(e.x, nearest.x);
                     const dy = nearest.y - e.y;
                     e.facing = dx >= 0 ? 1 : -1;
                     if (bestD > 34) {
-                        const spd = (e.speed || 85) * enemyTimeScale;
+                        const spd = ((e.hasOneRing ? 145 : (e.speed || 85))) * enemyTimeScale;
                         e.x = wrapX(e.x + (dx / bestD) * spd * dt);
                         e.y = Math.max(1320, Math.min(WORLD_H - 160, e.y + (dy / bestD) * spd * dt));
                     } else if ((e.attackCooldown || 0) <= 0) {
-                        e.attackCooldown = 1.1;
+                        e.attackCooldown = e.hasOneRing ? 0.65 : 1.1;
                         const edmg = e.attack || 12;
-                        nearest.hp -= edmg;
-                        nearest.hitFlash = 0.18;
-                        this.applyKnockback(nearest, e.x, e.y, e.isBoss ? 220 : 120);
+                        if (!nearest.invincible) {
+                            nearest.hp -= edmg;
+                            nearest.hitFlash = 0.18;
+                            if (nearest.hp <= 0) {
+                                e.kills = (e.kills || 0) + 1;
+                                this.handleUnitDeath(nearest, `Slain by ${e.name}`, e, false);
+                            }
+                        }
+                        this.applyKnockback(nearest, e.x, e.y, e.isBoss || e.hasOneRing ? 220 : 120);
                     }
                 }
             }

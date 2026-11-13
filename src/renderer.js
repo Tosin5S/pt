@@ -516,7 +516,7 @@ export const rendererMethods = {
         ctx.save();
         ctx.translate(sx, sy);
         ctx.scale(1, invTilt);
-        const scale = u.isBoss ? 1.85 : (u.isT101s ? 1.24 : 1.0);
+        const scale = (u.isBoss ? 1.85 : (u.hasOneRing ? 1.26 : (u.isT101s ? 1.20 : 1.0))) * (u.childScale || 1.0);
         ctx.scale(scale, scale);
     
         // Height-responsive ground shadow
@@ -748,13 +748,20 @@ export const rendererMethods = {
         ctx.lineTo(arm.endX, arm.endY);
         ctx.stroke();
     
-        if (u.isT101s) {
-            ctx.strokeStyle = '#fef08a';
+        if (u.hasOneRing) {
+            ctx.strokeStyle = '#fde047';
+            ctx.lineWidth = 2.0;
+            ctx.beginPath();
+            ctx.arc(arm.endX, arm.endY, 4.0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = isEnemy ? '#f43f5e' : '#facc15';
             ctx.lineWidth = 1.6;
             ctx.beginPath();
-            ctx.arc(arm.endX, arm.endY, 3.2, 0, Math.PI * 2);
+            ctx.arc(0, -18, 20 + Math.sin(this.time * 5) * 2, 0, Math.PI * 2);
             ctx.stroke();
-    
+        }
+        if (u.isT101s) {
             ctx.strokeStyle = '#f43f5e';
             ctx.lineWidth = 2.2;
             ctx.beginPath();
@@ -816,27 +823,27 @@ export const rendererMethods = {
         }
     
         if (this.cam.zoom <= 0.55) {
-            if (u.isT101s || u.isBoss || u.controlledByRing) {
+            if (u.hasOneRing || u.isT101s || u.isBoss || u.controlledByRing) {
                 const badgeScale = Math.min(2.6, 0.85 / this.cam.zoom);
                 ctx.save();
                 ctx.translate(0, -42);
                 ctx.scale(badgeScale, badgeScale);
                 ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
-                ctx.strokeStyle = u.isT101s ? '#facc15' : (u.controlledByRing ? '#c084fc' : '#f43f5e');
+                ctx.strokeStyle = u.hasOneRing ? '#facc15' : (u.controlledByRing ? '#c084fc' : '#f43f5e');
                 ctx.lineWidth = 1.5;
-                ctx.fillRect(-38, -12, 76, 15);
-                ctx.strokeRect(-38, -12, 76, 15);
+                ctx.fillRect(-42, -12, 84, 15);
+                ctx.strokeRect(-42, -12, 84, 15);
                 ctx.fillStyle = '#fef08a';
                 ctx.font = 'bold 8.5px Inter';
                 ctx.textAlign = 'center';
-                ctx.fillText(u.isT101s ? '💍 HERO t101s' : u.name.slice(0, 12), 0, -2);
+                ctx.fillText(u.hasOneRing ? `💍 ${u.name.slice(0, 11)}` : u.name.slice(0, 12), 0, -2);
                 ctx.restore();
             }
             ctx.restore();
             return;
         }
     
-        const showDetailTag = this.cam.zoom >= 1.35 || this.selectedIds.includes(u.id) || u.isT101s || u.isBoss || u.controlledByRing;
+        const showDetailTag = this.cam.zoom >= 1.35 || this.selectedIds.includes(u.id) || u.hasOneRing || u.isT101s || u.isBoss || u.controlledByRing;
         if (!isEnemy && u.thoughtTimer > 0 && u.thoughtBubble && (this.cam.zoom >= 0.88 || u.isT101s || this.selectedIds.includes(u.id))) {
             ctx.fillStyle = 'rgba(15, 23, 42, 0.86)';
             ctx.strokeStyle = '#fbbf24';
@@ -850,12 +857,13 @@ export const rendererMethods = {
         }
     
         if (showDetailTag) {
-            ctx.fillStyle = u.isT101s ? '#fde047' : (u.controlledByRing ? '#e879f9' : (isEnemy ? '#fca5a5' : '#a7f3d0'));
+            ctx.fillStyle = u.hasOneRing ? '#fde047' : (u.controlledByRing ? '#e879f9' : (isEnemy ? '#fca5a5' : '#a7f3d0'));
             ctx.font = 'bold 8px Inter';
             ctx.textAlign = 'center';
+            const ageBadge = ` (${Math.floor(u.age ?? 20)}y)`;
             const walletBadge = !isEnemy ? ` • ${u.emotionIcon || '😄'} • 👛${Math.round(u.walletGold || 0)}🪙` : '';
             const tribeTag = (!isEnemy && u.tribeId && u.tribeId !== 'player') ? ` [${u.tribeName.split(' ')[0]}]` : '';
-            ctx.fillText(`${u.isT101s ? '💍 ' : (u.controlledByRing ? '👑 PUPPET ' : '')}${u.name}${tribeTag}${walletBadge}`, 0, -39);
+            ctx.fillText(`${u.hasOneRing ? '💍 ' : (u.controlledByRing ? '👑 PUPPET ' : '')}${u.name}${ageBadge}${tribeTag}${walletBadge}`, 0, -39);
         }
     
         ctx.restore();
@@ -933,6 +941,27 @@ export const rendererMethods = {
             ctx.stroke();
             ctx.restore();
         });
+
+        if (this.oneRing && this.oneRing.dropped) {
+            const rx = wrapDX(this.cam.x, this.oneRing.x);
+            const ry = this.oneRing.y - this.cam.y;
+            ctx.save();
+            ctx.translate(rx, ry);
+            ctx.fillStyle = 'rgba(250, 204, 21, 0.22)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 18 + Math.sin(this.time * 6) * 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, -4 + Math.sin(this.time * 4) * 2, 7, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = '#fef08a';
+            ctx.font = 'bold 9px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText('💍 THE ONE RING', 0, -18);
+            ctx.restore();
+        }
     
         this.projectiles.forEach(p => {
             const px = wrapDX(this.cam.x, p.x);

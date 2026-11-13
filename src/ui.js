@@ -918,9 +918,59 @@ export const uiMethods = {
         setTxt('bossCountLabel', this.worldBosses.filter(b => b.hp > 0).length);
         setTxt('emergentTribeCountLabel', this.aiPlayers.length);
         setTxt('allTribesBtnCount', this.aiPlayers.length);
+        const totalEntries = (this.chronicles?.ring?.length || 0)
+            + (this.chronicles?.heroes?.length || 0)
+            + (this.chronicles?.empires?.length || 0);
+        setTxt('chronicleCountLabel', totalEntries);
     
         const nextAge = AGE_EPOCHS[this.ageLevel + 1];
         setTxt('advanceAgeBtnText', nextAge ? `Age ${this.ageLevel + 2} (${nextAge.costGold}🪙)` : 'MAX AGE IV');
+    },
+
+    toggleChroniclePanel() {
+        const p = document.getElementById('chroniclePanel');
+        if (!p) return;
+        p.classList.toggle('hidden');
+        if (!p.classList.contains('hidden')) {
+            this.renderChronicleBook();
+        }
+    },
+
+    selectChronicleBook(bookKey) {
+        this.activeChronicleBook = bookKey || 'ring';
+        this.renderChronicleBook();
+    },
+
+    renderChronicleBook() {
+        const container = document.getElementById('chronicleEntries');
+        if (!container || !this.chronicles) return;
+        const key = this.activeChronicleBook || 'ring';
+        const entries = this.chronicles[key] || [];
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="text-stone-400 italic p-2">No chapters inscribed yet in this book...</div>';
+            return;
+        }
+        container.innerHTML = entries.map(e => `
+            <div class="bg-stone-900/85 border border-stone-700/80 rounded-lg p-2">
+                <div class="flex items-center justify-between text-amber-300 font-bold mb-0.5">
+                    <span>📜 ${e.title}</span>
+                    <span class="text-[10px] text-stone-400">Year ${e.year}</span>
+                </div>
+                <div class="text-stone-200 leading-snug">${e.story}</div>
+            </div>
+        `).join('');
+    },
+
+    inscribeCustomChronicle() {
+        const input = document.getElementById('chronicleCustomInput');
+        if (!input) return;
+        const text = input.value.trim();
+        if (!text) return;
+        const key = this.activeChronicleBook || 'ring';
+        this.addChronicle(key, 'Player Chronicle', text);
+        input.value = '';
+        this.renderChronicleBook();
+        this.updateHUD();
     },
 
     updateInspector() {
@@ -931,13 +981,17 @@ export const uiMethods = {
             const el = document.getElementById(id);
             if (el) el.textContent = val;
         };
-        setTxt('selIcon', u.isT101s ? '💍' : (u.emotionIcon || style.icon));
-        setTxt('selName', `${u.name} (${u.tribeName || 'Aethelgard'} • ${u.emotionLabel || 'Joyful'})`);
+        const ageVal = Math.floor(u.age ?? 20);
+        const stage = ageVal < 13 ? 'Child' : (ageVal < 20 ? 'Youth' : (ageVal < 58 ? 'Adult' : 'Elder'));
+        setTxt('selIcon', u.hasOneRing ? '💍' : (u.emotionIcon || style.icon));
+        setTxt('selName', `${u.name} (${ageVal}y ${stage} • ${u.tribeName || 'Aethelgard'})`);
         setTxt('selWalletText', `👛 ${Math.round(u.walletGold || 0)}🪙`);
         setTxt('selHpText', u.invincible ? `🛡️ ∞/${u.maxHp} HP` : `❤️ ${Math.ceil(u.hp)}/${u.maxHp} HP`);
         const mountNames = { mammoth: ' • 🦣 Mammoth', sabre: ' • 🐅 Sabre-Cat', drake: ' • 🐉 Sky-Drake' };
         const mountTag = u.mountType ? (mountNames[u.mountType] || '') : '';
-        setTxt('selRole', `Mind: ${u.mindDesire} • Joy ${Math.round(u.joy || 80)}% • Loyalty ${Math.round(u.loyalty || 85)}%${mountTag}`);
+        const ringTag = u.hasOneRing ? ' • 💍 RING-BEARER' : '';
+        setTxt('selRole', `Mind: ${u.mindDesire} • ⚔️ ${u.kills || 0} Kills • Joy ${Math.round(u.joy || 80)}%${mountTag}${ringTag}`);
+        setTxt('ringToggleBtnText', u.hasOneRing ? 'Remove Ring' : 'Bestow Ring');
         setTxt('puppetCountText', this.enemies.filter(e => e.controlledByRing).length);
     }
 };
