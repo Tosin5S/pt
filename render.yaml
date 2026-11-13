@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: prehistoric-tribes-rts
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: .
+
