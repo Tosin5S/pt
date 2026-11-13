@@ -562,6 +562,18 @@ export const rendererMethods = {
             ctx.ellipse(0, 3, 15, 6.5, 0, 0, Math.PI * 2);
             ctx.stroke();
         }
+
+        // Water Physics Visuals: Swimming Ripples, Water-Bender Wave Surf, or Drowning Splash
+        if (u.inWater) {
+            ctx.save();
+            ctx.strokeStyle = u.isDrowning ? '#f87171' : (u.waterBendingSurf ? '#38bdf8' : '#bae6fd');
+            ctx.lineWidth = u.waterBendingSurf ? 2.4 : 1.6;
+            const rPulse = 12 + Math.sin(this.time * (u.isDrowning ? 14 : 6) + u.id) * 3;
+            ctx.beginPath();
+            ctx.ellipse(0, 2, rPulse, rPulse * 0.42, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
     
         // Sprint / dodge landing dust puffs
         if (this.cam.zoom >= 0.7 && (u.dodgeAnim > 0 || Math.abs(Math.sin(u.walkPhase || 0)) > 0.94)) {

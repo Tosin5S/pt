@@ -990,7 +990,8 @@ export const uiMethods = {
         const mountNames = { mammoth: ' • 🦣 Mammoth', sabre: ' • 🐅 Sabre-Cat', drake: ' • 🐉 Sky-Drake' };
         const mountTag = u.mountType ? (mountNames[u.mountType] || '') : '';
         const ringTag = u.hasOneRing ? ' • 💍 RING-BEARER' : '';
-        setTxt('selRole', `Mind: ${u.mindDesire} • ⚔️ ${u.kills || 0} Kills • Joy ${Math.round(u.joy || 80)}%${mountTag}${ringTag}`);
+        const swimTag = (u.bender === 'water' || u.bender === 'avatar') ? ' • 🌊 Water-Surfer' : (u.canSwim ? ' • 🏊 Swimmer' : ' • 🚫 Non-Swimmer');
+        setTxt('selRole', `Mind: ${u.mindDesire} • ⚔️ ${u.kills || 0} Kills • 😨 Fear ${Math.round(u.fear || 0)}%${swimTag}${mountTag}${ringTag}`);
         setTxt('ringToggleBtnText', u.hasOneRing ? 'Remove Ring' : 'Bestow Ring');
         setTxt('puppetCountText', this.enemies.filter(e => e.controlledByRing).length);
     }

@@ -167,12 +167,23 @@ export class PrehistoricPlanetaryGame {
         return CONTINENTS[0];
     }
 
-    getTerrainElevation(x, y) {
-        if (y < 1680) return 32;
+    isPointOnBridge(x, y) {
         for (let i = 0; i < this.stoneBridges.length; i++) {
             const br = this.stoneBridges[i];
-            if (Math.abs(wrapDX(br.x, x)) < 50 && Math.abs(y - RIVER_Y) < 62) return 10;
+            if (Math.abs(wrapDX(br.x, x)) < 54 && Math.abs(y - RIVER_Y) < 62) return true;
         }
+        return false;
+    }
+
+    isInWater(x, y) {
+        if (this.isPointOnBridge(x, y)) return false;
+        if (Math.abs(y - RIVER_Y) < 58) return true;
+        return getEarthTerrainAt(x, y).isOcean;
+    }
+
+    getTerrainElevation(x, y) {
+        if (y < 1680) return 32;
+        if (this.isPointOnBridge(x, y)) return 10;
         return getEarthTerrainAt(x, y).elevation || 0;
     }
 
@@ -227,6 +238,7 @@ export class PrehistoricPlanetaryGame {
             maxAge: isT101s ? 115 : (72 + Math.floor(Math.random() * 24)),
             kills: 0,
             hasOneRing: false,
+            canSwim: isT101s ? true : (Math.random() < 0.55),
             childScale: 1.0,
             profession: prof.title,
             wage: prof.wage,
@@ -281,6 +293,7 @@ export class PrehistoricPlanetaryGame {
             maxAge: isBoss ? 140 : (70 + Math.floor(Math.random() * 20)),
             kills: 0,
             hasOneRing: false,
+            canSwim: isBoss ? true : (Math.random() < 0.45),
             childScale: 1.0,
             hp: isBoss ? 1650 : 190,
             maxHp: isBoss ? 1650 : 190,
@@ -1881,6 +1894,58 @@ export class PrehistoricPlanetaryGame {
         entity.ky = (entity.ky || 0) + (dy / d) * scale;
     }
 
+    applyTerrainPhysics(u, dt, isEnemy = false) {
+        const inWater = !u.skySoar && this.isInWater(u.x, u.y);
+        u.inWater = inWater;
+        u.waterBendingSurf = false;
+        u.isSwimming = false;
+        u.isDrowning = false;
+
+        if (inWater) {
+            if (u.bender === 'water' || u.bender === 'avatar') {
+                u.waterBendingSurf = true;
+                return 1.15;
+            }
+            if (u.canSwim) {
+                u.isSwimming = true;
+                return 0.56;
+            }
+            u.isDrowning = true;
+            u.fear = Math.min(100, (u.fear || 0) + 45 * dt);
+            if (!isEnemy && u.thoughtTimer <= 0) {
+                u.thoughtBubble = '🌊 HELP! DROWNING!';
+                u.thoughtTimer = 1.6;
+            }
+            if (!u.invincible) {
+                u.hp -= 28 * dt;
+                u.hitFlash = 0.1;
+                if (u.hp <= 0) {
+                    this.handleUnitDeath(u, 'Drowned in deep water', null, isEnemy);
+                }
+            }
+            return 0.28;
+        }
+
+        u.fear = Math.max(0, (u.fear || 0) - 6 * dt);
+        const terr = getEarthTerrainAt(u.x, u.y);
+        if (terr.isMountain) return 0.78;
+        if (terr.type === 'iceTundra') return 1.08;
+        return 1.0;
+    }
+
+    canSafelyEnter(u, nextX, nextY) {
+        if (u.skySoar || u.canSwim || u.bender === 'water' || u.bender === 'avatar') return true;
+        if (this.isInWater(u.x, u.y)) return true; // already in water, allow moving back out
+        if (!this.isInWater(nextX, nextY)) return true;
+        // Scared to die: refuse to step into deep water unless directly ordered or in extreme despair
+        const desperate = (u.joy ?? 70) < 18 && (u.anger ?? 0) > 70;
+        if ((u.directOrderTimer || 0) > 0 || desperate) return true;
+        u.fear = Math.min(100, (u.fear || 0) + 18);
+        u.thoughtBubble = '😱 Too deep! I cannot swim!';
+        u.thoughtTimer = 2.4;
+        return false;
+    }
+
     resolveUnitPhysics(u, dt, isEnemy = false) {
         if (u.kx || u.ky) {
             u.x = wrapX(u.x + (u.kx || 0) * dt);
@@ -2128,7 +2193,8 @@ export class PrehistoricPlanetaryGame {
                 }
             }
 
-            // Movement & Speedster Afterimages
+            // Movement & Speedster Afterimages + Terrain/Water Physics
+            const terrainSpeedMult = this.applyTerrainPhysics(u, dt, false);
             if (u.targetX !== null && u.targetY !== null) {
                 const dx = wrapDX(u.x, u.targetX);
                 const dy = u.targetY - u.y;
@@ -2136,27 +2202,34 @@ export class PrehistoricPlanetaryGame {
                 if (dist > 8) {
                     const baseSpd = FIGHTING_STYLES[u.fightingStyle]?.speed || 110;
                     const mountMult = u.mountType ? 1.32 : 1.0;
-                    const spd = baseSpd * (u.lightningSpeed ? 3.2 : 1.0) * (u.skySoar ? 1.25 : 1.0) * mountMult;
+                    const spd = baseSpd * (u.lightningSpeed ? 3.2 : 1.0) * (u.skySoar ? 1.25 : 1.0) * mountMult * terrainSpeedMult;
                     u.vx = (dx / dist) * spd;
                     u.vy = (dy / dist) * spd;
-                    u.x = wrapX(u.x + u.vx * dt);
-                    u.y = Math.max(1320, Math.min(WORLD_H - 160, u.y + u.vy * dt));
-                    u.facing = u.vx >= 0 ? 1 : -1;
-                    u.walkPhase += dt * (u.lightningSpeed ? 22 : 9);
-                    if (u.lightningSpeed && Math.random() < 0.45) {
-                        this.afterimages.push({
-                            x: u.x,
-                            y: u.y,
-                            color: u.hasOneRing ? '#f43f5e' : '#38bdf8',
-                            alpha: 0.55,
-                            life: 0.25
-                        });
-                    }
+                    const nextX = wrapX(u.x + u.vx * dt);
+                    const nextY = Math.max(1320, Math.min(WORLD_H - 160, u.y + u.vy * dt));
+                    if (this.canSafelyEnter(u, nextX, nextY)) {
+                        u.x = nextX;
+                        u.y = nextY;
+                        u.facing = u.vx >= 0 ? 1 : -1;
+                        u.walkPhase += dt * (u.lightningSpeed ? 22 : 9);
+                        if (u.lightningSpeed && Math.random() < 0.45) {
+                            this.afterimages.push({
+                                x: u.x,
+                                y: u.y,
+                                color: u.hasOneRing ? '#f43f5e' : '#38bdf8',
+                                alpha: 0.55,
+                                life: 0.25
+                            });
+                        }
                     } else {
                         u.targetX = null;
                         u.targetY = null;
                     }
+                } else {
+                    u.targetX = null;
+                    u.targetY = null;
                 }
+            }
             this.resolveUnitPhysics(u, dt, false);
         }
 
@@ -2173,6 +2246,7 @@ export class PrehistoricPlanetaryGame {
             }
             if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
             if (e.attackCooldown > 0) e.attackCooldown = Math.max(0, e.attackCooldown - dt * enemyTimeScale);
+            const eTerrMult = this.applyTerrainPhysics(e, dt * enemyTimeScale, true);
             if (this.oneRing.dropped && !e.controlledByRing) {
                 const rd = wrappedDist(e.x, e.y, this.oneRing.x, this.oneRing.y);
                 if (rd < 28) {
@@ -2180,10 +2254,14 @@ export class PrehistoricPlanetaryGame {
                 } else if (rd < 520) {
                     const dx = wrapDX(e.x, this.oneRing.x);
                     const dy = this.oneRing.y - e.y;
-                    const spd = (e.speed || 90) * enemyTimeScale;
+                    const spd = (e.speed || 90) * enemyTimeScale * eTerrMult;
                     e.facing = dx >= 0 ? 1 : -1;
-                    e.x = wrapX(e.x + (dx / rd) * spd * dt);
-                    e.y = Math.max(1320, Math.min(WORLD_H - 160, e.y + (dy / rd) * spd * dt));
+                    const nextX = wrapX(e.x + (dx / rd) * spd * dt);
+                    const nextY = Math.max(1320, Math.min(WORLD_H - 160, e.y + (dy / rd) * spd * dt));
+                    if (this.canSafelyEnter(e, nextX, nextY)) {
+                        e.x = nextX;
+                        e.y = nextY;
+                    }
                     this.resolveUnitPhysics(e, dt * enemyTimeScale, true);
                     continue;
                 }
