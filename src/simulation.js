@@ -486,7 +486,11 @@ export class PrehistoricPlanetaryGame {
                 y: capY,
                 ageLevel: 1,
                 gold: 260,
-                tributeTimer: 12
+                tributeTimer: 12,
+                devTimer: 9 + ai.cont * 2,
+                crusadeTimer: 16 + ai.cont * 3,
+                warGoal: ai.stance === 'hostile' ? 'Seize the One Ring' : 'Develop Realm',
+                fallen: false
             });
             this.buildings.push({
                 id: this.nextId++,
@@ -1808,6 +1812,16 @@ export class PrehistoricPlanetaryGame {
         this.oneRing.y = unit.y;
         this.oneRing.history.unshift({ year: this.worldYear, text: `${unit.name}: ${reason}` });
         this.addChronicle('ring', `${unit.name} Claims the One Ring`, `In Year ${this.worldYear}, ${unit.name} (${unit.tribeName || (unit.isBoss ? 'World Boss' : 'Rival Raider')}) placed the One Ring upon their hand (${reason}).`);
+        if (unit.aiOwnerId) {
+            const ai = this.aiPlayers.find(a => a.id === unit.aiOwnerId && !a.fallen);
+            if (ai) {
+                ai.gold += 300;
+                if (ai.ageLevel < 3) ai.ageLevel++;
+                ai.warGoal = 'Rule the World with the One Ring';
+                this.addChronicle('empires', `${ai.tribe} Seizes the One Ring!`, `${ai.name} of ${ai.tribe} claimed the One Ring through ${unit.name}, advancing to ${AGE_EPOCHS[ai.ageLevel].title} to rule the world!`);
+                this.showBanner('👑', `${ai.tribe} seized the One Ring and marches for World Dominion!`);
+            }
+        }
         if (!silent) {
             this.parryRings.push({ x: unit.x, y: unit.y, radius: 12, maxRadius: 110, color: '#facc15', life: 0.55 });
             this.spawnFloatText(unit.x, unit.y - 36, `💍 ${unit.name} CLAIMS THE ONE RING!`, '#fde047');
@@ -2269,7 +2283,8 @@ export class PrehistoricPlanetaryGame {
             if (!e.controlledByRing && this.villagers.length > 0) {
                 let nearest = null;
                 let bestD = 360;
-                if (friendlyRingBearer && wrappedDist(e.x, e.y, friendlyRingBearer.x, friendlyRingBearer.y) < 650) {
+                const ringSeekRange = e.ringCrusader ? 999999 : 650;
+                if (friendlyRingBearer && wrappedDist(e.x, e.y, friendlyRingBearer.x, friendlyRingBearer.y) < ringSeekRange) {
                     nearest = friendlyRingBearer;
                     bestD = wrappedDist(e.x, e.y, friendlyRingBearer.x, friendlyRingBearer.y);
                 } else {
@@ -2277,6 +2292,16 @@ export class PrehistoricPlanetaryGame {
                         const v = this.villagers[j];
                         const d = wrappedDist(e.x, e.y, v.x, v.y);
                         if (d < bestD) { bestD = d; nearest = v; }
+                    }
+                    // Rival Kingdoms can also wage war on each other!
+                    if (!nearest && e.aiOwnerId) {
+                        for (let j = 0; j < this.enemies.length; j++) {
+                            const other = this.enemies[j];
+                            if (other !== e && other.aiOwnerId && other.aiOwnerId !== e.aiOwnerId && !other.controlledByRing) {
+                                const d = wrappedDist(e.x, e.y, other.x, other.y);
+                                if (d < bestD) { bestD = d; nearest = other; }
+                            }
+                        }
                     }
                 }
                 if (nearest) {
@@ -2345,17 +2370,88 @@ export class PrehistoricPlanetaryGame {
             }
         }
 
-        // AI Vassal Tribute & Periodic Raider Respawn
+        // AI Kingdoms: Autonomous Development, Age Advancement, Ring-Crusades & Rival Wars
         for (let i = 0; i < this.aiPlayers.length; i++) {
             const ai = this.aiPlayers[i];
+            if (ai.fallen) continue;
+
+            // Check if Kingdom's Capital still stands
+            const cap = this.buildings.find(b => b.owner === ai.id && b.type === 'town_center');
+            if (!cap || cap.hp <= 0) {
+                ai.fallen = true;
+                ai.stance = 'fallen';
+                ai.warGoal = 'Fallen Empire';
+                this.resources.gold += 250;
+                this.addChronicle('empires', `Fall of ${ai.tribe}`, `${ai.tribe} led by ${ai.name} collapsed in Year ${this.worldYear} when their capital fell!`);
+                this.showBanner('🏚️', `KINGDOM FALLEN: ${ai.tribe} has collapsed (+250🪙 plunder)!`);
+                this.updateHUD();
+                continue;
+            }
+
+            // Kingdom Economy, Construction & Age Progression
+            ai.devTimer = (ai.devTimer ?? 10) - dt;
+            if (ai.devTimer <= 0) {
+                ai.devTimer = 11 + Math.random() * 4;
+                ai.gold = (ai.gold || 0) + 40 + (ai.ageLevel || 1) * 20;
+
+                // Construct new Kingdom buildings up to 10 per tribe
+                const aiBuildings = this.buildings.filter(b => b.owner === ai.id);
+                if (ai.gold >= 130 && aiBuildings.length < 10) {
+                    const buildPool = ['hut', 'barracks', 'tower', 'forge', 'shrine'];
+                    const bType = buildPool[aiBuildings.length % buildPool.length];
+                    const spec = BUILDING_SPECS[bType];
+                    if (spec) {
+                        ai.gold -= 110;
+                        const ang = aiBuildings.length * 1.15;
+                        const dist = 110 + (aiBuildings.length % 3) * 65;
+                        this.buildings.push({
+                            id: this.nextId++,
+                            type: bType,
+                            name: `${ai.tribe} ${spec.name}`,
+                            icon: spec.icon,
+                            x: wrapX(ai.x + Math.cos(ang) * dist),
+                            y: Math.max(1740, Math.min(2850, ai.y + Math.sin(ang) * dist * 0.55)),
+                            hp: spec.hp,
+                            maxHp: spec.hp,
+                            radius: spec.radius,
+                            owner: ai.id,
+                            customColor: ai.color,
+                            shootTimer: 0
+                        });
+                    }
+                }
+
+                // Advance Kingdom Age (Stone -> Tool -> Bronze -> Imperial)
+                const nextAgeCost = 240 * ((ai.ageLevel || 1) + 1);
+                if ((ai.ageLevel || 1) < 3 && ai.gold >= nextAgeCost) {
+                    ai.gold -= nextAgeCost;
+                    ai.ageLevel++;
+                    this.addChronicle('empires', `${ai.tribe} Enters ${AGE_EPOCHS[ai.ageLevel].title}`, `${ai.name}'s ${ai.tribe} grew in might and reached ${AGE_EPOCHS[ai.ageLevel].title} in Year ${this.worldYear}.`);
+                    this.showBanner(ai.icon || '👑', `${ai.tribe} advanced to ${AGE_EPOCHS[ai.ageLevel].title}!`);
+                }
+
+                // The One Ring tempts ambitious neutral Kingdoms into declaring Ring-Wars!
+                if (ai.stance === 'neutral' && ai.gold >= 340 && (this.oneRing.dropped || Math.random() < 0.25)) {
+                    ai.stance = 'hostile';
+                    ai.warGoal = 'Seize the One Ring';
+                    this.addChronicle('empires', `${ai.tribe} Declares a Ring-War!`, `Tempted by the One Ring, ${ai.name} of ${ai.tribe} declared war to seize the Ring and rule the world!`);
+                    this.showBanner('⚔️', `${ai.tribe} has declared a Ring-War for World Dominion!`);
+                }
+            }
+
+            // Ring-Crusade Warbands & Tributary Income
             ai.tributeTimer = (ai.tributeTimer || 12) - dt;
             if (ai.tributeTimer <= 0) {
                 ai.tributeTimer = 14;
                 if (ai.stance === 'vassal') {
-                    this.resources.gold += 25;
+                    this.resources.gold += 30;
                     this.updateHUD();
-                } else if (ai.stance === 'hostile' && this.enemies.length < 36) {
-                    this.enemies.push(this.createEnemyRaider(ai.x + (Math.random() - 0.5) * 90, ai.y + 60, `${ai.tribe} Raider`, false, ai.id));
+                } else if (ai.stance === 'hostile' && this.enemies.length < 44) {
+                    const raider = this.createEnemyRaider(ai.x + (Math.random() - 0.5) * 90, ai.y + 60, `${ai.tribe} Raider`, false, ai.id);
+                    raider.attack += (ai.ageLevel || 1) * 5;
+                    raider.maxHp += (ai.ageLevel || 1) * 45;
+                    raider.hp = raider.maxHp;
+                    this.enemies.push(raider);
                 }
                 // Rival tribe warriors can also defect & join your tribe if your tax rate is welcoming!
                 if (this.taxRate <= 0.20 && this.villagers.length < this.maxBrowserAgents && Math.random() < 0.28) {
@@ -2365,11 +2461,37 @@ export class PrehistoricPlanetaryGame {
                     defector.targetX = 820 + (Math.random() - 0.5) * 140;
                     defector.targetY = 2320 + (Math.random() - 0.5) * 90;
                     defector.mindDesire = `🤝 Defected from ${ai.tribe} to join Aethelgard!`;
-                    defector.thoughtBubble = '🤝 Joining t101s Empire!';
+                    defector.thoughtBubble = '🤝 Joining Aethelgard!';
                     defector.thoughtTimer = 4.5;
                     this.villagers.push(defector);
                     this.totalTribeMigrations++;
                     this.updateHUD();
+                }
+            }
+
+            // Launch Ring-Crusade Expedition toward the One Ring!
+            ai.crusadeTimer = (ai.crusadeTimer ?? 20) - dt;
+            if (ai.crusadeTimer <= 0) {
+                ai.crusadeTimer = 24 + Math.random() * 8;
+                if (ai.stance === 'hostile' && this.enemies.length < 46) {
+                    const targetRing = this.getRingBearer() || (this.oneRing.dropped ? this.oneRing : null);
+                    if (targetRing) {
+                        for (let k = 0; k < 2; k++) {
+                            const crusader = this.createEnemyRaider(
+                                ai.x + (k - 0.5) * 45,
+                                ai.y + 70,
+                                `${ai.tribe.split(' ')[0]} Ring-Crusader`,
+                                false,
+                                ai.id
+                            );
+                            crusader.ringCrusader = true;
+                            crusader.speed = 112;
+                            crusader.attack += (ai.ageLevel || 1) * 7;
+                            crusader.maxHp += (ai.ageLevel || 1) * 70;
+                            crusader.hp = crusader.maxHp;
+                            this.enemies.push(crusader);
+                        }
+                    }
                 }
             }
         }
