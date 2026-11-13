@@ -136,3 +136,91 @@ export class SpatialGrid {
         return results;
     }
 }
+
+export const EARTH_SURFACE_STATS = {
+    oceansShare: 0.71,
+    landShare: 0.29,
+    landBreakdown: {
+        forest:    { label: 'Forests & Woodlands',    landShare: 0.31, earthShare: 0.090, color: '#1e5631', accent: '#2e7d32', icon: '🌲' },
+        grassland: { label: 'Grasslands & Savannas',  landShare: 0.26, earthShare: 0.075, color: '#6b8e23', accent: '#9acd32', icon: '🌾' },
+        desert:    { label: 'Deserts & Barren Land',  landShare: 0.19, earthShare: 0.055, color: '#c2a26b', accent: '#d9b982', icon: '🏜️' },
+        agriUrban: { label: 'Agricultural & Urban',   landShare: 0.14, earthShare: 0.041, color: '#84a942', accent: '#f59e0b', icon: '🏘️' },
+        iceTundra: { label: 'Ice, Glaciers & Tundra', landShare: 0.10, earthShare: 0.029, color: '#cbd5e1', accent: '#f8fafc', icon: '❄️' }
+    },
+    mountainLandShare: 0.24
+};
+
+function smoothNoise2D(x, y, scale, seedOffset = 0) {
+    const gx = x / scale;
+    const gy = y / scale;
+    const ix = Math.floor(gx);
+    const iy = Math.floor(gy);
+    const fx = gx - ix;
+    const fy = gy - iy;
+    const ux = fx * fx * (3 - 2 * fx);
+    const uy = fy * fy * (3 - 2 * fy);
+    const wrapCol = Math.max(1, Math.round(WORLD_W / scale));
+    const c0 = ((ix % wrapCol) + wrapCol) % wrapCol;
+    const c1 = (c0 + 1) % wrapCol;
+    const n00 = hash2D(c0 + seedOffset, iy);
+    const n10 = hash2D(c1 + seedOffset, iy);
+    const n01 = hash2D(c0 + seedOffset, iy + 1);
+    const n11 = hash2D(c1 + seedOffset, iy + 1);
+    const nx0 = n00 + (n10 - n00) * ux;
+    const nx1 = n01 + (n11 - n01) * ux;
+    return nx0 + (nx1 - nx0) * uy;
+}
+
+export function getEarthTerrainAt(x, y) {
+    const wx = wrapX(x);
+    const lat = Math.abs((y / WORLD_H) - 0.5) * 2; // 0 = equator, 1 = poles
+
+    // Multi-octave elevation for 71% Ocean / 29% Land
+    let elev = smoothNoise2D(wx, y, 16000, 11) * 0.62
+        + smoothNoise2D(wx, y, 4800, 47) * 0.28
+        + smoothNoise2D(wx, y, 1400, 91) * 0.10;
+
+    // Guarantee dry land around the Cradle of Aethelgard & continental capital bands
+    const contOffset = wx % 96000;
+    const isCapitalBand = contOffset < 2800 && y > 1300 && y < 3200;
+    if (isCapitalBand) elev = Math.max(elev, 0.66);
+
+    // 71% Ocean threshold (elev <= 0.583 is ocean/sea, > 0.583 is land)
+    if (elev <= 0.583) {
+        const isShallow = elev > 0.533;
+        return {
+            isOcean: true,
+            isMountain: false,
+            type: 'ocean',
+            label: isShallow ? 'Coastal Sea' : 'Deep Ocean',
+            icon: '🌊',
+            color: isShallow ? '#0369a1' : '#0c4a6e',
+            elevation: 0
+        };
+    }
+
+    const moisture = smoothNoise2D(wx, y, 12000, 173) * 0.7 + smoothNoise2D(wx, y, 3200, 211) * 0.3;
+    const ridge = smoothNoise2D(wx, y, 5600, 307) * 0.65 + smoothNoise2D(wx, y, 1800, 409) * 0.35;
+    // ~24% of land is mountainous (ridge > 0.665 or high elev > 0.78)
+    const isMountain = ridge > 0.665 || elev > 0.78;
+    const terrainElev = isMountain ? Math.round(18 + (ridge - 0.5) * 48) : 0;
+
+    // 10% Ice, Glaciers & Tundra (polar latitudes or highest frozen peaks)
+    if (lat > 0.90 || (lat > 0.78 && isMountain)) {
+        return { isOcean: false, isMountain, type: 'iceTundra', ...EARTH_SURFACE_STATS.landBreakdown.iceTundra, elevation: terrainElev };
+    }
+    // 14% Agricultural & Urban (fertile river valleys & capital heartlands)
+    if (isCapitalBand || (Math.abs(y - RIVER_Y) < 420 && moisture > 0.42) || (elev < 0.648 && moisture > 0.53)) {
+        return { isOcean: false, isMountain, type: 'agriUrban', ...EARTH_SURFACE_STATS.landBreakdown.agriUrban, elevation: terrainElev };
+    }
+    // 19% Deserts & Barren Land (dry subtropical belts)
+    if (moisture < 0.34 || (lat < 0.32 && moisture < 0.41)) {
+        return { isOcean: false, isMountain, type: 'desert', ...EARTH_SURFACE_STATS.landBreakdown.desert, elevation: terrainElev };
+    }
+    // 31% Forests & Woodlands (high moisture)
+    if (moisture > 0.50) {
+        return { isOcean: false, isMountain, type: 'forest', ...EARTH_SURFACE_STATS.landBreakdown.forest, elevation: terrainElev };
+    }
+    // 26% Grasslands & Savannas (moderate moisture)
+    return { isOcean: false, isMountain, type: 'grassland', ...EARTH_SURFACE_STATS.landBreakdown.grassland, elevation: terrainElev };
+}

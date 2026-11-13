@@ -1,6 +1,6 @@
 import {
     WORLD_W, WORLD_H, RIVER_Y, CONTINENTS, AGE_EPOCHS,
-    wrapX, wrapDX, solve2BoneIK, hash2D
+    wrapX, wrapDX, solve2BoneIK, hash2D, EARTH_SURFACE_STATS, getEarthTerrainAt
 } from './constants.js';
 
 export const rendererMethods = {
@@ -77,6 +77,35 @@ export const rendererMethods = {
             ctx.fillRect(drawX + cw - 90, 1714 - this.cam.y, 180, WORLD_H - 1714);
             ctx.restore();
     
+            // Earth Surface Terrain Grid: 71% Ocean / 29% Land (Forest 31%, Grassland 26%, Desert 19%, Agri/Urban 14%, Ice/Tundra 10%, Mountains ~24% overlap)
+            const tCell = this.cam.zoom < 0.22 ? 1200 : (this.cam.zoom < 0.65 ? 520 : 240);
+            const viewHalfH = (this.canvas.height * 0.65) / (this.cam.zoom * this.cam.tiltScale);
+            const tMinCol = Math.floor(Math.max(cont.xStart, this.cam.x - viewHalfW) / tCell);
+            const tMaxCol = Math.ceil(Math.min(cont.xEnd, this.cam.x + viewHalfW) / tCell);
+            const tMinRow = Math.floor(Math.max(1714, this.cam.y - viewHalfH) / tCell);
+            const tMaxRow = Math.ceil(Math.min(WORLD_H - 120, this.cam.y + viewHalfH) / tCell);
+            for (let tr = tMinRow; tr <= tMaxRow; tr++) {
+                for (let tc = tMinCol; tc <= tMaxCol; tc++) {
+                    const wx = tc * tCell + tCell * 0.5;
+                    const wy = tr * tCell + tCell * 0.5;
+                    if (Math.abs(wy - RIVER_Y) < 90) continue;
+                    const terr = getEarthTerrainAt(wx, wy);
+                    const tx = wrapDX(this.cam.x, tc * tCell);
+                    const ty = tr * tCell - this.cam.y;
+                    ctx.fillStyle = terr.color;
+                    ctx.fillRect(tx, ty, tCell + 1, tCell + 1);
+                    if (terr.isMountain && this.cam.zoom >= 0.25) {
+                        ctx.fillStyle = terr.type === 'iceTundra' ? 'rgba(248, 250, 252, 0.55)' : 'rgba(68, 64, 60, 0.48)';
+                        ctx.beginPath();
+                        ctx.moveTo(tx + tCell * 0.18, ty + tCell * 0.82);
+                        ctx.lineTo(tx + tCell * 0.5, ty + tCell * 0.18);
+                        ctx.lineTo(tx + tCell * 0.82, ty + tCell * 0.82);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                }
+            }
+
             // Infinite-grid procedural biome ground details (constant O(visible screen) cost at any map size)
             if (this.cam.zoom >= 0.42) {
                 const detailColor = cont.biome === 'volcanic' ? 'rgba(249, 115, 22, 0.35)'
@@ -1264,6 +1293,16 @@ export const rendererMethods = {
         ctx.beginPath();
         ctx.ellipse(cx, cy, R + 16, (R + 16) * 0.34, -0.22, 0, Math.PI * 2);
         ctx.stroke();
+
+        // Earth Surface & Terrain Breakdown Overlay
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+        ctx.fillRect(cx - 260, cy + R + 22, 520, 24);
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
+        ctx.strokeRect(cx - 260, cy + R + 22, 520, 24);
+        ctx.fillStyle = '#fef08a';
+        ctx.font = 'bold 11px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('🌍 71% Oceans & Seas • 29% Land | 🌲 Forest 31% • 🌾 Savanna 26% • 🏜️ Desert 19% • 🏘️ Agri/Urban 14% • ❄️ Ice 10% (⛰️ 24% Mtn)', cx, cy + R + 38);
     },
 
     renderMinimapRadar() {

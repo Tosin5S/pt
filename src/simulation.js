@@ -1,7 +1,7 @@
 import {
     WORLD_W, WORLD_H, RIVER_Y, CONTINENTS, AGE_EPOCHS,
     FIGHTING_STYLES, BENDING_SPECS, ARMY_FORMATIONS, BUILDING_SPECS,
-    wrapX, wrapDX, wrappedDist, SpatialGrid
+    wrapX, wrapDX, wrappedDist, SpatialGrid, getEarthTerrainAt
 } from './constants.js';
 import { TribalAudioEngine } from './audio.js';
 import { uiMethods } from './ui.js';
@@ -173,7 +173,7 @@ export class PrehistoricPlanetaryGame {
             const br = this.stoneBridges[i];
             if (Math.abs(wrapDX(br.x, x)) < 50 && Math.abs(y - RIVER_Y) < 62) return 10;
         }
-        return 0;
+        return getEarthTerrainAt(x, y).elevation || 0;
     }
 
     createVillager(x, y, name, isT101s = false) {
