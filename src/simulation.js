@@ -93,6 +93,7 @@ export class PrehistoricPlanetaryGame {
             empires: []
         };
         this.activeChronicleBook = 'ring';
+        this.autoSaveTimer = 60.0;
 
         this.ringControlSpareMode = true;
         this.heroTeleportOnTap = true;
@@ -1469,39 +1470,181 @@ export class PrehistoricPlanetaryGame {
     }
 
 
-    saveEmpireState() {
+    serializeWorldState() {
+        const cleanUnit = (u) => {
+            const copy = { ...u };
+            copy.targetEntityId = u.targetEntity ? u.targetEntity.id : null;
+            delete copy.targetEntity;
+            delete copy._deadHandled;
+            return copy;
+        };
+        const cleanBuilding = (b) => {
+            const copy = { ...b };
+            delete copy._isBuilding;
+            delete copy._footprintStamped;
+            return copy;
+        };
+        return {
+            version: 2,
+            savedAt: new Date().toISOString(),
+            time: this.time,
+            worldYear: this.worldYear,
+            nextId: this.nextId,
+            resources: { ...this.resources },
+            ageLevel: this.ageLevel,
+            taxRate: this.taxRate,
+            totalTaxesCollected: this.totalTaxesCollected,
+            empirePopBillions: this.empirePopBillions,
+            housedRelics: this.housedRelics,
+            totalTribesFounded: this.totalTribesFounded,
+            totalTribeMigrations: this.totalTribeMigrations,
+            oneRing: {
+                bearerId: this.oneRing.bearerId,
+                x: this.oneRing.x,
+                y: this.oneRing.y,
+                dropped: this.oneRing.dropped,
+                history: (this.oneRing.history || []).slice(0, 60)
+            },
+            chronicles: {
+                ring: (this.chronicles?.ring || []).slice(0, 80),
+                heroes: (this.chronicles?.heroes || []).slice(0, 80),
+                empires: (this.chronicles?.empires || []).slice(0, 80)
+            },
+            researchedTechs: { ...this.researchedTechs },
+            heroArtifacts: { ...this.heroArtifacts },
+            blueprints: this.blueprints || [],
+            cam: {
+                x: this.cam.x,
+                y: this.cam.y,
+                targetX: this.cam.targetX,
+                targetY: this.cam.targetY,
+                zoom: this.cam.zoom,
+                targetZoom: this.cam.targetZoom
+            },
+            aiPlayers: this.aiPlayers.map(a => ({ ...a })),
+            buildings: this.buildings.map(cleanBuilding),
+            villagers: this.villagers.map(cleanUnit),
+            enemies: this.enemies.map(cleanUnit),
+            siegeEngines: this.siegeEngines.map(s => ({ ...s })),
+            warGalleys: this.warGalleys.map(g => ({ ...g }))
+        };
+    }
+
+    applyWorldState(data) {
+        if (!data || typeof data !== 'object') return;
+        if (data.resources) this.resources = data.resources;
+        if (typeof data.ageLevel === 'number') this.ageLevel = data.ageLevel;
+        if (typeof data.taxRate === 'number') this.taxRate = data.taxRate;
+        if (typeof data.totalTaxesCollected === 'number') this.totalTaxesCollected = data.totalTaxesCollected;
+        if (typeof data.empirePopBillions === 'number') this.empirePopBillions = data.empirePopBillions;
+
+        if (data.version >= 2) {
+            if (typeof data.time === 'number') this.time = data.time;
+            if (typeof data.worldYear === 'number') this.worldYear = data.worldYear;
+            if (typeof data.nextId === 'number') this.nextId = data.nextId;
+            if (typeof data.housedRelics === 'number') this.housedRelics = data.housedRelics;
+            if (typeof data.totalTribesFounded === 'number') this.totalTribesFounded = data.totalTribesFounded;
+            if (typeof data.totalTribeMigrations === 'number') this.totalTribeMigrations = data.totalTribeMigrations;
+            if (data.oneRing) this.oneRing = data.oneRing;
+            if (data.chronicles) this.chronicles = data.chronicles;
+            if (data.researchedTechs) this.researchedTechs = data.researchedTechs;
+            if (data.heroArtifacts) this.heroArtifacts = data.heroArtifacts;
+            if (Array.isArray(data.blueprints)) this.blueprints = data.blueprints;
+            if (data.cam) {
+                Object.assign(this.cam, data.cam);
+            }
+            if (Array.isArray(data.aiPlayers)) this.aiPlayers = data.aiPlayers;
+            if (Array.isArray(data.buildings)) this.buildings = data.buildings;
+            if (Array.isArray(data.villagers)) this.villagers = data.villagers;
+            if (Array.isArray(data.enemies)) {
+                this.enemies = data.enemies;
+                this.worldBosses = this.enemies.filter(e => e.isBoss);
+            }
+            if (Array.isArray(data.siegeEngines)) this.siegeEngines = data.siegeEngines;
+            if (Array.isArray(data.warGalleys)) this.warGalleys = data.warGalleys;
+
+            const byId = new Map();
+            this.villagers.forEach(u => byId.set(u.id, u));
+            this.enemies.forEach(e => byId.set(e.id, e));
+            for (const u of [...this.villagers, ...this.enemies]) {
+                if (u.targetEntityId) {
+                    u.targetEntity = byId.get(u.targetEntityId) || null;
+                    delete u.targetEntityId;
+                }
+            }
+            this.projectiles = [];
+            this.fallingMeteors = [];
+            this.spatialGrid.clear();
+            const bearer = this.getRingBearer();
+            if (bearer && this.villagers.includes(bearer)) this.selectedIds = [bearer.id];
+            else if (this.villagers[0]) this.selectedIds = [this.villagers[0].id];
+        }
+
+        const lbl = document.getElementById('taxRateBtnLabel');
+        if (lbl) lbl.textContent = Math.round(this.taxRate * 100) + '%';
+        this.updateHUD();
+        this.updateInspector();
+        this.renderEconomyPanel();
+        if (this.renderChronicleBook) this.renderChronicleBook();
+    }
+
+    saveEmpireState(silent = false) {
         try {
-            const data = {
-                resources: this.resources,
-                ageLevel: this.ageLevel,
-                taxRate: this.taxRate,
-                totalTaxesCollected: this.totalTaxesCollected,
-                empirePopBillions: this.empirePopBillions
-            };
-            localStorage.setItem('prehistoric_tribes_save_v1', JSON.stringify(data));
-            this.showBanner('💾', 'Saved Planetary Empire, Treasury & Citizen Economy!');
-        } catch (e) {}
+            const data = this.serializeWorldState();
+            localStorage.setItem('prehistoric_tribes_save_v2', JSON.stringify(data));
+            if (!silent) {
+                this.showBanner('💾', `Saved Full World (Year ${this.worldYear}, ${this.villagers.length} Citizens & Chronicles)!`);
+            }
+        } catch (e) {
+            if (!silent) this.showBanner('⚠️', 'Could not save to browser storage — try ⬇️ Export!');
+        }
     }
 
     loadEmpireState() {
         try {
-            const raw = localStorage.getItem('prehistoric_tribes_save_v1');
+            const raw = localStorage.getItem('prehistoric_tribes_save_v2')
+                || localStorage.getItem('prehistoric_tribes_save_v1');
             if (!raw) {
-                this.showBanner('📂', 'No saved Empire found yet — click 💾 Save anytime!');
+                this.showBanner('📂', 'No saved world found yet — click 💾 Save or ⬆️ Import!');
                 return;
             }
             const data = JSON.parse(raw);
-            if (data.resources) this.resources = data.resources;
-            if (typeof data.ageLevel === 'number') this.ageLevel = data.ageLevel;
-            if (typeof data.taxRate === 'number') this.taxRate = data.taxRate;
-            if (typeof data.totalTaxesCollected === 'number') this.totalTaxesCollected = data.totalTaxesCollected;
-            if (typeof data.empirePopBillions === 'number') this.empirePopBillions = data.empirePopBillions;
-            const lbl = document.getElementById('taxRateBtnLabel');
-            if (lbl) lbl.textContent = Math.round(this.taxRate * 100) + '%';
-            this.updateHUD();
-            this.renderEconomyPanel();
-            this.showBanner('📂', 'Restored Planetary Empire State!');
+            this.applyWorldState(data);
+            this.showBanner('📂', `Restored World State (Year ${this.worldYear}, ${this.villagers.length} Citizens)!`);
+        } catch (e) {
+            this.showBanner('⚠️', 'Failed to load saved world!');
+        }
+    }
+
+    exportSaveFile() {
+        try {
+            const data = this.serializeWorldState();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `aethelgard_year_${this.worldYear}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.showBanner('⬇️', `Exported aethelgard_year_${this.worldYear}.json!`);
         } catch (e) {}
+    }
+
+    importSaveFile(event) {
+        const file = event?.target?.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = JSON.parse(ev.target.result);
+                this.applyWorldState(data);
+                this.showBanner('⬆️', `Imported World Save (Year ${this.worldYear})!`);
+            } catch (err) {
+                this.showBanner('⚠️', 'Invalid save file!');
+            }
+        };
+        reader.readAsText(file);
+        event.target.value = '';
     }
 
 
@@ -2040,6 +2183,11 @@ export class PrehistoricPlanetaryGame {
         dt = Math.min(0.08, dt * this.simSpeed);
         this.time += dt;
         this.worldYear = Math.floor(1 + this.time / 12);
+        this.autoSaveTimer = (this.autoSaveTimer ?? 60) - dt;
+        if (this.autoSaveTimer <= 0) {
+            this.autoSaveTimer = 60;
+            this.saveEmpireState(true);
+        }
 
         // Advance 3-stage construction progress for any blueprints under construction
         for (let i = 0; i < this.buildings.length; i++) {

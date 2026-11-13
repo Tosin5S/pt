@@ -87,6 +87,13 @@
                     <button onclick="game.loadEmpireState()" class="stone-btn px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-200 shrink-0">
                         📂 Load
                     </button>
+                    <button onclick="game.exportSaveFile()" class="stone-btn px-2 py-1 rounded-lg text-[10px] font-bold text-emerald-200 shrink-0" title="Download World Save (.json)">
+                        ⬇️ Export
+                    </button>
+                    <label class="stone-btn px-2 py-1 rounded-lg text-[10px] font-bold text-purple-200 shrink-0 cursor-pointer" title="Load World Save (.json)">
+                        ⬆️ Import
+                        <input type="file" accept=".json" onchange="game.importSaveFile(event)" class="hidden" />
+                    </label>
                 </div>
             </div>
 
