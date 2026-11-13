@@ -1679,6 +1679,8 @@ export class PrehistoricPlanetaryGame {
 
         target.hp -= dmg;
         target.hitFlash = 0.18;
+        const kbForce = (u.isT101s ? 240 : 145) * (u.comboStep === 2 ? 1.4 : 1.0);
+        this.applyKnockback(target, u.x, u.y, kbForce);
 
         if (target.hp <= 0) {
             const bounty = target.isBoss ? 180 : 16;
@@ -1689,6 +1691,64 @@ export class PrehistoricPlanetaryGame {
                 this.showBanner('🏆', `${u.name} slew ${target.name} & claimed an Ancient Relic (+${bounty}🪙)!`);
             }
             this.updateHUD();
+        }
+    }
+
+    applyKnockback(entity, fromX, fromY, force) {
+        if (!entity) return;
+        let dx = wrapDX(fromX, entity.x);
+        let dy = entity.y - fromY;
+        let d = Math.hypot(dx, dy);
+        if (d < 1) {
+            dx = 1;
+            dy = 0;
+            d = 1;
+        }
+        const scale = force / (entity.isBoss ? 2.4 : 1.0);
+        entity.kx = (entity.kx || 0) + (dx / d) * scale;
+        entity.ky = (entity.ky || 0) + (dy / d) * scale;
+    }
+
+    resolveUnitPhysics(u, dt, isEnemy = false) {
+        if (u.kx || u.ky) {
+            u.x = wrapX(u.x + (u.kx || 0) * dt);
+            u.y = Math.max(1320, Math.min(WORLD_H - 160, u.y + (u.ky || 0) * dt));
+            const damp = Math.max(0, 1 - dt * 8);
+            u.kx = Math.abs((u.kx || 0) * damp) < 1 ? 0 : u.kx * damp;
+            u.ky = Math.abs((u.ky || 0) * damp) < 1 ? 0 : u.ky * damp;
+        }
+
+        const nearby = this.spatialGrid.query(u.x, u.y, 90);
+        for (let j = 0; j < nearby.length; j++) {
+            const other = nearby[j];
+            if (other === u) continue;
+            if (other._isBuilding) {
+                if (u.skySoar) continue;
+                const bRadius = (other.radius || 32) * 0.72;
+                const dx = wrapDX(other.x, u.x);
+                const dy = u.y - other.y;
+                const d = Math.hypot(dx, dy);
+                if (d < bRadius) {
+                    if (d < 0.01) {
+                        u.y = Math.max(1320, Math.min(WORLD_H - 160, u.y + bRadius));
+                    } else {
+                        u.x = wrapX(other.x + (dx / d) * bRadius);
+                        u.y = Math.max(1320, Math.min(WORLD_H - 160, other.y + (dy / d) * bRadius));
+                    }
+                }
+            } else {
+                const minDist = (u.isBoss || other.isBoss) ? 28 : 18;
+                const dx = wrapDX(other.x, u.x);
+                const dy = u.y - other.y;
+                const d = Math.hypot(dx, dy);
+                if (d > 0.01 && d < minDist) {
+                    const push = (minDist - d) * 0.45;
+                    u.x = wrapX(u.x + (dx / d) * push);
+                    u.y = Math.max(1320, Math.min(WORLD_H - 160, u.y + (dy / d) * push));
+                } else if (d <= 0.01) {
+                    u.x = wrapX(u.x + (isEnemy ? -2 : 2));
+                }
+            }
         }
     }
 
@@ -1743,6 +1803,16 @@ export class PrehistoricPlanetaryGame {
         if (this.greatCometTimer > 0) this.greatCometTimer = Math.max(0, this.greatCometTimer - dt);
         if (this.globalTimeSlowTimer > 0) this.globalTimeSlowTimer = Math.max(0, this.globalTimeSlowTimer - dt);
         const enemyTimeScale = this.globalTimeSlowTimer > 0 ? 0.12 : 1.0;
+
+        // Populate SpatialGrid for O(N) unit separation & building push-out
+        this.spatialGrid.clear();
+        for (let i = 0; i < this.villagers.length; i++) this.spatialGrid.insert(this.villagers[i]);
+        for (let i = 0; i < this.enemies.length; i++) this.spatialGrid.insert(this.enemies[i]);
+        for (let i = 0; i < this.buildings.length; i++) {
+            const b = this.buildings[i];
+            b._isBuilding = true;
+            this.spatialGrid.insert(b);
+        }
 
         // Procedural Kalimba & War-Drum Beat
         if (this.musicEnabled) {
@@ -1889,11 +1959,49 @@ export class PrehistoricPlanetaryGame {
                             life: 0.25
                         });
                     }
-                } else {
-                    u.targetX = null;
-                    u.targetY = null;
+                    } else {
+                        u.targetX = null;
+                        u.targetY = null;
+                    }
+                }
+            this.resolveUnitPhysics(u, dt, false);
+        }
+
+        // Update Hostile Raiders & Bosses
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const e = this.enemies[i];
+            if (e.hp <= 0) {
+                this.enemies.splice(i, 1);
+                continue;
+            }
+            if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
+            if (e.attackCooldown > 0) e.attackCooldown = Math.max(0, e.attackCooldown - dt * enemyTimeScale);
+            if (!e.controlledByRing && this.villagers.length > 0) {
+                let nearest = null;
+                let bestD = 360;
+                for (let j = 0; j < this.villagers.length; j++) {
+                    const v = this.villagers[j];
+                    const d = wrappedDist(e.x, e.y, v.x, v.y);
+                    if (d < bestD) { bestD = d; nearest = v; }
+                }
+                if (nearest) {
+                    const dx = wrapDX(e.x, nearest.x);
+                    const dy = nearest.y - e.y;
+                    e.facing = dx >= 0 ? 1 : -1;
+                    if (bestD > 34) {
+                        const spd = (e.speed || 85) * enemyTimeScale;
+                        e.x = wrapX(e.x + (dx / bestD) * spd * dt);
+                        e.y = Math.max(1320, Math.min(WORLD_H - 160, e.y + (dy / bestD) * spd * dt));
+                    } else if ((e.attackCooldown || 0) <= 0) {
+                        e.attackCooldown = 1.1;
+                        const edmg = e.attack || 12;
+                        nearest.hp -= edmg;
+                        nearest.hitFlash = 0.18;
+                        this.applyKnockback(nearest, e.x, e.y, e.isBoss ? 220 : 120);
+                    }
                 }
             }
+            this.resolveUnitPhysics(e, dt * enemyTimeScale, true);
         }
 
         // Update Watchtowers, Town Centers, Siege Engines & Naval War Galleys
@@ -1981,9 +2089,22 @@ export class PrehistoricPlanetaryGame {
             if (p.trail.length > 14) p.trail.shift();
 
             if (p.progress >= 1) {
-                if (p.targetEntity && p.targetEntity.hp > 0) {
+                const isSplash = p.kind === 'phoenix';
+                const hitRadius = isSplash ? 95 : 42;
+                if (isSplash) {
+                    this.parryRings.push({ x: p.targetX, y: p.targetY, radius: 10, maxRadius: 95, color: '#fb923c', life: 0.35 });
+                    for (let j = 0; j < this.enemies.length; j++) {
+                        const e = this.enemies[j];
+                        if (e.hp > 0 && wrappedDist(p.targetX, p.targetY, e.x, e.y) <= hitRadius) {
+                            e.hp -= p.damage;
+                            e.hitFlash = 0.18;
+                            this.applyKnockback(e, p.targetX, p.targetY, 170);
+                        }
+                    }
+                } else if (p.targetEntity && p.targetEntity.hp > 0 && wrappedDist(p.targetX, p.targetY, p.targetEntity.x, p.targetEntity.y) <= hitRadius) {
                     p.targetEntity.hp -= p.damage;
                     p.targetEntity.hitFlash = 0.18;
+                    this.applyKnockback(p.targetEntity, p.startX, p.startY, 95);
                 }
                 this.embeddedArrows.push({
                     x: p.targetX,
@@ -2005,6 +2126,7 @@ export class PrehistoricPlanetaryGame {
                     if (!e.controlledByRing && wrappedDist(e.x, e.y, m.targetX, m.targetY) < 185) {
                         e.hp -= 240;
                         e.hitFlash = 0.25;
+                        this.applyKnockback(e, m.targetX, m.targetY, 340);
                     }
                 });
                 this.fallingMeteors.splice(i, 1);

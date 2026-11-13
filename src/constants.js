@@ -116,4 +116,23 @@ export class SpatialGrid {
         }
         bucket.push(entity);
     }
+    query(x, y, radius) {
+        const rCells = Math.ceil(radius / this.cellSize);
+        const cx0 = Math.floor(wrapX(x) / this.cellSize);
+        const cy0 = Math.floor(y / this.cellSize);
+        const maxCols = Math.ceil(WORLD_W / this.cellSize);
+        const results = [];
+        for (let dx = -rCells; dx <= rCells; dx++) {
+            const cx = ((cx0 + dx) % maxCols + maxCols) % maxCols;
+            for (let dy = -rCells; dy <= rCells; dy++) {
+                const bucket = this.cells.get(`${cx},${cy0 + dy}`);
+                if (bucket) {
+                    for (let i = 0; i < bucket.length; i++) {
+                        results.push(bucket[i]);
+                    }
+                }
+            }
+        }
+        return results;
+    }
 }
