@@ -3,20 +3,25 @@
  * -------------------------------------------------------------------------------
  * File target in your repo: src/isometric_upgrade.js
  *
- * Designed specifically for PrehistoricPlanetaryGame (src/simulation.js & src/renderer.js):
- * - Matches your camera transform: ctx.scale(this.cam.zoom, this.cam.zoom * this.cam.tiltScale)
- *   and un-flattens vertical sprites using `invTilt` (1 / this.cam.tiltScale).
- * - Maps your exact building types: 'town_hall', 'house', 'barracks', 'farm', 'tower',
- *   'lumber_camp', 'mining_camp', 'archery_range', 'stable', 'siege_workshop', plus
- *   hut/sawmill/forge/citadel aliases.
- * - Maps your exact villager & enemy fields: u.state ('idle', 'move', 'gather', 'chop',
- *   'mine', 'build', 'attack', 'fight', 'flee', 'wander'), u.vx, u.vy, u.color,
- *   u.gatherType, u.carryAmount, u.isT101s, u.hp, u.maxHp.
- * - Maps your resource nodes: node.type === 'tree' | 'stone' | 'gold', node.amount.
- * - Adds emergent worn dirt & cobblestone footpaths that wrap cleanly with wrapDX.
+ * Updates in this version:
+ * 1. 2.5D Isometric Dragon-Fire War Galleys (`this.warGalleys`): Intercepts the flat
+ *    trapezoid/rectangle galley render inside `renderContinentsAndRiver` (preventing
+ *    double-draw) and renders a 2.5D carvel-planked warship with V-shaped foam wakes,
+ *    synchronized rowing oars, gilded shields along the gunwale, a carved dragon-head
+ *    figurehead (breathing fire sparks when firing), and a billowing crimson-and-gold
+ *    emblazoned sail.
+ * 2. Smooth Continuous Footpaths: Soft radial-gradient terrain blending + connected
+ *    neighbor path segments so high-traffic areas form seamless dirt trails and
+ *    cobblestone roads.
+ * 3. 2.5D Isometric Bridges (`this.stoneBridges`): Arched timber-and-stone isometric
+ *    causeways, water pilings, plank decks, and side railings across `RIVER_Y`.
+ * 4. 2.5D Isometric Siege Engines (`drawSiegeEngine`): Shaded isometric timber frames,
+ *    spoked wheels, swinging counterweight arms, and horned mammoth-skull prows.
+ * 5. Preserves all existing custom hooks (`unit.customTool`, `unit.customMagic`,
+ *    `unit.swingAnim`, `building.auraColor`, selection rings, and all 24 building specs).
  */
 
-import { WORLD_W, wrapX, wrapDX } from './constants.js';
+import { WORLD_W, RIVER_Y, wrapX, wrapDX } from './constants.js';
 
 function shadeHex(hex, amount) {
   if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return '#2e6fd9';
@@ -400,11 +405,8 @@ export class VillagerSpriteBank {
     return vx >= 0 ? 'NE' : 'NW';
   }
 
-  /**
-   * Drop-in replacement for PrehistoricPlanetaryGame.prototype.drawArticulatedHuman
-   */
   drawGameUnit(ctx, unit, dx, sy, invTilt = 1, isEnemy = false, gameTime = 0, showBadges = true) {
-    const factionColor = isEnemy ? '#c93b2b' : unit.isT101s ? '#f59e0b' : (unit.tribeColor || unit.color || '#2e6fd9');
+    const factionColor = isEnemy ? '#c93b2b' : unit.isT101s ? '#f59e0b' : unit.color || '#2e6fd9';
     const animState = mapUnitStateToAnim(unit.state, unit.vx, unit.vy);
     const dir = VillagerSpriteBank.vectorToDirection(unit.vx, unit.vy, unit._lastIsoDir || 'SE');
     unit._lastIsoDir = dir;
@@ -418,9 +420,8 @@ export class VillagerSpriteBank {
 
     ctx.save();
     ctx.translate(dx, sy);
-    ctx.scale(1, invTilt); // Un-flatten vertical aspect inside tilted camera
+    ctx.scale(1, invTilt);
 
-    // Golden sovereign aura for hero t101s
     if (unit.isT101s) {
       ctx.save();
       ctx.strokeStyle = 'rgba(245, 158, 11, 0.75)';
@@ -449,7 +450,6 @@ export class VillagerSpriteBank {
       drawCarriedResource(ctx, 0, 0, unit.gatherType, dir === 'SE' || dir === 'NE');
     }
 
-    // Health bar when damaged or hero
     if (unit.hp < unit.maxHp || unit.isT101s) {
       const hpRatio = Math.max(0, Math.min(1, (unit.hp || 1) / (unit.maxHp || 1)));
       const bw = 24;
@@ -472,15 +472,14 @@ export class VillagerSpriteBank {
 }
 
 /* ============================================================================
- * 2. ENVIRONMENT SPRITE BANK (3-Stage Buildings, Smoke, Trees, Ore Nodes)
+ * 2. ENVIRONMENT SPRITE BANK (Buildings, Trees, Bridges, Siege, War Galleys)
  * ========================================================================== */
 
-// Maps all building types in src/simulation.js & src/constants.js
 const BUILDING_SPECS = {
   town_hall: { halfW: 44, halfH: 22, wallH: 36, roofH: 22, chimney: true, banner: true, isStone: true },
   citadel: { halfW: 44, halfH: 22, wallH: 36, roofH: 22, chimney: true, banner: true, isStone: true },
   house: { halfW: 26, halfH: 13, wallH: 20, roofH: 17, chimney: true, banner: false, isStone: false },
-  hut: { halfW: 26, halfH: 13, wallH: 20, roofH: 17, chimney: true, banner: false, isStone: false },
+  hut: { halfW: 26, halfH: 13, wallH: 20, roofH: 17, chimney: false, banner: false, isStone: false },
   barracks: { halfW: 36, halfH: 18, wallH: 25, roofH: 16, chimney: false, banner: true, isStone: true },
   archery_range: { halfW: 34, halfH: 17, wallH: 22, roofH: 15, chimney: false, banner: true, isStone: false },
   stable: { halfW: 36, halfH: 18, wallH: 22, roofH: 16, chimney: false, banner: true, isStone: false },
@@ -582,7 +581,6 @@ function renderBuildingStage(ctx, cx, baseY, type, stage, factionColor) {
   ctx.fill();
   ctx.restore();
 
-  // Golden tilled crop rows for farms
   if (type === 'farm' && stage === 2) {
     ctx.save();
     ctx.fillStyle = '#6e5233';
@@ -644,7 +642,7 @@ function renderBuildingStage(ctx, cx, baseY, type, stage, factionColor) {
     ctx.strokeStyle = '#684729';
     ctx.lineWidth = 2.2;
     const poles = [
-      [cx - halfW - 2, baseY + 1],
+      [cx - halfW + 2, baseY + 1],
       [cx, baseY + halfH + 2],
       [cx + halfW + 2, baseY + 1],
       [cx, baseY - halfH - 1],
@@ -652,59 +650,72 @@ function renderBuildingStage(ctx, cx, baseY, type, stage, factionColor) {
     for (const [px, py] of poles) {
       ctx.beginPath();
       ctx.moveTo(px, py);
-      ctx.lineTo(px, py - wallH - 6);
+      ctx.lineTo(px, py - wallH - 4);
       ctx.stroke();
     }
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(cx - halfW - 2, baseY - wallH * 0.5);
-    ctx.lineTo(cx, baseY + halfH - wallH * 0.9);
-    ctx.lineTo(cx + halfW + 2, baseY - wallH * 0.5);
-    ctx.stroke();
     return;
   }
 
-  drawIsoBox(ctx, cx, baseY, halfW, halfH, wallH, {
-    left: isStone ? '#b9b5ad' : '#d5c1a0',
-    right: isStone ? '#848078' : '#9c8669',
-  });
+  const wallColors = isStone
+    ? { left: '#a4a098', right: '#7d7a73', top: '#bebbb3' }
+    : { left: '#ab8b62', right: '#826543', top: '#c2a176' };
 
-  // Doorway
-  ctx.fillStyle = '#3b2616';
+  drawIsoBox(ctx, cx, baseY, halfW, halfH, wallH, wallColors);
+
+  if (spec.banner && factionColor) {
+    ctx.save();
+    ctx.fillStyle = factionColor;
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW * 0.65, baseY - wallH * 0.55);
+    ctx.lineTo(cx, baseY + halfH * 0.35 - wallH * 0.55);
+    ctx.lineTo(cx, baseY + halfH * 0.35 - wallH * 0.32);
+    ctx.lineTo(cx - halfW * 0.65, baseY - wallH * 0.32);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.fillStyle = '#3a2514';
+  const doorW = 8;
+  const doorH = 14;
   ctx.beginPath();
-  ctx.moveTo(cx - halfW * 0.45, baseY + halfH * 0.55);
-  ctx.lineTo(cx - halfW * 0.25, baseY + halfH * 0.75);
-  ctx.lineTo(cx - halfW * 0.25, baseY + halfH * 0.75 - 12);
-  ctx.lineTo(cx - halfW * 0.45, baseY + halfH * 0.55 - 12);
+  ctx.moveTo(cx - halfW * 0.4, baseY - halfH * 0.2);
+  ctx.lineTo(cx - halfW * 0.4 + doorW, baseY - halfH * 0.2 + doorW * 0.5);
+  ctx.lineTo(cx - halfW * 0.4 + doorW, baseY - halfH * 0.2 + doorW * 0.5 - doorH);
+  ctx.lineTo(cx - halfW * 0.4, baseY - halfH * 0.2 - doorH);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
 
-  if (type === 'town_hall' || type === 'citadel') {
-    drawIsoBox(ctx, cx, baseY - wallH, halfW + 2, halfH + 1, 7, {
-      left: '#a29e95',
-      right: '#716d65',
-      top: '#c4bfb6',
-    });
-    drawIsoBox(ctx, cx, baseY - wallH - 7, halfW * 0.45, halfH * 0.45, 16, {
-      left: '#c5c0b6',
-      right: '#8f8a80',
-    });
-    drawIsoRoof(ctx, cx, baseY - wallH - 23, halfW * 0.45, halfH * 0.45, roofH * 0.75, {
-      left: shadeHex(factionColor, 0.08),
-      right: shadeHex(factionColor, -0.22),
-    });
-  } else {
-    drawIsoRoof(ctx, cx, baseY - wallH, halfW, halfH, roofH, {
-      left: isStone ? shadeHex(factionColor, 0.05) : '#a85a3a',
-      right: isStone ? shadeHex(factionColor, -0.22) : '#743a24',
+  const wallTopY = baseY - wallH;
+  const roofColors = isStone
+    ? { left: '#4a5b6e', right: '#334252', top: '#63778d' }
+    : { left: '#9e3b2b', right: '#78281c', top: '#ba4836' };
+
+  drawIsoRoof(ctx, cx, wallTopY, halfW, halfH, roofH, roofColors);
+
+  if (spec.chimney) {
+    const chX = cx + halfW * 0.35;
+    const chY = wallTopY - roofH * 0.4;
+    drawIsoBox(ctx, chX, chY, 5, 3, 11, {
+      left: '#615d58',
+      right: '#474440',
+      top: '#78746e',
     });
   }
 
-  if (spec.chimney) {
-    drawIsoBox(ctx, cx + halfW * 0.25, baseY - wallH - roofH * 0.45, 5, 2.5, 11, {
-      left: '#8c857d',
-      right: '#5c5650',
-      top: '#443f3a',
+  if (type === 'town_hall' || type === 'citadel' || type === 'town_center' || type === 'wonder') {
+    const topBaseY = wallTopY - roofH + 4;
+    drawIsoBox(ctx, cx, topBaseY, halfW * 0.45, halfH * 0.45, 16, {
+      left: '#b0ab9f',
+      right: '#858075',
+      top: '#c7c2b5',
+    });
+    drawIsoRoof(ctx, cx, topBaseY - 16, halfW * 0.45, halfH * 0.45, 12, {
+      left: '#ba4836',
+      right: '#802b1d',
+      top: '#d45642',
     });
   }
 }
@@ -801,9 +812,6 @@ export class EnvironmentSpriteBank {
     return canvas;
   }
 
-  /**
-   * Drop-in replacement for PrehistoricPlanetaryGame.prototype.drawBuilding
-   */
   drawGameBuilding(ctx, building, dx, sy, invTilt = 1, timeSec = 0, showBadges = false) {
     const type = building.type || 'house';
     const progress = building.progress ?? 1.0;
@@ -825,7 +833,6 @@ export class EnvironmentSpriteBank {
       ctx.fillStyle = '#f59e0b';
       ctx.fillRect(-23, -51, Math.round(46 * progress), 4);
     } else {
-      // Chimney smoke
       if (spec.chimney) {
         const chimX = spec.halfW * 0.25;
         const chimY = -(spec.wallH + spec.roofH * 0.45 + 12);
@@ -841,7 +848,6 @@ export class EnvironmentSpriteBank {
         }
       }
 
-      // Waving faction banner
       if (spec.banner) {
         const poleX = -spec.halfW * 0.35;
         const poleTopY = -(spec.wallH + spec.roofH + (type === 'town_hall' || type === 'citadel' ? 24 : 6));
@@ -863,7 +869,6 @@ export class EnvironmentSpriteBank {
       }
     }
 
-    // Health bar when damaged
     if (building.hp < building.maxHp) {
       const hpRatio = Math.max(0, Math.min(1, (building.hp || 1) / (building.maxHp || 1)));
       ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
@@ -882,9 +887,6 @@ export class EnvironmentSpriteBank {
     ctx.restore();
   }
 
-  /**
-   * Drop-in replacement for PrehistoricPlanetaryGame.prototype.drawResourceNode
-   */
   drawGameResourceNode(ctx, node, dx, sy, invTilt = 1, timeSec = 0) {
     ctx.save();
     ctx.translate(dx, sy);
@@ -897,7 +899,6 @@ export class EnvironmentSpriteBank {
       ctx.transform(1, 0, sway, 1, 0, 0);
       ctx.drawImage(sprite, -29, -64, 64, 76);
     } else {
-      // Shaded isometric stone / gold deposit boulders
       const isGold = node.type === 'gold';
       ctx.fillStyle = 'rgba(10, 14, 18, 0.28)';
       ctx.beginPath();
@@ -917,7 +918,6 @@ export class EnvironmentSpriteBank {
       ctx.fill();
       ctx.stroke();
 
-      // Sunlit facet
       ctx.fillStyle = isGold ? '#f7d35c' : '#a6b0b8';
       ctx.beginPath();
       ctx.moveTo(-12, 0);
@@ -930,26 +930,588 @@ export class EnvironmentSpriteBank {
 
     ctx.restore();
   }
+
+  /**
+   * 2.5D Isometric River Bridge Renderer (replaces flat brown/yellow rectangles)
+   */
+  drawIsometricBridge(ctx, bx, rY, invTilt = 1, timeSec = 0) {
+    ctx.save();
+    ctx.translate(bx, rY);
+
+    const halfW = 44;
+    const halfH = 64;
+
+    ctx.fillStyle = 'rgba(8, 15, 26, 0.38)';
+    ctx.fillRect(-halfW - 6, -halfH + 4, (halfW + 6) * 2, halfH * 2);
+
+    const pierYs = [-halfH + 8, -18, 18, halfH - 12];
+    for (const py of pierYs) {
+      const ripple = Math.sin(timeSec * 2.6 + py * 0.1) * 2;
+      ctx.strokeStyle = 'rgba(186, 230, 253, 0.35)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(-halfW - 2, py + 4, 8 + ripple, 4, 0, 0, Math.PI * 2);
+      ctx.ellipse(halfW + 2, py + 4, 8 + ripple, 4, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#64748b';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1;
+      ctx.fillRect(-halfW - 6, py - 4, 8, 10);
+      ctx.strokeRect(-halfW - 6, py - 4, 8, 10);
+      ctx.fillRect(halfW - 2, py - 4, 8, 10);
+      ctx.strokeRect(halfW - 2, py - 4, 8, 10);
+    }
+
+    const rampGradN = ctx.createLinearGradient(0, -halfH - 10, 0, -halfH + 14);
+    rampGradN.addColorStop(0, '#78716c');
+    rampGradN.addColorStop(1, '#57534e');
+    ctx.fillStyle = rampGradN;
+    ctx.beginPath();
+    ctx.moveTo(-halfW + 4, -halfH - 8);
+    ctx.lineTo(halfW - 4, -halfH - 8);
+    ctx.lineTo(halfW, -halfH + 12);
+    ctx.lineTo(-halfW, -halfH + 12);
+    ctx.closePath();
+    ctx.fill();
+
+    const rampGradS = ctx.createLinearGradient(0, halfH - 12, 0, halfH + 10);
+    rampGradS.addColorStop(0, '#57534e');
+    rampGradS.addColorStop(1, '#78716c');
+    ctx.fillStyle = rampGradS;
+    ctx.beginPath();
+    ctx.moveTo(-halfW, halfH - 12);
+    ctx.lineTo(halfW, halfH - 12);
+    ctx.lineTo(halfW - 4, halfH + 8);
+    ctx.lineTo(-halfW + 4, halfH + 8);
+    ctx.closePath();
+    ctx.fill();
+
+    const deckGrad = ctx.createLinearGradient(-halfW, 0, halfW, 0);
+    deckGrad.addColorStop(0, '#854d0e');
+    deckGrad.addColorStop(0.5, '#a16207');
+    deckGrad.addColorStop(1, '#713f12');
+    ctx.fillStyle = deckGrad;
+    ctx.strokeStyle = '#422006';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(-halfW, -halfH + 8, halfW * 2, (halfH - 8) * 2);
+    ctx.strokeRect(-halfW, -halfH + 8, halfW * 2, (halfH - 8) * 2);
+
+    ctx.strokeStyle = 'rgba(42, 20, 5, 0.55)';
+    ctx.lineWidth = 1;
+    for (let py = -halfH + 13; py <= halfH - 10; py += 6) {
+      ctx.beginPath();
+      ctx.moveTo(-halfW + 2, py);
+      ctx.lineTo(halfW - 2, py);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(120, 113, 108, 0.28)';
+    ctx.fillRect(-16, -halfH + 8, 32, (halfH - 8) * 2);
+
+    const postHeight = 10 * invTilt;
+    ctx.strokeStyle = '#451a03';
+    ctx.lineWidth = 2.4;
+
+    ctx.beginPath();
+    ctx.moveTo(-halfW + 2, -halfH + 8 - postHeight);
+    ctx.lineTo(-halfW + 2, halfH - 8 - postHeight);
+    ctx.moveTo(halfW - 2, -halfH + 8 - postHeight);
+    ctx.lineTo(halfW - 2, halfH - 8 - postHeight);
+    ctx.stroke();
+
+    for (let py = -halfH + 10; py <= halfH - 10; py += 22) {
+      ctx.fillStyle = '#5c2d0c';
+      ctx.fillRect(-halfW, py - postHeight, 4, postHeight + 2);
+      ctx.fillRect(halfW - 4, py - postHeight, 4, postHeight + 2);
+
+      if (Math.abs(py) > 35) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(-halfW + 2, py - postHeight - 2, 2.5, 0, Math.PI * 2);
+        ctx.arc(halfW - 2, py - postHeight - 2, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * 2.5D Isometric Dragon-Fire War Galley Renderer
+   * Replaces the flat brown trapezoid + red square in `renderContinentsAndRiver`
+   */
+  drawIsometricWarGalley(ctx, g, gx, gy, invTilt = 1, timeSec = 0, showBadges = true) {
+    ctx.save();
+    ctx.translate(gx, gy);
+    ctx.scale(1, invTilt);
+
+    const dir = (g.vx || 0) < 0 ? -1 : 1;
+    const speed = Math.abs(g.vx || 30);
+    const phase = timeSec * 4.5 + (g.id || 0) * 1.3;
+    const bob = Math.sin(phase * 0.7) * 1.6;
+
+    // 1. V-Shaped Foam Water Wake & Stern Trail (behind moving ship)
+    ctx.save();
+    for (let i = 0; i < 4; i++) {
+      const wakeT = ((timeSec * 1.4 + i * 0.25) % 1);
+      const wx = -dir * (26 + wakeT * 36);
+      const spread = 6 + wakeT * 12;
+      const alpha = (1 - wakeT) * 0.42;
+      ctx.strokeStyle = `rgba(186, 230, 253, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(wx, 6, 8 + wakeT * 10, spread * 0.45, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // Bow wave splash
+    ctx.strokeStyle = 'rgba(224, 242, 254, 0.65)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(dir * 34, 5 + bob * 0.4, 7, dir > 0 ? -0.8 : Math.PI - 0.8, dir > 0 ? 0.8 : Math.PI + 0.8);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.translate(0, bob);
+
+    // 2. Waterline shadow
+    ctx.fillStyle = 'rgba(7, 16, 30, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(0, 8, 38, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3. Back-side Rowing Oars (behind hull)
+    const oarCount = 5;
+    const oarSwing = Math.sin(phase * (speed > 2 ? 1.4 : 0.4)) * 6 * dir;
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < oarCount; i++) {
+      const ox = -18 + i * 9;
+      ctx.beginPath();
+      ctx.moveTo(ox, -2);
+      ctx.lineTo(ox - oarSwing, -9);
+      ctx.stroke();
+    }
+
+    // 4. Elevated Stern & Forecastle Deck + Carvel-Planked Isometric Hull
+    const hullGrad = ctx.createLinearGradient(0, -10, 0, 12);
+    hullGrad.addColorStop(0, '#92400e');
+    hullGrad.addColorStop(0.55, '#78350f');
+    hullGrad.addColorStop(1, '#451a03');
+
+    ctx.fillStyle = hullGrad;
+    ctx.strokeStyle = '#271203';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-36 * dir, -6); // Elevated stern poop deck
+    ctx.lineTo(-28 * dir, -2);
+    ctx.lineTo(28 * dir, -2);
+    ctx.lineTo(38 * dir, -7); // Swept dragon prow stem
+    ctx.lineTo(29 * dir, 9);  // Waterline bow
+    ctx.lineTo(-29 * dir, 9); // Waterline stern
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Gold gunwale trim rail & plank strake lines
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-34 * dir, -4);
+    ctx.lineTo(35 * dir, -5);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(40, 18, 4, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-30 * dir, 3);
+    ctx.lineTo(31 * dir, 3);
+    ctx.stroke();
+
+    // 5. Gilded Round Shields Along the Gunwale
+    for (let i = 0; i < 6; i++) {
+      const sx = -20 + i * 8;
+      ctx.fillStyle = i % 2 === 0 ? '#b91c1c' : '#d97706';
+      ctx.strokeStyle = '#fde68a';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(sx, -1, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // 6. Front-side Synchronized Oars + White Water Blade Splashes
+    for (let i = 0; i < oarCount; i++) {
+      const ox = -18 + i * 9;
+      const bladeX = ox + oarSwing;
+      const bladeY = 13 + Math.cos(phase) * 1.8;
+
+      ctx.strokeStyle = '#a16207';
+      ctx.lineWidth = 1.9;
+      ctx.beginPath();
+      ctx.moveTo(ox, 1);
+      ctx.lineTo(bladeX, bladeY);
+      ctx.stroke();
+
+      // White water ripple at oar tip
+      ctx.fillStyle = 'rgba(224, 242, 254, 0.7)';
+      ctx.beginPath();
+      ctx.ellipse(bladeX, bladeY + 1, 3.2, 1.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 7. Carved Dragon-Head Prow Figurehead & Naval Bronze Ram
+    const prowX = 38 * dir;
+    // Naval waterline bronze ram
+    ctx.fillStyle = '#d97706';
+    ctx.beginPath();
+    ctx.moveTo(29 * dir, 5);
+    ctx.lineTo(43 * dir, 7);
+    ctx.lineTo(29 * dir, 9);
+    ctx.closePath();
+    ctx.fill();
+
+    // Sculpted gold/crimson dragon neck & head
+    ctx.fillStyle = '#b45309';
+    ctx.strokeStyle = '#451a03';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(33 * dir, -5);
+    ctx.quadraticCurveTo(39 * dir, -16, 44 * dir, -14);
+    ctx.lineTo(41 * dir, -9);
+    ctx.lineTo(36 * dir, -2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Glowing dragon eye
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath();
+    ctx.arc(40 * dir, -13, 1.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dragon-Fire breath jet when cannon/fire timer is active (or periodic burst)
+    const fireCycle = (timeSec * 0.9 + (g.id || 0) * 0.37) % 1;
+    if ((g.shootTimer && g.shootTimer > 0) || fireCycle < 0.28) {
+      for (let f = 0; f < 4; f++) {
+        const fx = prowX + dir * (6 + f * 4.5 + (fireCycle * 8));
+        const fy = -12 + Math.sin(timeSec * 18 + f) * 2.5;
+        ctx.fillStyle = f % 2 === 0 ? 'rgba(249, 115, 22, 0.85)' : 'rgba(253, 224, 71, 0.85)';
+        ctx.beginPath();
+        ctx.arc(fx, fy, 4.2 - f * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 8. Central Timber Mast, Crow's Nest & Billowing Imperial Sail
+    ctx.strokeStyle = '#451a03';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -2);
+    ctx.lineTo(0, -44);
+    ctx.stroke();
+
+    // Rigging stays
+    ctx.strokeStyle = 'rgba(214, 211, 209, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-28 * dir, -3);
+    ctx.lineTo(0, -40);
+    ctx.lineTo(28 * dir, -4);
+    ctx.stroke();
+
+    // Billowing square sail curved toward movement direction
+    const billow = (7 + Math.sin(phase * 0.8) * 2.2) * dir;
+    const sailGrad = ctx.createLinearGradient(-16, -38, 16, -12);
+    sailGrad.addColorStop(0, '#dc2626');
+    sailGrad.addColorStop(0.5, '#991b1b');
+    sailGrad.addColorStop(1, '#7f1d1d');
+
+    ctx.fillStyle = sailGrad;
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-16, -38);
+    ctx.quadraticCurveTo(0, -39, 16, -38);
+    ctx.quadraticCurveTo(16 + billow, -24, 15, -11);
+    ctx.quadraticCurveTo(0, -10, -15, -11);
+    ctx.quadraticCurveTo(-16 + billow * 0.75, -24, -16, -38);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Golden Sovereign Dragon Crest on Sail
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(billow * 0.45, -24, 5.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#991b1b';
+    ctx.beginPath();
+    ctx.arc(billow * 0.45 + 1.5 * dir, -25, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Streaming masthead pennant
+    const wave = Math.sin(timeSec * 6 + (g.id || 0)) * 2.5;
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.moveTo(0, -44);
+    ctx.quadraticCurveTo(8 * dir, -43 + wave, 16 * dir, -41 - wave * 0.5);
+    ctx.lineTo(0, -39);
+    ctx.closePath();
+    ctx.fill();
+
+    if (showBadges) {
+      ctx.fillStyle = '#fde047';
+      ctx.font = 'bold 8.5px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(g.name || '🐉 WAR GALLEY', 0, -49);
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * 2.5D Isometric Siege Engine Renderer (Counterweight Trebuchet & Mammoth-Skull Battering Ram)
+   */
+  drawGameSiegeEngine(ctx, s, sx, sy, invTilt = 1, timeSec = 0, showBadges = true) {
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.scale(1, invTilt);
+
+    const name = (s.name || s.type || '').toLowerCase();
+    const isRam = name.includes('ram') || name.includes('mammoth') || s.type === 'battering_ram';
+    const facing = (s.vx || 0) < -0.05 ? -1 : 1;
+
+    ctx.fillStyle = 'rgba(10, 14, 18, 0.36)';
+    ctx.beginPath();
+    ctx.ellipse(0, 4, 28, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const drawWheel = (wx, wy, r = 7.5) => {
+      const spin = ((s.x || 0) + (s.y || 0)) * 0.08;
+      ctx.save();
+      ctx.translate(wx, wy);
+      ctx.fillStyle = '#451a03';
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 0.6, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 4; i++) {
+        const a = spin + (i * Math.PI) / 4;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * -r, Math.sin(a) * -r);
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    if (isRam) {
+      drawWheel(-15, -4, 7);
+      drawWheel(15, -4, 7);
+
+      drawIsoBox(ctx, 0, -2, 24, 11, 6, {
+        left: '#78350f',
+        right: '#451a03',
+        top: '#92400e',
+      });
+
+      const swing = Math.sin(timeSec * 5 + (s.id || 0)) * 3.5 * facing;
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-10, -24);
+      ctx.lineTo(-8 + swing, -12);
+      ctx.moveTo(10, -24);
+      ctx.lineTo(8 + swing, -12);
+      ctx.stroke();
+
+      ctx.fillStyle = '#5c2d0c';
+      ctx.strokeStyle = '#271203';
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(-18 + swing, -15, 36, 6);
+      ctx.strokeRect(-18 + swing, -15, 36, 6);
+
+      drawIsoRoof(ctx, 0, -18, 22, 10, 12, {
+        left: '#a16207',
+        right: '#713f12',
+        outline: '#422006',
+      });
+
+      const skullX = (19 + swing) * facing;
+      ctx.fillStyle = '#e7e5e4';
+      ctx.strokeStyle = '#57534e';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(skullX, -12, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#fef3c7';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(skullX, -10);
+      ctx.quadraticCurveTo(skullX + 9 * facing, -8, skullX + 12 * facing, -16);
+      ctx.stroke();
+    } else {
+      drawWheel(-16, -3, 6.5);
+      drawWheel(16, -3, 6.5);
+
+      drawIsoBox(ctx, 0, -2, 24, 11, 5, {
+        left: '#92400e',
+        right: '#5c2d0c',
+        top: '#b45309',
+      });
+
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 3.2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-14, -6);
+      ctx.lineTo(0, -34);
+      ctx.lineTo(14, -6);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#b45309';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-9, -16);
+      ctx.lineTo(9, -16);
+      ctx.stroke();
+
+      const cooldown = s.attackCooldown || 0;
+      const armAngle =
+        cooldown > 0.5
+          ? -0.55 * facing
+          : (-0.25 + Math.sin(timeSec * 2.2 + (s.id || 0)) * 0.18) * facing;
+
+      ctx.save();
+      ctx.translate(0, -32);
+      ctx.rotate(armAngle);
+
+      ctx.strokeStyle = '#a16207';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(-12 * facing, 0);
+      ctx.lineTo(26 * facing, 0);
+      ctx.stroke();
+
+      ctx.fillStyle = '#475569';
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-16 * facing, 0);
+      ctx.lineTo(-8 * facing, 0);
+      ctx.lineTo(-9 * facing, 11);
+      ctx.lineTo(-15 * facing, 11);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#d6d3d1';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(26 * facing, 0);
+      ctx.lineTo(29 * facing, 10);
+      ctx.stroke();
+
+      ctx.fillStyle = '#78716c';
+      ctx.beginPath();
+      ctx.arc(29 * facing, 11, 3.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.arc(0, -32, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (s.hp < s.maxHp) {
+      const hpRatio = Math.max(0, Math.min(1, (s.hp || 1) / (s.maxHp || 1)));
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fillRect(-20, -48, 40, 4.5);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(-19, -47, Math.round(38 * hpRatio), 2.5);
+    }
+
+    if (showBadges && s.name) {
+      ctx.fillStyle = '#fde68a';
+      ctx.font = 'bold 8.5px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(s.name, 0, -52);
+    }
+
+    ctx.restore();
+  }
 }
 
 /* ============================================================================
- * 3. SPARSE HASHED FOOTPATH OVERLAY (Supports planetary wrapDX coordinates)
+ * 3. SMOOTH CONTINUOUS FOOTPATH OVERLAY (Soft Radial Blends + Connected Trails)
  * ========================================================================== */
 
 export class PlanetaryFootpathOverlay {
   constructor({ cellSize = 28 } = {}) {
     this.cellSize = cellSize;
-    this.cells = new Map(); // key "col:row" -> wear (0..1)
+    this.cells = new Map();
+    this.stampCache = new Map();
+  }
+
+  _getSoftStamp(tier) {
+    if (this.stampCache.has(tier)) return this.stampCache.get(tier);
+
+    const size = this.cellSize * 2.4;
+    const half = size * 0.5;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const gCtx = c.getContext('2d');
+
+    const grad = gCtx.createRadialGradient(half, half, size * 0.08, half, half, half);
+    if (tier === 'cobble') {
+      grad.addColorStop(0, 'rgba(124, 116, 105, 0.42)');
+      grad.addColorStop(0.55, 'rgba(120, 104, 86, 0.22)');
+      grad.addColorStop(1, 'rgba(120, 104, 86, 0.0)');
+    } else {
+      grad.addColorStop(0, 'rgba(139, 108, 74, 0.36)');
+      grad.addColorStop(0.6, 'rgba(139, 108, 74, 0.16)');
+      grad.addColorStop(1, 'rgba(139, 108, 74, 0.0)');
+    }
+
+    gCtx.fillStyle = grad;
+    gCtx.fillRect(0, 0, size, size);
+
+    if (tier === 'cobble') {
+      gCtx.fillStyle = 'rgba(168, 162, 154, 0.28)';
+      gCtx.beginPath();
+      gCtx.arc(half - 4, half - 2, 2.6, 0, Math.PI * 2);
+      gCtx.arc(half + 5, half + 3, 2.2, 0, Math.PI * 2);
+      gCtx.arc(half + 2, half - 5, 2.0, 0, Math.PI * 2);
+      gCtx.fill();
+    }
+
+    this.stampCache.set(tier, c);
+    return c;
   }
 
   updateTraffic(villagers, dt = 1 / 60) {
     if (!villagers) return;
-    const gain = 0.065 * dt * 12;
-    const maxCols = Math.round(WORLD_W / this.cellSize);
+    const gain = 0.045 * dt * 10;
     for (let i = 0; i < villagers.length; i++) {
       const u = villagers[i];
       if (Math.hypot(u.vx || 0, u.vy || 0) < 2) continue;
-      const col = ((Math.floor(wrapX(u.x) / this.cellSize) % maxCols) + maxCols) % maxCols;
+      const col = Math.floor(wrapX(u.x, WORLD_W) / this.cellSize);
       const row = Math.floor(u.y / this.cellSize);
       const key = `${col}:${row}`;
       const prev = this.cells.get(key) || 0;
@@ -960,17 +1522,16 @@ export class PlanetaryFootpathOverlay {
   }
 
   stampBuilding(x, y, radius = 44) {
-    const maxCols = Math.round(WORLD_W / this.cellSize);
-    const c0 = ((Math.floor(wrapX(x) / this.cellSize) % maxCols) + maxCols) % maxCols;
+    if (typeof y !== 'number') return;
+    const c0 = Math.floor(wrapX(x, WORLD_W) / this.cellSize);
     const r0 = Math.floor(y / this.cellSize);
     const rad = Math.ceil(radius / this.cellSize);
     for (let dr = -rad; dr <= rad; dr++) {
       for (let dc = -rad; dc <= rad; dc++) {
         const d = Math.hypot(dc, dr) / Math.max(1, rad);
         if (d <= 1) {
-          const cc = (((c0 + dc) % maxCols) + maxCols) % maxCols;
-          const key = `${cc}:${r0 + dr}`;
-          const val = 0.62 * (1 - d * 0.4);
+          const key = `${c0 + dc}:${r0 + dr}`;
+          const val = 0.55 * (1 - d * 0.45);
           if (val > (this.cells.get(key) || 0)) {
             this.cells.set(key, val);
           }
@@ -980,34 +1541,72 @@ export class PlanetaryFootpathOverlay {
   }
 
   drawVisiblePaths(ctx, cam, canvasWidth, canvasHeight) {
+    if (!ctx || !cam) return;
     const halfW = (canvasWidth * 0.65) / cam.zoom;
     const halfH = (canvasHeight * 0.65) / (cam.zoom * (cam.tiltScale || 1));
-    const maxCols = Math.round(WORLD_W / this.cellSize);
     const minCol = Math.floor((cam.x - halfW) / this.cellSize);
     const maxCol = Math.ceil((cam.x + halfW) / this.cellSize);
     const minRow = Math.floor((cam.y - halfH) / this.cellSize);
     const maxRow = Math.ceil((cam.y + halfH) / this.cellSize);
+    const totalCols = Math.ceil(WORLD_W / this.cellSize);
+
+    const dirtStamp = this._getSoftStamp('dirt');
+    const cobbleStamp = this._getSoftStamp('cobble');
+    const stampSize = dirtStamp.width;
+    const stampHalf = stampSize * 0.5;
 
     ctx.save();
+    ctx.lineCap = 'round';
+
     for (let r = minRow; r <= maxRow; r++) {
       for (let c = minCol; c <= maxCol; c++) {
-        const wc = ((c % maxCols) + maxCols) % maxCols;
-        const wear = this.cells.get(`${wc}:${r}`);
-        if (!wear || wear < 0.08) continue;
+        const wrappedC = ((c % totalCols) + totalCols) % totalCols;
+        const wear = this.cells.get(`${wrappedC}:${r}`);
+        if (!wear || wear < 0.14) continue;
 
-        const wx = wrapDX(cam.x, wrapX((wc + 0.5) * this.cellSize));
+        const wx = (c + 0.5) * this.cellSize - cam.x;
         const wy = (r + 0.5) * this.cellSize - cam.y;
 
-        if (wear >= 0.72) {
-          ctx.fillStyle = `rgba(128, 122, 114, ${Math.min(0.82, wear * 0.85)})`;
-        } else {
-          ctx.fillStyle = `rgba(139, 108, 76, ${Math.min(0.68, wear * 0.85)})`;
+        const neighbors = [
+          [1, 0],
+          [0, 1],
+          [1, 1],
+          [-1, 1],
+        ];
+        for (const [dc, dr] of neighbors) {
+          const nc = (((c + dc) % totalCols) + totalCols) % totalCols;
+          const nw = this.cells.get(`${nc}:${r + dr}`);
+          if (nw && nw >= 0.14) {
+            const avg = (wear + nw) * 0.5;
+            ctx.strokeStyle =
+              avg > 0.72
+                ? `rgba(122, 114, 104, ${(avg * 0.28).toFixed(3)})`
+                : `rgba(139, 108, 74, ${(avg * 0.25).toFixed(3)})`;
+            ctx.lineWidth = this.cellSize * (0.72 + avg * 0.35);
+            ctx.beginPath();
+            ctx.moveTo(wx, wy);
+            ctx.lineTo(wx + dc * this.cellSize, wy + dr * this.cellSize);
+            ctx.stroke();
+          }
         }
-        ctx.beginPath();
-        ctx.arc(wx, wy, this.cellSize * (0.35 + wear * 0.25), 0, Math.PI * 2);
-        ctx.fill();
       }
     }
+
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        const wrappedC = ((c % totalCols) + totalCols) % totalCols;
+        const wear = this.cells.get(`${wrappedC}:${r}`);
+        if (!wear || wear < 0.10) continue;
+
+        const wx = (c + 0.5) * this.cellSize - cam.x;
+        const wy = (r + 0.5) * this.cellSize - cam.y;
+
+        ctx.globalAlpha = Math.min(0.85, wear * 0.9);
+        const stamp = wear > 0.72 ? cobbleStamp : dirtStamp;
+        ctx.drawImage(stamp, wx - stampHalf, wy - stampHalf);
+      }
+    }
+
     ctx.restore();
   }
 }
@@ -1016,10 +1615,6 @@ export class PlanetaryFootpathOverlay {
  * 4. ONE-LINE INSTALLER FOR PrehistoricPlanetaryGame
  * ========================================================================== */
 
-/**
- * Call `installIsometricGraphicsUpgrade(PrehistoricPlanetaryGame)` in `src/main.js`
- * right before `new PrehistoricPlanetaryGame(...)` (or pass the `window.game` instance).
- */
 export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   const proto =
     typeof targetClassOrInstance === 'function'
@@ -1041,12 +1636,54 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     };
   }
 
-  // 2. Hook into renderContinentsAndRiver to draw worn footpaths over terrain
+  // 2. Hook into renderContinentsAndRiver to draw smooth footpaths, 2.5D bridges, and 2.5D War Galleys
   const origRenderTerrain = proto.renderContinentsAndRiver;
   if (typeof origRenderTerrain === 'function') {
     proto.renderContinentsAndRiver = function (ctx, invTilt) {
-      origRenderTerrain.call(this, ctx, invTilt);
+      // Temporarily stash warGalleys so the base renderer doesn't draw flat brown trapezoids under our 2.5D galleys
+      const savedGalleys = this.warGalleys;
+      this.warGalleys = [];
+      try {
+        origRenderTerrain.call(this, ctx, invTilt);
+      } finally {
+        this.warGalleys = savedGalleys;
+      }
+
+      // Draw blended footpath trails
       footpaths.drawVisiblePaths(ctx, this.cam, this.canvas.width, this.canvas.height);
+
+      const viewHalfW = (this.canvas.width * 0.65) / this.cam.zoom;
+      const rY = RIVER_Y - this.cam.y;
+      const timeSec = this.time || 0;
+
+      // Draw 2.5D arched timber & stone bridges over the flat placeholder rectangles
+      if (Array.isArray(this.stoneBridges)) {
+        for (const br of this.stoneBridges) {
+          const bx = wrapDX(this.cam.x, br.x);
+          if (Math.abs(bx) <= viewHalfW + 120) {
+            envBank.drawIsometricBridge(ctx, bx, rY, invTilt, timeSec);
+          }
+        }
+      }
+
+      // Draw 2.5D Dragon-Fire War Galleys with billowing sails, oars, and water wakes
+      if (Array.isArray(this.warGalleys)) {
+        for (const g of this.warGalleys) {
+          const gx = wrapDX(this.cam.x, g.x);
+          if (Math.abs(gx) <= viewHalfW + 120) {
+            const gy = g.y - this.cam.y;
+            envBank.drawIsometricWarGalley(
+              ctx,
+              g,
+              gx,
+              gy,
+              invTilt,
+              timeSec,
+              this.showFloatingBadges !== false
+            );
+          }
+        }
+      }
     };
   }
 
@@ -1106,7 +1743,7 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
         ctx.lineWidth = 1.6;
         ctx.setLineDash([4, 3]);
         ctx.beginPath();
-        ctx.arc(0, -16, 17 + Math.sin((this.time || 0) * 4 + (unit.id || 0)) * 2, (this.time || 0) * 2, (this.time || 0) * 2 + Math.PI * 2);
+        ctx.arc(0, -16, 17 + Math.sin((this.time || 0) * 4 + (unit.id || 0)) * 2, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
       }
@@ -1157,5 +1794,18 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   // 5. Replace trees & ore nodes with shaded isometric trees and boulders
   proto.drawResourceNode = function (ctx, node, dx, sy, invTilt) {
     envBank.drawGameResourceNode(ctx, node, dx, sy, invTilt, this.time || 0);
+  };
+
+  // 6. Replace flat brown boxes on Siege Engines (Trebuchets & Mammoth Battering Rams)
+  proto.drawSiegeEngine = function (ctx, s, sx, sy, invTilt) {
+    envBank.drawGameSiegeEngine(
+      ctx,
+      s,
+      sx,
+      sy,
+      invTilt,
+      this.time || 0,
+      this.showFloatingBadges !== false
+    );
   };
 }
