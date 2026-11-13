@@ -720,9 +720,10 @@ export const uiMethods = {
             <div class="stone-panel p-2 rounded-lg border border-stone-600 flex flex-col justify-between gap-1">
                 <div class="font-bold text-amber-200 flex items-center justify-between">
                     <span>${ai.icon} ${ai.name}</span>
-                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-stone-800 text-cyan-200">${ai.stance.toUpperCase()}</span>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-stone-800 ${ai.stance === 'hostile' ? 'text-rose-300' : (ai.stance === 'allied' ? 'text-emerald-300' : 'text-cyan-200')}">${ai.stance.toUpperCase()} (${ai.relationScore ?? 0})</span>
                 </div>
-                <div class="text-[9px] text-stone-300">${ai.tribe} • Gold: ${ai.gold}🪙</div>
+                <div class="text-[9px] text-stone-300">${ai.tribe} • Age ${(ai.ageLevel || 1) + 1} • ${ai.gold}🪙</div>
+                <div class="text-[9px] text-amber-200/80 italic">${ai.diplomacyReason || ai.warGoal || 'Developing'}</div>
                 <div class="flex items-center gap-1 mt-1">
                     <button onclick="game.spectateAICapital(${ai.id})" class="stone-btn px-1.5 py-0.5 rounded text-[9px] text-amber-200 flex-1">📷 View</button>
                     <button onclick="game.allyAIPlayer(${ai.id})" class="wood-btn px-1.5 py-0.5 rounded text-[9px] text-emerald-200 flex-1">🤝 Ally (45🪙)</button>
@@ -743,13 +744,17 @@ export const uiMethods = {
 
     allyAIPlayer(aiId) {
         const ai = this.aiPlayers.find(a => a.id === aiId);
-        if (!ai) return;
+        if (!ai || ai.fallen) return;
         if (this.resources.gold < 45) {
             this.showBanner('⚠️', 'Need 45🪙 Imperial Gold to send an Alliance Tribute!');
             return;
         }
         this.resources.gold -= 45;
+        ai.relationScore = Math.min(100, (ai.relationScore ?? 0) + 55);
         ai.stance = 'allied';
+        ai.diplomacyReason = 'Accepted Imperial Alliance Tribute';
+        ai.warGoal = 'Joint Pact';
+        this.addChronicle('empires', `Alliance with ${ai.tribe}`, `${ai.name} of ${ai.tribe} accepted 45🪙 tribute and allied with Aethelgard in Year ${this.worldYear}.`);
         this.updateHUD();
         this.renderDiplomacyPanel();
         this.showBanner('🤝', `${ai.name} (${ai.tribe}) is now Allied with your Empire!`);
@@ -757,12 +762,15 @@ export const uiMethods = {
 
     subjugateAIPlayer(aiId) {
         const ai = this.aiPlayers.find(a => a.id === aiId);
-        const hero = this.villagers.find(v => v.isT101s);
-        if (!ai || !hero) return;
+        const hero = this.requireRingBearer('One Ring Subjugation');
+        if (!ai || !hero || ai.fallen) return;
         this.executeTeleportJump(hero, ai.x - 45, ai.y + 20, '💍 ONE RING SUBJUGATION!');
         ai.stance = 'vassal';
+        ai.relationScore = 100;
+        ai.diplomacyReason = 'Ring-Sworn Vassal';
+        this.addChronicle('empires', `${ai.tribe} Subjugated`, `${hero.name} wielded the One Ring to bind ${ai.name}'s ${ai.tribe} as a Ring-Sworn Vassal in Year ${this.worldYear}.`);
         this.renderDiplomacyPanel();
-        this.showBanner('💍', `t101s subjugated ${ai.name} as a Ring-Sworn Vassal paying continuous Gold Tribute!`);
+        this.showBanner('💍', `${hero.name} subjugated ${ai.name} as a Ring-Sworn Vassal paying continuous Gold Tribute!`);
     },
 
     toggleTechForgePanel() {

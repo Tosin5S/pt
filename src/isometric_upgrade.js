@@ -3012,6 +3012,7 @@ export class PlanetaryFootpathOverlay {
     const minRow = Math.floor((cam.y - halfH) / this.cellSize);
     const maxRow = Math.ceil((cam.y + halfH) / this.cellSize);
     const totalCols = Math.ceil(WORLD_W / this.cellSize);
+    if (typeof Path2D === 'undefined') return;
 
     const dirtPath = new Path2D();
     const cobblePath = new Path2D();

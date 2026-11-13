@@ -490,6 +490,9 @@ export class PrehistoricPlanetaryGame {
                 tributeTimer: 12,
                 devTimer: 9 + ai.cont * 2,
                 crusadeTimer: 16 + ai.cont * 3,
+                diplomacyTimer: 18 + ai.cont * 3,
+                relationScore: ai.stance === 'allied' ? 55 : (ai.stance === 'hostile' ? -60 : 5),
+                diplomacyReason: ai.stance === 'allied' ? 'Ancient Pact' : (ai.stance === 'hostile' ? 'Covets the One Ring' : 'Cautious Independence'),
                 warGoal: ai.stance === 'hostile' ? 'Seize the One Ring' : 'Develop Realm',
                 fallen: false
             });
@@ -2456,22 +2459,31 @@ export class PrehistoricPlanetaryGame {
                     const dx = wrapDX(e.x, nearest.x);
                     const dy = nearest.y - e.y;
                     e.facing = dx >= 0 ? 1 : -1;
-                    if (bestD > 34) {
-                        const spd = ((e.hasOneRing ? 145 : (e.speed || 85))) * enemyTimeScale;
+                    const eRange = e.fightingStyle === 'archery' ? 230 : (e.bender ? 105 : 34);
+                    if (bestD > eRange) {
+                        const spd = ((e.hasOneRing ? 145 : (e.speed || 85))) * enemyTimeScale * eTerrMult;
                         e.x = wrapX(e.x + (dx / bestD) * spd * dt);
                         e.y = Math.max(1320, Math.min(WORLD_H - 160, e.y + (dy / bestD) * spd * dt));
                     } else if ((e.attackCooldown || 0) <= 0) {
-                        e.attackCooldown = e.hasOneRing ? 0.65 : 1.1;
+                        e.attackCooldown = e.hasOneRing ? 0.65 : (e.fightingStyle === 'archery' ? 1.4 : 1.1);
                         const edmg = e.attack || 12;
-                        if (!nearest.invincible) {
-                            nearest.hp -= edmg;
-                            nearest.hitFlash = 0.18;
-                            if (nearest.hp <= 0) {
-                                e.kills = (e.kills || 0) + 1;
-                                this.handleUnitDeath(nearest, `Slain by ${e.name}`, e, false);
+                        if (e.fightingStyle === 'archery') {
+                            this.spawnParabolicArrow(e, nearest.x, nearest.y, 'broadhead', nearest);
+                        } else {
+                            if (e.bender) {
+                                const bColor = e.bender === 'fire' ? '#f97316' : (e.bender === 'water' ? '#38bdf8' : (e.bender === 'earth' ? '#a3e635' : '#e2e8f0'));
+                                this.parryRings.push({ x: nearest.x, y: nearest.y, radius: 8, maxRadius: 48, color: bColor, life: 0.3 });
                             }
+                            if (!nearest.invincible) {
+                                nearest.hp -= edmg;
+                                nearest.hitFlash = 0.18;
+                                if (nearest.hp <= 0) {
+                                    e.kills = (e.kills || 0) + 1;
+                                    this.handleUnitDeath(nearest, `Slain by ${e.name}`, e, false);
+                                }
+                            }
+                            this.applyKnockback(nearest, e.x, e.y, e.isBoss || e.hasOneRing ? 220 : 120);
                         }
-                        this.applyKnockback(nearest, e.x, e.y, e.isBoss || e.hasOneRing ? 220 : 120);
                     }
                 }
             }
@@ -2617,28 +2629,85 @@ export class PrehistoricPlanetaryGame {
                 }
             }
 
-            // Launch Ring-Crusade Expedition toward the One Ring!
+            // Dynamic Diplomacy Shifts Driven by the One Ring, Taxes & Realm Ambition
+            if (ai.stance !== 'vassal') {
+                ai.diplomacyTimer = (ai.diplomacyTimer ?? 20) - dt;
+                if (ai.diplomacyTimer <= 0) {
+                    ai.diplomacyTimer = 20 + Math.random() * 8;
+                    let delta = 0;
+                    let reason = ai.diplomacyReason || 'Border Politics';
+                    const friendlyBearer = this.getFriendlyRingBearer();
+                    if (this.oneRing.dropped) {
+                        delta -= 14;
+                        reason = 'Covets the unclaimed One Ring';
+                    } else if (friendlyBearer) {
+                        delta -= (this.villagers.length > 105 || this.ageLevel >= 2) ? 14 : 8;
+                        reason = 'Envious of Aethelgard’s One Ring';
+                    }
+                    if (this.taxRate <= 0.15) {
+                        delta += 10;
+                        if (delta > 0) reason = 'Welcoming trade & low Imperial taxes';
+                    } else if (this.taxRate >= 0.40) {
+                        delta -= 12;
+                        reason = 'Resents harsh Imperial taxation';
+                    }
+                    if ((ai.gold || 0) >= 380 && (ai.ageLevel || 1) >= 2) {
+                        delta -= 8;
+                    } else if ((ai.gold || 0) < 150) {
+                        delta += 10;
+                        if (delta > 0) reason = 'Seeking peace to rebuild realm';
+                    }
+
+                    ai.relationScore = Math.max(-100, Math.min(100, (ai.relationScore ?? 0) + delta));
+                    ai.diplomacyReason = reason;
+                    const oldStance = ai.stance;
+                    const newStance = ai.relationScore >= 40 ? 'allied' : (ai.relationScore <= -25 ? 'hostile' : 'neutral');
+                    if (newStance !== oldStance) {
+                        ai.stance = newStance;
+                        ai.warGoal = newStance === 'hostile' ? 'Seize the One Ring' : (newStance === 'allied' ? 'Joint Pact' : 'Develop Realm');
+                        this.addChronicle('empires', `${ai.tribe}: ${oldStance.toUpperCase()} → ${newStance.toUpperCase()}`, `In Year ${this.worldYear}, ${ai.name}'s ${ai.tribe} shifted from ${oldStance} to ${newStance} (${reason}).`);
+                        this.showBanner(ai.icon || '📜', `Diplomacy Shift: ${ai.tribe} is now ${newStance.toUpperCase()} (${reason})!`);
+                        this.renderDiplomacyPanel();
+                    }
+                }
+            }
+
+            // Launch Coordinated War-Army (Vanguard + Skilled Benders + Archers + War-Captain) to Seize the One Ring!
             ai.crusadeTimer = (ai.crusadeTimer ?? 20) - dt;
             if (ai.crusadeTimer <= 0) {
-                ai.crusadeTimer = 24 + Math.random() * 8;
-                if (ai.stance === 'hostile' && this.enemies.length < 46) {
+                ai.crusadeTimer = 28 + Math.random() * 10;
+                if (ai.stance === 'hostile' && this.enemies.length < 85 && (ai.gold || 0) >= 90) {
                     const targetRing = this.getRingBearer() || (this.oneRing.dropped ? this.oneRing : null);
                     if (targetRing) {
-                        for (let k = 0; k < 2; k++) {
-                            const crusader = this.createEnemyRaider(
-                                ai.x + (k - 0.5) * 45,
-                                ai.y + 70,
-                                `${ai.tribe.split(' ')[0]} Ring-Crusader`,
+                        const armySize = Math.min(11, 5 + (ai.ageLevel || 1) * 2);
+                        ai.gold -= 80;
+                        const shortName = ai.tribe.split(' ')[0];
+                        const roles = ['phalanx', 'juggernaut', 'kungfu', 'archery', 'berserker'];
+                        const elements = ['fire', 'water', 'earth', 'air'];
+                        for (let k = 0; k < armySize; k++) {
+                            const isCaptain = k === 0;
+                            const role = isCaptain ? 'juggernaut' : roles[k % roles.length];
+                            const elem = (k % 2 === 1 || isCaptain) ? elements[k % elements.length] : null;
+                            const title = isCaptain ? `${shortName} War-Captain` : (elem ? `${shortName} ${elem.toUpperCase()}-Bender` : `${shortName} ${role}`);
+                            const soldier = this.createEnemyRaider(
+                                ai.x + ((k % 4) - 1.5) * 32,
+                                ai.y + 65 + Math.floor(k / 4) * 26,
+                                title,
                                 false,
                                 ai.id
                             );
-                            crusader.ringCrusader = true;
-                            crusader.speed = 112;
-                            crusader.attack += (ai.ageLevel || 1) * 7;
-                            crusader.maxHp += (ai.ageLevel || 1) * 70;
-                            crusader.hp = crusader.maxHp;
-                            this.enemies.push(crusader);
+                            soldier.fightingStyle = role;
+                            soldier.bender = elem;
+                            if (elem === 'water') soldier.canSwim = true;
+                            soldier.ringCrusader = true;
+                            soldier.speed = role === 'phalanx' || role === 'juggernaut' ? 96 : 114;
+                            soldier.attack += (ai.ageLevel || 1) * 7 + (isCaptain ? 14 : 0);
+                            soldier.maxHp += (ai.ageLevel || 1) * 75 + (isCaptain ? 220 : 0);
+                            soldier.hp = soldier.maxHp;
+                            this.enemies.push(soldier);
                         }
+                        this.addChronicle('empires', `${ai.tribe} Launches ${armySize}-Warrior Ring-Army!`, `${ai.name} mustered ${armySize} skilled benders, phalanx & archers in Year ${this.worldYear} to seize the One Ring!`);
+                        this.showBanner('⚔️', `${ai.tribe} mustered a ${armySize}-warrior War-Army (Benders & Archers) for the One Ring!`);
                     }
                 }
             }
