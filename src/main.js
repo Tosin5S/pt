@@ -1,5 +1,8 @@
 import { CONTINENTS } from './constants.js';
 import { PrehistoricPlanetaryGame } from './simulation.js';
+import { installIsometricGraphicsUpgrade } from './isometric_upgrade.js';
+
+installIsometricGraphicsUpgrade(PrehistoricPlanetaryGame);
 
 let game = null;
 window.addEventListener('load', () => {
