@@ -40,14 +40,14 @@ export const rendererMethods = {
             const cont = CONTINENTS[c];
             const center = (cont.xStart + cont.xEnd) * 0.5;
             const dx = wrapDX(this.cam.x, center);
-            if (Math.abs(dx) > viewHalfW + 1750) continue;
+            if (Math.abs(dx) > viewHalfW + 5000) continue;
     
             const drawX = dx - (cont.xEnd - cont.xStart) * 0.5;
             const cw = cont.xEnd - cont.xStart;
             const topY = 1200 - this.cam.y;
     
             ctx.fillStyle = cont.grass;
-            ctx.fillRect(drawX, topY, cw, 3600);
+            ctx.fillRect(drawX, topY, cw, 8400);
     
             // Highland plateau + striated 2.5D cliff face + drop shadow
             ctx.fillStyle = cont.color;
@@ -74,7 +74,7 @@ export const rendererMethods = {
             ctx.save();
             ctx.globalAlpha = 0.45;
             ctx.fillStyle = seamGrad;
-            ctx.fillRect(drawX + cw - 90, 1714 - this.cam.y, 180, 3086);
+            ctx.fillRect(drawX + cw - 90, 1714 - this.cam.y, 180, 7886);
             ctx.restore();
     
             // Procedural biome ground details (culled by zoom & viewport)
@@ -85,10 +85,12 @@ export const rendererMethods = {
                     : cont.biome === 'coral' ? 'rgba(103, 232, 249, 0.28)'
                     : 'rgba(134, 239, 172, 0.25)';
                 ctx.fillStyle = detailColor;
-                for (let i = 0; i < 42; i++) {
-                    const gx = drawX + ((i * 293 + c * 137) % (cw - 60)) + 30;
+                const viewHalfH = (this.canvas.height * 0.65) / (this.cam.zoom * this.cam.tiltScale);
+                for (let i = 0; i < 90; i++) {
+                    const gx = drawX + ((i * 397 + c * 137) % (cw - 60)) + 30;
                     if (Math.abs(gx) > viewHalfW + 80) continue;
-                    const gy = 1750 + ((i * 197 + c * 89) % 2650);
+                    const gy = 1750 + ((i * 271 + c * 89) % 7400);
+                    if (Math.abs(gy - this.cam.y) > viewHalfH + 60) continue;
                     if (Math.abs(gy - RIVER_Y) < 85) continue;
                     const sy = gy - this.cam.y;
                     if (cont.biome === 'volcanic') {
@@ -1263,7 +1265,7 @@ export const rendererMethods = {
         if (hero) {
             mctx.fillStyle = '#fde047';
             mctx.beginPath();
-            mctx.arc((hero.x / WORLD_W) * mw, ((hero.y - 1200) / 3400) * mh, 3.5, 0, Math.PI * 2);
+            mctx.arc((hero.x / WORLD_W) * mw, ((hero.y - 1200) / 8200) * mh, 3.5, 0, Math.PI * 2);
             mctx.fill();
         }
     
