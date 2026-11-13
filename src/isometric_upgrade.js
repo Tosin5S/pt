@@ -1,36 +1,47 @@
 /**
- * Drop-in Isometric Graphics, Earth Biome & Footpath Upgrade for https://github.com/Tosin5S/pt
- * --------------------------------------------------------------------------------------------
+ * Drop-in Isometric Graphics, Earth Biome, Combat, Bending & Sovereign Powers Engine
+ * for https://github.com/Tosin5S/pt
+ * ----------------------------------------------------------------------------------
  * File target in your repo: src/isometric_upgrade.js
  *
- * Updates in this version:
- * 1. Earth 71% Ocean / 29% Land Biome & 24% Mountain Renderer:
- *    - Upgrades the blocky 240px `ctx.fillRect` squares from `getEarthTerrainAt(wx, wy)`
- *      into organic, feathered isometric terrain biomes:
- *        * Oceans & Seas (~71%): Deep ocean basins, turquoise coastal shallows, and
- *          animated white shoreline surf foam where ocean meets land.
- *        * Forests & Woodlands (~31% of land / ~9.0% of Earth): Rich forest floor canopy
- *          shading, fern clusters, and fallen timber details.
- *        * Grasslands & Savannas (~26% of land / ~7.5% of Earth): Golden-olive steppe
- *          swaths and wind-swept prairie grass tufts.
- *        * Deserts & Barren Land (~19% of land / ~5.5% of Earth): Rippled windblown sand
- *          dunes, arid sandstone mesas, and salt-flat shimmer.
- *        * Agricultural & Urban (~14% of land / ~4.1% of Earth): Hedgerow-bordered
- *          plowed golden cropland furrows and cobblestone civic plazas.
- *        * Ice, Glaciers & Tundra (~10% of land / ~2.9% of Earth): Permafrost snowfields,
- *          glacial crevasse lines, and ice crystal highlights.
- *        * Mountainous Terrain (~24% of land overlapping all biomes): Replaces flat
- *          triangles with 3D multi-faceted isometric mountain peaks (sunlit left slope,
- *          shaded right slope, ridge line, and biome-matched snow/forest/volcanic caps).
- * 2. 3D Planetary Globe Upgrade (`render3DPlanetaryGlobe`):
- *    - Renders the 71% Ocean / 29% Land breakdown with multi-biome continental bands
- *      (Forest, Savanna, Desert, Agricultural, Polar Ice Caps, and 24% Mountain ridges)
- *      plus an on-screen Earth Surface Breakdown HUD legend on the 3D Globe view.
- * 3. Constant-Alpha Offscreen Footpath Compositor:
- *    - Eliminates overlapping grey disc artifacts by compositing connected trails on an
- *      offscreen layer at 1.0 alpha, then blitting once at constant 0.42 opacity.
- * 4. Preserves 2.5D Bridges, 2.5D Dragon-Fire War Galleys, 2.5D Siege Engines, and all
- *    custom unit/building hooks.
+ * New in this version — High-End Fighting, Elemental Bending & God Powers Animations:
+ * 1. Fighting Style Weapons & Martial Poses (`unit.fightingStyle` & `unit.kataTimer`):
+ *    - Renders distinct isometric weapons in your offscreen unit atlases and live overlays:
+ *      * `onering`: Glowing Crimson-Gold Sovereign Greatblade + Golden One Ring Halo
+ *      * `berserker`: Dual Twin-Fang Curved Daggers + Crimson Frenzy Slash Arcs
+ *      * `phalanx`: Round Bronze Hoplite Shield + Long Thrusting Spear
+ *      * `kungfu`: Martial Arts Headband + Golden Chi Fist Aura
+ *      * `archery`: Recurve Composite Bow + Quiver
+ *      * `juggernaut`: Two-Handed Mammoth-Maul War Hammer + Ground Shockwaves
+ *    - `unit.kataTimer > 0`: 360-degree airborne spin-kick & weapon kata with golden dragon
+ *      spiral ribbons and shockwave dust rings.
+ * 2. Elemental & Sub-Elemental Bending (`unit.bender` & `unit.subElement`):
+ *    - `fire`: Orbiting flame wisps, blazing fire-whip arcs, and crackling Blue Lightning
+ *      (`subElement`) forks between hands and targets.
+ *    - `water`: Flowing 3D water-ribbon torus, surfing wave crest (`waterBendingSurf`),
+ *      and hexagonal Cryo-Prison ice crystals (`subElement`).
+ *    - `earth`: Levitating orbiting boulder satellites, seismic ground cracks, and glowing
+ *      molten Lavabending magma fissures (`subElement`).
+ *    - `air`: Swirling wind-sphere scooter/vortex at feet, high-velocity air-blade crescents,
+ *      and expanding Sonic-Boom shock cones (`subElement`).
+ *    - `avatar`: Full Avatar State 4-elemental gyroscope rings (Fire, Water, Earth, Air)
+ *      orbiting at tilted 3D angles + glowing cosmic eye/crown aura.
+ * 3. Sovereign God Powers (`renderCombatAndArrowVFX` & Unit Overlays):
+ *    - Hero `isT101s` & `isWraith`: Now get full 2.5D shaded sovereign armor, flowing cape,
+ *      and spectral Fellbeast wings (for Ring-Wraiths & `skySoar`) instead of falling back
+ *      to plain stick figures.
+ *    - `isShadowClone`: Translucent violet-cyan illusion shimmer + clone dissipation runes.
+ *    - `invincible`: Rotating golden sacred geometry hexagonal barrier dome.
+ *    - `lightningSpeed`: Crackling electric bio-aura + speed-line afterimage streaks.
+ *    - `globalTimeSlowTimer > 0`: Chronos golden clockwork dome & time-dilation ripples.
+ *    - `bloodbendTarget` / `bloodbendActive`: Crimson puppet marionette tendrils linking
+ *      caster fingers to target limbs with pulsing blood-moon sigils.
+ *    - `blackHoles`: Multi-layered relativistic accretion disk, gravitational lensing halo,
+ *      and inward-spiraling matter streams.
+ *    - `fallingMeteors`: Blazing atmospheric-entry plasma core, twin smoke/ember contrails,
+ *      and expanding magma crater target reticle on the ground.
+ *    - `slashRibbons`, `projectiles`, `parryRings`, `clashSparks`: Multi-layered tapered
+ *      katana/elemental ribbons, directional sparks, and feathered 3D projectiles.
  */
 
 import {
@@ -65,7 +76,7 @@ function hash2D(x, y) {
 }
 
 /* ============================================================================
- * 1. VILLAGER & ENEMY OFFSCREEN SPRITE BANK
+ * 1. VILLAGER, HERO & WARRIOR OFFSCREEN SPRITE BANK
  * ========================================================================== */
 
 const UNIT_STATES = {
@@ -73,12 +84,13 @@ const UNIT_STATES = {
   walk: { frames: 8, fps: 12 },
   chop: { frames: 6, fps: 10 },
   build: { frames: 6, fps: 11 },
-  attack: { frames: 6, fps: 12 },
+  attack: { frames: 6, fps: 14 },
 };
 
 const DIRECTIONS = ['SE', 'SW', 'NE', 'NW'];
 
-function mapUnitStateToAnim(rawState, vx, vy) {
+function mapUnitStateToAnim(rawState, vx, vy, swingAnim = 0) {
+  if ((swingAnim || 0) > 0.05) return 'attack';
   switch (rawState) {
     case 'chop':
     case 'gather':
@@ -366,6 +378,356 @@ function drawCarriedResource(ctx, x, y, carryItem, facingRight) {
   ctx.restore();
 }
 
+/**
+ * Renders fighting-style specific weapons, shields, capes, wings, martial kata,
+ * elemental bending rings, and sovereign god-power auras around a unit.
+ */
+function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
+  const f = facingRight ? 1 : -1;
+  const phase = gameTime * 4.5 + (unit.id || 0) * 0.9;
+  const swing = unit.swingAnim || 0;
+  const kata = unit.kataTimer || 0;
+
+  // 1. Sovereign Hero / Ring-Wraith Flowing Cape & Fellbeast Wings
+  if (unit.isT101s || unit.isWraith || unit.skySoar) {
+    const flap = Math.sin(gameTime * 7 + (unit.id || 0)) * 5;
+    if (unit.isWraith || unit.skySoar) {
+      // Spectral Fellbeast / Sky-Soar Wings
+      ctx.save();
+      ctx.fillStyle = unit.isWraith ? 'rgba(30, 27, 75, 0.78)' : 'rgba(251, 191, 36, 0.38)';
+      ctx.strokeStyle = unit.isWraith ? '#818cf8' : '#fde047';
+      ctx.lineWidth = 1.3;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(0, -22 * scale);
+        ctx.quadraticCurveTo(
+          side * 22 * scale,
+          (-38 + flap) * scale,
+          side * 30 * scale,
+          (-18 + flap * 1.3) * scale
+        );
+        ctx.quadraticCurveTo(side * 16 * scale, -14 * scale, 0, -14 * scale);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (unit.isT101s) {
+      // Royal Sovereign Crimson-Gold Cape + Crown
+      const capeWave = Math.sin(gameTime * 6) * 3;
+      ctx.fillStyle = '#991b1b';
+      ctx.beginPath();
+      ctx.moveTo(-4 * f * scale, -24 * scale);
+      ctx.lineTo(-14 * f * scale, (-6 + capeWave) * scale);
+      ctx.lineTo(-4 * f * scale, -7 * scale);
+      ctx.closePath();
+      ctx.fill();
+
+      // Golden Sovereign Crown
+      ctx.fillStyle = '#fbbf24';
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(-5 * scale, -34 * scale);
+      ctx.lineTo(-4 * scale, -39 * scale);
+      ctx.lineTo(0, -36 * scale);
+      ctx.lineTo(0, -40 * scale);
+      ctx.lineTo(4 * scale, -39 * scale);
+      ctx.lineTo(5 * scale, -34 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // 2. Fighting Style Weapons (`unit.fightingStyle`)
+  const style = unit.fightingStyle;
+  if (style === 'phalanx') {
+    // Hoplite Bronze Round Shield + Long Thrusting Spear
+    const thrust = swing > 0.05 ? Math.sin(swing * Math.PI) * 10 * f : 0;
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-8 * f + thrust, -16);
+    ctx.lineTo(20 * f + thrust, -20);
+    ctx.stroke();
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.beginPath();
+    ctx.moveTo(20 * f + thrust, -22);
+    ctx.lineTo(26 * f + thrust, -20);
+    ctx.lineTo(20 * f + thrust, -18);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#d97706';
+    ctx.strokeStyle = '#fef08a';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(5 * f, -14, 5.5, 7.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (style === 'archery') {
+    // Recurve Composite Bow
+    ctx.strokeStyle = '#b45309';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(6 * f, -16, 9, f > 0 ? -1.1 : Math.PI - 1.1, f > 0 ? 1.1 : Math.PI + 1.1);
+    ctx.stroke();
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(6 * f, -24);
+    ctx.lineTo(6 * f, -8);
+    ctx.stroke();
+  } else if (style === 'juggernaut') {
+    // Mammoth-Maul Titan Great Hammer
+    const smash = swing > 0.05 ? Math.sin(swing * Math.PI) * 1.1 : -0.35;
+    ctx.save();
+    ctx.translate(6 * f, -16);
+    ctx.rotate(smash * f);
+    ctx.strokeStyle = '#5c2d0c';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(0, 4);
+    ctx.lineTo(0, -18);
+    ctx.stroke();
+    ctx.fillStyle = '#57534e';
+    ctx.strokeStyle = '#fb923c';
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(-6, -23, 12, 7);
+    ctx.strokeRect(-6, -23, 12, 7);
+    ctx.restore();
+  } else if (style === 'berserker') {
+    // Twin-Fang Crimson Daggers
+    ctx.strokeStyle = '#fb7185';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(7 * f, -14);
+    ctx.lineTo(15 * f, -21);
+    ctx.moveTo(-5 * f, -13);
+    ctx.lineTo(-12 * f, -19);
+    ctx.stroke();
+  } else if (style === 'onering' || unit.hasOneRing) {
+    // One Ring Golden Floating Halo & Sovereign Flame Blade
+    ctx.save();
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, -42 * scale, 8, 3.2, Math.sin(gameTime * 3) * 0.2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 3. Martial Kata 360-Degree Dragon Spiral (`unit.kataTimer > 0`)
+  if (kata > 0) {
+    ctx.save();
+    const kataSpin = gameTime * 16;
+    for (let k = 0; k < 2; k++) {
+      const a = kataSpin + k * Math.PI;
+      ctx.strokeStyle = k === 0 ? 'rgba(251, 191, 36, 0.88)' : 'rgba(56, 189, 248, 0.82)';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.arc(0, -18 * scale, 22 * scale, a, a + 1.9);
+      ctx.stroke();
+    }
+    // Expanding ground chi ring
+    const ringR = 14 + ((gameTime * 28) % 22);
+    ctx.strokeStyle = 'rgba(253, 224, 71, 0.55)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.ellipse(0, 2, ringR, ringR * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 4. Elemental & Sub-Elemental Bending Rings (`unit.bender` & `unit.subElement`)
+  const bender = unit.bender;
+  if (bender) {
+    ctx.save();
+    if (bender === 'fire') {
+      // Orbiting Fire Orbs + Blazing Flame Whip on swing
+      for (let i = 0; i < 3; i++) {
+        const a = phase + (i * Math.PI * 2) / 3;
+        const ox = Math.cos(a) * 16 * scale;
+        const oy = -16 * scale + Math.sin(a) * 7 * scale;
+        const grad = ctx.createRadialGradient(ox, oy, 0.5, ox, oy, 5.5);
+        grad.addColorStop(0, '#fef08a');
+        grad.addColorStop(0.5, '#f97316');
+        grad.addColorStop(1, 'rgba(220, 38, 38, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(ox, oy, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Sub-element: Blue Lightning arcs
+      if (unit.subElement || swing > 0.08) {
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        let lx = 6 * f;
+        let ly = -18 * scale;
+        ctx.moveTo(lx, ly);
+        for (let s = 0; s < 4; s++) {
+          lx += f * 6;
+          ly += (Math.sin(gameTime * 45 + s * 3) - 0.3) * 6;
+          ctx.lineTo(lx, ly);
+        }
+        ctx.stroke();
+      }
+    } else if (bender === 'water') {
+      // Flowing 3D Water Ribbon Torus
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.78)';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      for (let i = 0; i <= 16; i++) {
+        const t = (i / 16) * Math.PI * 2;
+        const wx = Math.cos(t + phase * 0.7) * 17 * scale;
+        const wy = -16 * scale + Math.sin(t * 2 + phase) * 6 * scale;
+        if (i === 0) ctx.moveTo(wx, wy);
+        else ctx.lineTo(wx, wy);
+      }
+      ctx.stroke();
+
+      // Cryo-Prison Ice Shards when subElement is active
+      if (unit.subElement) {
+        ctx.fillStyle = 'rgba(186, 230, 253, 0.85)';
+        for (let i = 0; i < 3; i++) {
+          const ia = -phase + (i * Math.PI * 2) / 3;
+          const ix = Math.cos(ia) * 19 * scale;
+          const iy = -18 * scale + Math.sin(ia) * 7 * scale;
+          ctx.beginPath();
+          ctx.moveTo(ix, iy - 5);
+          ctx.lineTo(ix + 3, iy);
+          ctx.lineTo(ix, iy + 5);
+          ctx.lineTo(ix - 3, iy);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    } else if (bender === 'earth') {
+      // Orbiting Levitating Boulder Satellites + Lavabending Magma Rim
+      for (let i = 0; i < 3; i++) {
+        const a = phase * 0.8 + (i * Math.PI * 2) / 3;
+        const rx = Math.cos(a) * 18 * scale;
+        const ry = -14 * scale + Math.sin(a) * 7 * scale;
+        ctx.fillStyle = '#78716c';
+        ctx.strokeStyle = unit.subElement ? '#f97316' : '#44403c';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(rx, ry, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    } else if (bender === 'air') {
+      // Swirling Wind-Scooter Vortex & Sonic Rings
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.75)';
+      ctx.lineWidth = 2;
+      for (let r = 0; r < 2; r++) {
+        const startA = phase * 1.6 + r * Math.PI;
+        ctx.beginPath();
+        ctx.ellipse(0, (-6 - r * 8) * scale, (14 + r * 4) * scale, 5 * scale, 0, startA, startA + 2.1);
+        ctx.stroke();
+      }
+    } else if (bender === 'avatar') {
+      // Full Avatar State 4-Elemental Gyroscope Rings (Fire, Water, Earth, Air)
+      const ringColors = ['#f97316', '#38bdf8', '#a3e635', '#f8fafc'];
+      for (let r = 0; r < 4; r++) {
+        ctx.save();
+        ctx.translate(0, -18 * scale);
+        ctx.rotate((r * Math.PI) / 4 + Math.sin(gameTime * 1.5 + r) * 0.35);
+        ctx.strokeStyle = ringColors[r];
+        ctx.lineWidth = 2.0;
+        const startA = (gameTime * (3.5 + r * 0.6)) % (Math.PI * 2);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 22 * scale, 7.5 * scale, 0, startA, startA + 4.4);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  // 5. Invincibility Sacred Geometry Hexagonal Dome (`unit.invincible`)
+  if (unit.invincible && !unit.isShadowClone) {
+    ctx.save();
+    const pulse = 0.45 + Math.sin(gameTime * 6) * 0.15;
+    ctx.strokeStyle = `rgba(250, 204, 21, ${pulse.toFixed(3)})`;
+    ctx.fillStyle = `rgba(250, 204, 21, ${(pulse * 0.18).toFixed(3)})`;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = gameTime * 1.5 + (i * Math.PI) / 3;
+      const hx = Math.cos(a) * 19 * scale;
+      const hy = -18 * scale + Math.sin(a) * 21 * scale;
+      if (i === 0) ctx.moveTo(hx, hy);
+      else ctx.lineTo(hx, hy);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 6. Lightning Speed Bio-Electric Crackles (`unit.lightningSpeed`)
+  if (unit.lightningSpeed) {
+    ctx.save();
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.4;
+    for (let b = 0; b < 2; b++) {
+      const seed = Math.floor(gameTime * 24) + b * 7 + (unit.id || 0);
+      const sx = (hash2D(seed, 1) - 0.5) * 18 * scale;
+      const sy = (-6 - hash2D(seed, 2) * 24) * scale;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + (hash2D(seed, 3) - 0.5) * 12, sy - 6);
+      ctx.lineTo(sx + (hash2D(seed, 4) - 0.5) * 12, sy - 12);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 7. Tapered Multi-Layered Weapon / Elemental Slash Arc (`unit.swingAnim > 0.05`)
+  if (swing > 0.05) {
+    ctx.save();
+    const swingColor =
+      bender === 'fire'
+        ? '#f97316'
+        : bender === 'water'
+        ? '#38bdf8'
+        : bender === 'earth'
+        ? '#a3e635'
+        : bender === 'avatar'
+        ? '#fde047'
+        : unit.isT101s
+        ? '#f43f5e'
+        : '#f8fafc';
+
+    ctx.globalAlpha = Math.min(1, swing * 1.6);
+    const arcCenterY = -16 * scale;
+    const startA = f > 0 ? -1.15 : Math.PI - 0.75;
+    const endA = f > 0 ? 0.75 : Math.PI + 1.15;
+
+    // Outer colored energy crescent
+    ctx.strokeStyle = swingColor;
+    ctx.lineWidth = 5.0 * scale;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(f * 7 * scale, arcCenterY, 17 * scale, startA, endA);
+    ctx.stroke();
+
+    // Inner white-hot blade core
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.0 * scale;
+    ctx.beginPath();
+    ctx.arc(f * 7 * scale, arcCenterY, 16.5 * scale, startA + 0.15, endA - 0.15);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 export class VillagerSpriteBank {
   constructor({ cellWidth = 48, cellHeight = 56 } = {}) {
     this.cellWidth = cellWidth;
@@ -426,65 +788,134 @@ export class VillagerSpriteBank {
   }
 
   drawGameUnit(ctx, unit, dx, sy, invTilt = 1, isEnemy = false, gameTime = 0, showBadges = true) {
-    const factionColor = isEnemy ? '#c93b2b' : unit.hasOneRing ? '#f59e0b' : unit.color || '#2e6fd9';
-    const animState = mapUnitStateToAnim(unit.state, unit.vx, unit.vy);
+    const factionColor = unit.isWraith
+      ? '#312e81'
+      : unit.isShadowClone
+      ? '#7c3aed'
+      : isEnemy
+      ? '#c93b2b'
+      : unit.isT101s
+      ? '#d97706'
+      : unit.color || unit.tribeColor || '#2e6fd9';
+
+    const animState = mapUnitStateToAnim(unit.state, unit.vx, unit.vy, unit.swingAnim);
     const dir = VillagerSpriteBank.vectorToDirection(unit.vx, unit.vy, unit._lastIsoDir || 'SE');
     unit._lastIsoDir = dir;
+    const facingRight = dir === 'SE' || dir === 'NE';
 
     const animTime = (unit.animTime ?? gameTime) + (unit.id || 0) * 0.17;
-    const scale = (unit.hasOneRing ? 1.28 : 1.0) * (unit.childScale || 1.0);
+    const baseScale = unit.isT101s ? 1.32 : unit.isWraith ? 1.22 : unit.childScale || 1.0;
     const cfg = UNIT_STATES[animState] || UNIT_STATES.idle;
     const frameIndex = Math.floor(animTime * cfg.fps) % cfg.frames;
     const row = this.rowIndex.get(`${animState}:${dir}`) ?? 0;
     const atlas = this.getAtlas(factionColor);
 
+    // Airborne elevation offset for Sky-Soar, Wraiths, and Martial Kata flips
+    const hoverOffset =
+      unit.skySoar || unit.isWraith
+        ? -18 + Math.sin(gameTime * 4 + (unit.id || 0)) * 4
+        : (unit.kataTimer || 0) > 0
+        ? -Math.abs(Math.sin(gameTime * 10)) * 16
+        : 0;
+
     ctx.save();
     ctx.translate(dx, sy);
     ctx.scale(1, invTilt);
 
+    // Shadow Clone translucent shimmer
+    if (unit.isShadowClone) {
+      ctx.globalAlpha = 0.68 + Math.sin(gameTime * 12 + (unit.id || 0)) * 0.15;
+    }
+
+    // Ground shadow stays on the ground even when levitating
+    if (hoverOffset < -2) {
+      ctx.fillStyle = 'rgba(10, 14, 18, 0.26)';
+      ctx.beginPath();
+      ctx.ellipse(0, 2, 12 * baseScale, 5 * baseScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.translate(0, hoverOffset);
+
+    // Sovereign Hero Golden Aura Ring
     if (unit.isT101s) {
       ctx.save();
-      ctx.strokeStyle = 'rgba(245, 158, 11, 0.75)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+      ctx.lineWidth = 2.2;
       ctx.beginPath();
-      ctx.ellipse(0, 0, 14, 6.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 1, 16, 7, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
 
-    const dw = this.cellWidth * scale;
-    const dh = this.cellHeight * scale;
-    ctx.drawImage(
-      atlas,
-      frameIndex * this.cellWidth,
-      row * this.cellHeight,
-      this.cellWidth,
-      this.cellHeight,
-      Math.round(-dw * 0.5),
-      Math.round(-dh + 8 * scale),
-      dw,
-      dh
-    );
+    // Controlled by One Ring puppet sigil
+    if (unit.controlledByRing) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(244, 63, 94, 0.85)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(0, 1, 14, 6, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    const dw = this.cellWidth * baseScale;
+    const dh = this.cellHeight * baseScale;
+
+    // Optional 360-degree Martial Kata flip rotation
+    if ((unit.kataTimer || 0) > 0) {
+      ctx.save();
+      ctx.translate(0, -dh * 0.45);
+      ctx.rotate(gameTime * 14 * (facingRight ? 1 : -1));
+      ctx.drawImage(
+        atlas,
+        frameIndex * this.cellWidth,
+        row * this.cellHeight,
+        this.cellWidth,
+        this.cellHeight,
+        Math.round(-dw * 0.5),
+        Math.round(-dh * 0.55 + 8 * baseScale),
+        dw,
+        dh
+      );
+      ctx.restore();
+    } else {
+      ctx.drawImage(
+        atlas,
+        frameIndex * this.cellWidth,
+        row * this.cellHeight,
+        this.cellWidth,
+        this.cellHeight,
+        Math.round(-dw * 0.5),
+        Math.round(-dh + 8 * baseScale),
+        dw,
+        dh
+      );
+    }
 
     if ((unit.carryAmount || 0) > 0 && unit.gatherType) {
-      drawCarriedResource(ctx, 0, 0, unit.gatherType, dir === 'SE' || dir === 'NE');
+      drawCarriedResource(ctx, 0, 0, unit.gatherType, facingRight);
     }
 
+    // Render Fighting Style weapons, Elemental Bending rings, Kata spirals & God Power auras
+    drawUnitCombatAndBendingFX(ctx, unit, facingRight, baseScale, gameTime);
+
+    // Health bar when damaged or hero
     if (unit.hp < unit.maxHp || unit.isT101s) {
       const hpRatio = Math.max(0, Math.min(1, (unit.hp || 1) / (unit.maxHp || 1)));
-      const bw = 24;
+      const bw = unit.isT101s ? 30 : 24;
       const by = -dh + 2;
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
-      ctx.fillRect(-bw * 0.5, by, bw, 4);
-      ctx.fillStyle = isEnemy ? '#ef4444' : '#22c55e';
-      ctx.fillRect(-bw * 0.5 + 0.5, by + 0.5, (bw - 1) * hpRatio, 3);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fillRect(-bw * 0.5, by, bw, 4.5);
+      ctx.fillStyle = isEnemy ? '#ef4444' : unit.isT101s ? '#fbbf24' : '#22c55e';
+      ctx.fillRect(-bw * 0.5 + 0.5, by + 0.5, (bw - 1) * hpRatio, 3.5);
     }
 
-    if (showBadges && unit.isT101s && unit.name) {
+    if (showBadges && (unit.isT101s || unit.isWraith) && unit.name) {
       ctx.font = 'bold 10px Inter, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#fde68a';
-      ctx.fillText(unit.name, 0, -dh - 4);
+      ctx.fillStyle = unit.isWraith ? '#c7d2fe' : '#fde68a';
+      ctx.fillText(unit.name, 0, -dh - 6);
     }
 
     ctx.restore();
@@ -492,7 +923,221 @@ export class VillagerSpriteBank {
 }
 
 /* ============================================================================
- * 2. EARTH SURFACE BIOME & 24% MOUNTAIN RENDERER (71% Ocean / 29% Land)
+ * 2. SOVEREIGN POWERS & COMBAT VFX OVERLAY (`renderCombatAndArrowVFX` Upgrade)
+ * ========================================================================== */
+
+export class CombatAndPowersVFXRenderer {
+  /**
+   * Renders high-end 2.5D visual effects for Black Holes, Falling Meteors,
+   * Slash Ribbons, Bloodbending Marionette Tendrils, One Ring Dominion Beams,
+   * and Global Time-Slow Chronos Domes.
+   */
+  drawEnhancedCombatVFX(ctx, game, invTilt = 1) {
+    const timeSec = game.time || 0;
+    const viewHalfW = (game.canvas.width * 0.65) / game.cam.zoom;
+    const hero = Array.isArray(game.villagers) ? game.villagers.find((u) => u.isT101s) : null;
+
+    // 1. Global Time-Slow Chronos Dome (`game.globalTimeSlowTimer > 0`)
+    if ((game.globalTimeSlowTimer || 0) > 0 && hero) {
+      const hx = wrapDX(game.cam.x, hero.x);
+      const hy = hero.y - game.cam.y;
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.scale(1, invTilt);
+
+      const domeR = 260 + Math.sin(timeSec * 3) * 10;
+      const grad = ctx.createRadialGradient(0, 0, domeR * 0.2, 0, 0, domeR);
+      grad.addColorStop(0, 'rgba(56, 189, 248, 0.0)');
+      grad.addColorStop(0.75, 'rgba(56, 189, 248, 0.10)');
+      grad.addColorStop(1, 'rgba(250, 204, 21, 0.32)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, domeR, domeR * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Rotating clockwork rune ticks around perimeter
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.55)';
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < 12; i++) {
+        const a = timeSec * 0.4 + (i * Math.PI) / 6;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * (domeR - 12), Math.sin(a) * (domeR - 12) * 0.6);
+        ctx.lineTo(Math.cos(a) * domeR, Math.sin(a) * domeR * 0.6);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 2. Bloodbending Crimson Marionette Strings (`hero.bloodbendTarget` or `game.bloodbendActive`)
+    if (hero && (hero.bloodbendTarget || game.bloodbendActive)) {
+      const hx = wrapDX(game.cam.x, hero.x);
+      const hy = hero.y - game.cam.y;
+      const targets = [];
+      if (hero.bloodbendTarget && typeof hero.bloodbendTarget === 'object') {
+        targets.push(hero.bloodbendTarget);
+      } else if (Array.isArray(game.enemies)) {
+        for (const e of game.enemies) {
+          if (Math.abs(wrapDX(hero.x, e.x)) < 260 && Math.abs(hero.y - e.y) < 220) {
+            targets.push(e);
+            if (targets.length >= 4) break;
+          }
+        }
+      }
+
+      ctx.save();
+      for (const t of targets) {
+        const tx = wrapDX(game.cam.x, t.x);
+        const ty = t.y - game.cam.y;
+        ctx.strokeStyle = 'rgba(225, 29, 72, 0.82)';
+        ctx.lineWidth = 1.8;
+        for (let strand = -1; strand <= 1; strand++) {
+          ctx.beginPath();
+          ctx.moveTo(hx, hy - 22 * invTilt);
+          ctx.quadraticCurveTo(
+            (hx + tx) * 0.5 + strand * 18,
+            Math.min(hy, ty) - (42 + Math.sin(timeSec * 8 + strand) * 8) * invTilt,
+            tx + strand * 5,
+            ty - 16 * invTilt
+          );
+          ctx.stroke();
+        }
+        // Crimson blood-moon sigil under puppeted target
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.75)';
+        ctx.beginPath();
+        ctx.ellipse(tx, ty, 16, 7 * invTilt, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 3. Relativistic Black Hole Singularity (`game.blackHoles`)
+    if (Array.isArray(game.blackHoles)) {
+      for (const bh of game.blackHoles) {
+        const bx = wrapDX(game.cam.x, bh.x);
+        if (Math.abs(bx) > viewHalfW + 180) continue;
+        const by = bh.y - game.cam.y;
+        const r = bh.radius || 52;
+
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.scale(1, invTilt);
+
+        // Outer gravitational lensing distortion halo
+        const halo = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, r * 1.65);
+        halo.addColorStop(0, 'rgba(0, 0, 0, 0.98)');
+        halo.addColorStop(0.38, 'rgba(88, 28, 135, 0.85)');
+        halo.addColorStop(0.68, 'rgba(217, 70, 239, 0.45)');
+        halo.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.65, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Swirling accretion disk spiral arms
+        for (let arm = 0; arm < 4; arm++) {
+          const startA = -timeSec * 5.5 + (arm * Math.PI) / 2;
+          ctx.strokeStyle = arm % 2 === 0 ? 'rgba(244, 114, 182, 0.78)' : 'rgba(56, 189, 248, 0.72)';
+          ctx.lineWidth = 2.6;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, r * 1.15, r * 0.58, 0.25, startA, startA + 1.85);
+          ctx.stroke();
+        }
+
+        // Event horizon pitch-black core + photon ring
+        ctx.fillStyle = '#020617';
+        ctx.strokeStyle = '#f0abfc';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
+
+    // 4. Prehistoric Asteroid / Falling Meteors (`game.fallingMeteors`)
+    if (Array.isArray(game.fallingMeteors)) {
+      for (const m of game.fallingMeteors) {
+        const tx = wrapDX(game.cam.x, m.targetX ?? m.x);
+        if (Math.abs(tx) > viewHalfW + 240) continue;
+        const ty = (m.targetY ?? m.y) - game.cam.y;
+        const prog = Math.max(0, Math.min(1, m.progress ?? 0.5));
+
+        ctx.save();
+        // Expanding magma target warning reticle on ground
+        ctx.strokeStyle = `rgba(249, 115, 22, ${(0.35 + prog * 0.55).toFixed(3)})`;
+        ctx.fillStyle = `rgba(220, 38, 38, ${(0.12 + prog * 0.22).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(tx, ty, 38 * (0.4 + prog * 0.6), 18 * (0.4 + prog * 0.6), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Blazing meteor bolide descending from orbit
+        const mx = wrapDX(game.cam.x, m.x);
+        const my = m.y - game.cam.y;
+
+        // Atmospheric plasma tail
+        const tailGrad = ctx.createLinearGradient(mx, my, mx - 55, my - 95 * invTilt);
+        tailGrad.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
+        tailGrad.addColorStop(0.4, 'rgba(249, 115, 22, 0.75)');
+        tailGrad.addColorStop(1, 'rgba(124, 45, 18, 0.0)');
+        ctx.strokeStyle = tailGrad;
+        ctx.lineWidth = 18;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(mx, my);
+        ctx.lineTo(mx - 55, my - 95 * invTilt);
+        ctx.stroke();
+
+        // Molten craggy asteroid core
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.arc(mx, my, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ea580c';
+        ctx.beginPath();
+        ctx.arc(mx - 2, my - 2, 8.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // 5. Enhanced Multi-Layered Slash Ribbons (`game.slashRibbons`)
+    if (Array.isArray(game.slashRibbons)) {
+      for (const s of game.slashRibbons) {
+        const sx = wrapDX(game.cam.x, s.x);
+        if (Math.abs(sx) > viewHalfW + 80) continue;
+        const sy = s.y - game.cam.y;
+        const f = s.facing || 1;
+
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.scale(1, invTilt);
+
+        // Outer glowing ribbon
+        ctx.strokeStyle = s.color || '#38bdf8';
+        ctx.lineWidth = 4.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(f * 6, -15, 19, f > 0 ? -1.05 : Math.PI - 0.85, f > 0 ? 0.85 : Math.PI + 1.05);
+        ctx.stroke();
+
+        // Inner white razor edge
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(f * 6, -15, 18.5, f > 0 ? -0.85 : Math.PI - 0.65, f > 0 ? 0.65 : Math.PI + 0.85);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+}
+
+/* ============================================================================
+ * 3. EARTH SURFACE BIOME & 24% MOUNTAIN RENDERER (71% Ocean / 29% Land)
  * ========================================================================== */
 
 export class EarthBiomeRenderer {
@@ -500,10 +1145,6 @@ export class EarthBiomeRenderer {
     this.peakCache = new Map();
   }
 
-  /**
-   * Pre-renders a 2.5D multi-faceted isometric mountain peak for each biome
-   * (representing the ~24% mountainous land overlap).
-   */
   getMountainPeakCanvas(biomeType = 'grassland') {
     if (this.peakCache.has(biomeType)) return this.peakCache.get(biomeType);
 
@@ -516,7 +1157,6 @@ export class EarthBiomeRenderer {
     const cx = w * 0.5;
     const baseY = h - 14;
 
-    // Ground drop shadow
     ctx.fillStyle = 'rgba(10, 14, 20, 0.26)';
     ctx.beginPath();
     ctx.ellipse(cx + 12, baseY + 2, 54, 14, 0, 0, Math.PI * 2);
@@ -531,7 +1171,6 @@ export class EarthBiomeRenderer {
     };
     const pal = palettes[biomeType] || palettes.grassland;
 
-    // Main central peak — sunlit left slope
     ctx.fillStyle = pal.left;
     ctx.beginPath();
     ctx.moveTo(cx, 14);
@@ -540,7 +1179,6 @@ export class EarthBiomeRenderer {
     ctx.closePath();
     ctx.fill();
 
-    // Main central peak — shaded right slope
     ctx.fillStyle = pal.right;
     ctx.beginPath();
     ctx.moveTo(cx, 14);
@@ -549,7 +1187,6 @@ export class EarthBiomeRenderer {
     ctx.closePath();
     ctx.fill();
 
-    // Snow / alpine cap (top 38% of peak)
     ctx.fillStyle = pal.cap;
     ctx.beginPath();
     ctx.moveTo(cx, 14);
@@ -561,7 +1198,6 @@ export class EarthBiomeRenderer {
     ctx.closePath();
     ctx.fill();
 
-    // Secondary flanking sub-peak for natural mountain range silhouette
     ctx.fillStyle = pal.left;
     ctx.beginPath();
     ctx.moveTo(cx + 28, 38);
@@ -578,7 +1214,6 @@ export class EarthBiomeRenderer {
     ctx.closePath();
     ctx.fill();
 
-    // Craggy ridge line highlight
     ctx.strokeStyle = pal.ridge;
     ctx.lineWidth = 1.4;
     ctx.beginPath();
@@ -591,11 +1226,6 @@ export class EarthBiomeRenderer {
     return c;
   }
 
-  /**
-   * Renders smooth, organic Earth terrain biomes (71% Ocean / 29% Land:
-   * 31% Forest, 26% Grassland, 19% Desert, 14% Agri/Urban, 10% Ice/Tundra + 24% Mountains)
-   * without blocky harsh rectangles.
-   */
   drawEarthBiomesInViewport(ctx, cam, canvasWidth, canvasHeight, invTilt = 1, timeSec = 0) {
     if (typeof getEarthTerrainAt !== 'function') return;
 
@@ -626,8 +1256,6 @@ export class EarthBiomeRenderer {
         const h = hash2D(tc, tr);
 
         if (terr.isOcean) {
-          // === 71% OCEANS & SEAS ===
-          // Soft radial water basin blend so coastlines curve naturally instead of jagged squares
           const radius = tCell * 0.78;
           const oceanGrad = ctx.createRadialGradient(cx, cy, radius * 0.15, cx, cy, radius);
           if (terr.label === 'Coastal Sea') {
@@ -644,7 +1272,6 @@ export class EarthBiomeRenderer {
           ctx.arc(cx, cy, radius, 0, Math.PI * 2);
           ctx.fill();
 
-          // Animated ocean wave crests & coastal surf foam
           if (cam.zoom >= 0.25 && h > 0.35) {
             const waveOffset = Math.sin(timeSec * 2.0 + tc * 0.7 + tr * 0.5) * 6;
             ctx.strokeStyle =
@@ -660,7 +1287,6 @@ export class EarthBiomeRenderer {
           continue;
         }
 
-        // === 29% LAND TERRAIN BREAKDOWN (Soft feathered biome blend) ===
         const radius = tCell * 0.82;
         const biomePalette = {
           forest: ['rgba(20, 62, 32, 0.58)', 'rgba(30, 86, 49, 0.28)', 'rgba(30, 86, 49, 0.0)'],
@@ -680,10 +1306,8 @@ export class EarthBiomeRenderer {
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Micro-terrain ecological details when zoomed in
         if (cam.zoom >= 0.32) {
           if (terr.type === 'agriUrban' && h > 0.35) {
-            // Subtle plowed golden cropland furrows (instead of grey checkerboards)
             ctx.strokeStyle = 'rgba(217, 169, 56, 0.26)';
             ctx.lineWidth = 1.4;
             for (let f = -18; f <= 18; f += 9) {
@@ -693,21 +1317,18 @@ export class EarthBiomeRenderer {
               ctx.stroke();
             }
           } else if (terr.type === 'desert' && h > 0.3) {
-            // Windblown sand dune crescents
             ctx.strokeStyle = 'rgba(161, 98, 7, 0.32)';
             ctx.lineWidth = 1.6;
             ctx.beginPath();
             ctx.arc(cx, cy + 8, 22, Math.PI * 1.15, Math.PI * 1.85);
             ctx.stroke();
           } else if (terr.type === 'forest' && h > 0.3) {
-            // Rich forest undergrowth rings
             ctx.fillStyle = 'rgba(22, 101, 52, 0.32)';
             ctx.beginPath();
             ctx.ellipse(cx - 12, cy + 4, 16, 8, 0, 0, Math.PI * 2);
             ctx.ellipse(cx + 14, cy - 6, 14, 7, 0, 0, Math.PI * 2);
             ctx.fill();
           } else if (terr.type === 'iceTundra' && h > 0.35) {
-            // Glacial ice sheen
             ctx.strokeStyle = 'rgba(248, 250, 252, 0.55)';
             ctx.lineWidth = 1.4;
             ctx.beginPath();
@@ -717,7 +1338,6 @@ export class EarthBiomeRenderer {
           }
         }
 
-        // === 24% MOUNTAINOUS LAND OVERLAP ===
         if (terr.isMountain && cam.zoom >= 0.2) {
           const peakCanvas = this.getMountainPeakCanvas(terr.type);
           const scale = tCell / 260;
@@ -731,10 +1351,6 @@ export class EarthBiomeRenderer {
     ctx.restore();
   }
 
-  /**
-   * Draws an Earth Surface Breakdown HUD card on the 3D Planetary Globe view
-   * and enriches the 3D globe with polar ice caps and biome bands.
-   */
   drawGlobeEarthBreakdownHUD(ctx, canvasWidth, canvasHeight) {
     const cardW = 310;
     const cardH = 212;
@@ -755,7 +1371,6 @@ export class EarthBiomeRenderer {
     ctx.textAlign = 'left';
     ctx.fillText('🌍 EARTH SURFACE BREAKDOWN (71% WATER / 29% LAND)', x + 12, y + 20);
 
-    // 71% Ocean / 29% Land proportional bar
     const barX = x + 12;
     const barY = y + 28;
     const barW = cardW - 24;
@@ -796,7 +1411,7 @@ export class EarthBiomeRenderer {
 }
 
 /* ============================================================================
- * 3. ENVIRONMENT SPRITE BANK (Buildings, Trees, Bridges, Siege, War Galleys)
+ * 4. ENVIRONMENT SPRITE BANK (Buildings, Trees, Bridges, Siege, War Galleys)
  * ========================================================================== */
 
 const BUILDING_SPECS = {
@@ -1753,7 +2368,7 @@ export class EnvironmentSpriteBank {
 }
 
 /* ============================================================================
- * 4. CONSTANT-ALPHA OFFSCREEN FOOTPATH COMPOSITOR (Zero Overlapping Circles)
+ * 5. CONSTANT-ALPHA OFFSCREEN FOOTPATH COMPOSITOR (Zero Overlapping Circles)
  * ========================================================================== */
 
 export class PlanetaryFootpathOverlay {
@@ -1797,10 +2412,6 @@ export class PlanetaryFootpathOverlay {
     }
   }
 
-  /**
-   * Draws all worn dirt and cobblestone paths as unified single-pass Path2D
-   * shapes so overlapping nodes never multiply their alpha into grey discs.
-   */
   drawVisiblePaths(ctx, cam, canvasWidth, canvasHeight) {
     if (!ctx || !cam) return;
     const halfW = (canvasWidth * 0.65) / cam.zoom;
@@ -1810,7 +2421,6 @@ export class PlanetaryFootpathOverlay {
     const minRow = Math.floor((cam.y - halfH) / this.cellSize);
     const maxRow = Math.ceil((cam.y + halfH) / this.cellSize);
     const totalCols = Math.ceil(WORLD_W / this.cellSize);
-    if (typeof Path2D === 'undefined') return;
 
     const dirtPath = new Path2D();
     const cobblePath = new Path2D();
@@ -1859,14 +2469,12 @@ export class PlanetaryFootpathOverlay {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Single constant-alpha stroke for the entire dirt trail network (zero circle overlap)
     if (hasDirt) {
       ctx.strokeStyle = 'rgba(139, 108, 74, 0.34)';
       ctx.lineWidth = this.cellSize * 0.95;
       ctx.stroke(dirtPath);
     }
 
-    // Single constant-alpha inner stroke for heavily traveled cobblestone trade roads
     if (hasCobble) {
       ctx.strokeStyle = 'rgba(168, 162, 158, 0.36)';
       ctx.lineWidth = this.cellSize * 0.55;
@@ -1878,7 +2486,7 @@ export class PlanetaryFootpathOverlay {
 }
 
 /* ============================================================================
- * 5. ONE-LINE INSTALLER FOR PrehistoricPlanetaryGame
+ * 6. ONE-LINE INSTALLER FOR PrehistoricPlanetaryGame
  * ========================================================================== */
 
 export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
@@ -1891,6 +2499,7 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   const envBank = new EnvironmentSpriteBank();
   const biomeRenderer = new EarthBiomeRenderer();
   const footpaths = new PlanetaryFootpathOverlay({ cellSize: 28 });
+  const combatVFX = new CombatAndPowersVFXRenderer();
 
   // 1. Hook into update(dt) to record villager footsteps
   const origUpdate = proto.update;
@@ -1909,7 +2518,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
       const savedBridges = this.stoneBridges;
       const origFillRect = ctx.fillRect;
 
-      // Suppress the base renderer's blocky tCell+1 square biome fillRects while keeping continent base & river
       this.warGalleys = [];
       this.stoneBridges = [];
       ctx.fillRect = function (x, y, w, h) {
@@ -1929,7 +2537,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
 
       const timeSec = this.time || 0;
 
-      // Render smooth feathered 71% Ocean / 29% Land biomes + 24% 3D Isometric Mountain Peaks
       biomeRenderer.drawEarthBiomesInViewport(
         ctx,
         this.cam,
@@ -1939,13 +2546,11 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
         timeSec
       );
 
-      // Draw unified constant-alpha footpath network (zero overlapping circles)
       footpaths.drawVisiblePaths(ctx, this.cam, this.canvas.width, this.canvas.height);
 
       const viewHalfW = (this.canvas.width * 0.65) / this.cam.zoom;
       const rY = RIVER_Y - this.cam.y;
 
-      // Draw 2.5D Dragon-Fire War Galleys first, then Bridges above them so bridge decks occlude passing hulls
       if (Array.isArray(this.warGalleys)) {
         for (const g of this.warGalleys) {
           const gx = wrapDX(this.cam.x, g.x);
@@ -1988,17 +2593,11 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     };
   }
 
-  // 4. Hybrid Villager Renderer
+  // 4. Upgraded Villager, Hero t101s, Ring-Wraith & Bender Renderer
   const origDrawHuman = proto.drawArticulatedHuman;
   proto.drawArticulatedHuman = function (ctx, unit, dx, sy, invTilt, isEnemy) {
-    if (
-      unit.hasOneRing ||
-      unit.isBoss ||
-      unit.mountType ||
-      unit.skySoar ||
-      (unit.dodgeAnim || 0) > 0 ||
-      (this.cam && this.cam.zoom < 0.45)
-    ) {
+    // Only fall back to stick-figure renderer for World Bosses, mounted beasts, or extreme zoom-out LOD
+    if (unit.isBoss || unit.mountType || (this.cam && this.cam.zoom < 0.45)) {
       if (typeof origDrawHuman === 'function') {
         origDrawHuman.call(this, ctx, unit, dx, sy, invTilt, isEnemy);
       }
@@ -2028,7 +2627,7 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
       this.showFloatingBadges !== false
     );
 
-    if (unit.customTool || unit.customMagic || (unit.swingAnim || 0) > 0.08) {
+    if (unit.customTool || unit.customMagic) {
       ctx.save();
       ctx.translate(dx, sy);
       ctx.scale(1, invTilt);
@@ -2047,21 +2646,20 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
         ctx.stroke();
         ctx.setLineDash([]);
       }
-      if ((unit.swingAnim || 0) > 0.08) {
-        ctx.globalAlpha = Math.min(1, unit.swingAnim * 1.4);
-        ctx.strokeStyle = unit.bender ? '#38bdf8' : '#f8fafc';
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        const f = unit.facing || 1;
-        const arcStart = f > 0 ? -0.9 : Math.PI - 0.9;
-        ctx.arc(f * 8, -16, 16, arcStart, arcStart + 1.8);
-        ctx.stroke();
-      }
       ctx.restore();
     }
   };
 
-  // 5. Buildings
+  // 5. Hook into renderCombatAndArrowVFX for Black Holes, Meteors, Bloodbending, Time-Slow & Slash Ribbons
+  const origRenderCombatVFX = proto.renderCombatAndArrowVFX;
+  if (typeof origRenderCombatVFX === 'function') {
+    proto.renderCombatAndArrowVFX = function (ctx, invTilt) {
+      origRenderCombatVFX.call(this, ctx, invTilt);
+      combatVFX.drawEnhancedCombatVFX(ctx, this, invTilt);
+    };
+  }
+
+  // 6. Buildings
   proto.drawBuilding = function (ctx, building, dx, sy, invTilt) {
     if (!building._footprintStamped) {
       building._footprintStamped = true;
@@ -2091,12 +2689,12 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     );
   };
 
-  // 6. Trees & Ore Nodes
+  // 7. Trees & Ore Nodes
   proto.drawResourceNode = function (ctx, node, dx, sy, invTilt) {
     envBank.drawGameResourceNode(ctx, node, dx, sy, invTilt, this.time || 0);
   };
 
-  // 7. Siege Engines
+  // 8. Siege Engines
   proto.drawSiegeEngine = function (ctx, s, sx, sy, invTilt) {
     envBank.drawGameSiegeEngine(
       ctx,
