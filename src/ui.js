@@ -588,10 +588,11 @@ export const uiMethods = {
                 const el = document.getElementById(id);
                 if (el) el.classList.add('hidden');
             });
+            this.renderBlueprintLibrary();
         }
     },
 
-    applyCreatorPreset(category, name, icon, color) {
+    applyCreatorPreset(category, name, icon, color, components = ['timber', 'stone']) {
         const catEl = document.getElementById('creatorCategory');
         const nameEl = document.getElementById('creatorName');
         const iconEl = document.getElementById('creatorIcon');
@@ -600,6 +601,11 @@ export const uiMethods = {
         if (nameEl) nameEl.value = name;
         if (iconEl) iconEl.value = icon;
         if (colEl) colEl.value = color;
+        if (typeof document.querySelectorAll === 'function') {
+            document.querySelectorAll('.bp-comp').forEach(cb => {
+                cb.checked = components.includes(cb.value);
+            });
+        }
     },
 
     toggleSandboxFreeBuild() {
@@ -609,12 +615,42 @@ export const uiMethods = {
         this.showBanner('🆓', this.freeBuildMode ? 'Sandbox Free-Build ON! Anyone can build anything with 0 resource cost!' : 'Sandbox Free-Build OFF (Normal Resource Costs).');
     },
 
-    createAnythingFromUI() {
+    readCreatorForm() {
         const category = document.getElementById('creatorCategory')?.value || 'house';
-        const name = (document.getElementById('creatorName')?.value || '').trim() || 'Custom Creation';
+        const name = (document.getElementById('creatorName')?.value || '').trim() || 'Custom Blueprint';
         const icon = (document.getElementById('creatorIcon')?.value || '').trim() || '✨';
         const color = document.getElementById('creatorColor')?.value || '#38bdf8';
-        this.createCustomEntity({ category, name, icon, color });
+        const components = typeof document.querySelectorAll === 'function'
+            ? [...document.querySelectorAll('.bp-comp:checked')].map(cb => cb.value)
+            : ['timber', 'stone'];
+        return { category, name, icon, color, components: components.length ? components : ['timber'] };
+    },
+
+    saveBlueprintOnlyFromUI() {
+        const spec = this.readCreatorForm();
+        const bp = this.designBlueprint(spec);
+        this.renderBlueprintLibrary();
+        this.showBanner('📐', `Saved Blueprint "${bp.name}" (${bp.components.join(' + ')}) — Humans can now build it!`);
+    },
+
+    createAnythingFromUI() {
+        const spec = this.readCreatorForm();
+        const bp = this.designBlueprint(spec);
+        this.buildFromBlueprint(bp.id);
+        this.renderBlueprintLibrary();
+    },
+
+    renderBlueprintLibrary() {
+        const grid = document.getElementById('savedBlueprintsList');
+        if (!grid || !Array.isArray(this.blueprints)) return;
+        const compIcons = { timber: '🪵', stone: '🪨', metal: '⚔️', gold: '🪙', crystal: '🔮', gears: '⚙️' };
+        grid.innerHTML = this.blueprints.map(bp => `
+            <div onclick="game.buildFromBlueprint('${bp.id}')" class="stone-btn p-1.5 rounded-lg cursor-pointer border" style="border-color:${bp.color}">
+                <div class="font-bold text-amber-200 truncate">${bp.icon} ${bp.name}</div>
+                <div class="text-[9px] text-cyan-200 truncate">${bp.category.toUpperCase()} • ${bp.components.map(c => compIcons[c] || c).join('')}</div>
+                <div class="text-[9px] text-emerald-300 truncate">Built: ${bp.builtCount || 0}×</div>
+            </div>
+        `).join('');
     },
 
     toggleEmotionsPanel() {

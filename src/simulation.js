@@ -28,6 +28,19 @@ export class PrehistoricPlanetaryGame {
         this.globalFreeWill = true;
         this.freeBuildMode = false;
         this.simSpeed = 1;
+        this.blueprints = [
+            { id: 'bp_treehouse', category: 'house', name: 'Treehouse Sanctuary', icon: '🌳', color: '#4ade80', components: ['timber', 'crystal'], builtCount: 0 },
+            { id: 'bp_obelisk', category: 'structure', name: 'Crystal Obelisk', icon: '🔮', color: '#38bdf8', components: ['stone', 'crystal', 'gold'], builtCount: 0 },
+            { id: 'bp_sunblade', category: 'tool', name: 'Obsidian Sunblade', icon: '🗡️', color: '#f59e0b', components: ['metal', 'crystal'], builtCount: 0 },
+            { id: 'bp_phoenix', category: 'magic', name: 'Phoenix Nova', icon: '🔥', color: '#f43f5e', components: ['crystal', 'gold'], builtCount: 0 }
+        ];
+        try {
+            const savedBps = localStorage.getItem('prehistoric_tribes_blueprints_v1');
+            if (savedBps) {
+                const parsed = JSON.parse(savedBps);
+                if (Array.isArray(parsed) && parsed.length > 0) this.blueprints = parsed;
+            }
+        } catch (e) {}
         this.keysDown = new Set();
         this.musicEnabled = false;
         this.musicBeatTimer = 0;
@@ -997,104 +1010,162 @@ export class PrehistoricPlanetaryGame {
         this.showBanner('🪨', `Deployed 2.5D ${isTreb ? 'Counterweight Trebuchet' : 'Mammoth-Skull Battering Ram'}!`);
     }
 
-    createCustomEntity({ category = 'house', name = 'Custom Creation', icon = '✨', color = '#38bdf8' } = {}) {
-        const u = this.getSelectedUnit();
+    designBlueprint({ category = 'house', name = 'Custom Blueprint', icon = '✨', color = '#38bdf8', components = ['timber'] } = {}) {
+        const cleanComps = [...new Set((components && components.length) ? components : ['timber'])];
+        const existing = this.blueprints.find(b => b.name.toLowerCase() === name.toLowerCase() && b.category === category);
+        if (existing) {
+            existing.icon = icon;
+            existing.color = color;
+            existing.components = cleanComps;
+            try { localStorage.setItem('prehistoric_tribes_blueprints_v1', JSON.stringify(this.blueprints)); } catch (e) {}
+            return existing;
+        }
+        const bp = {
+            id: `bp_${Date.now()}_${Math.floor(Math.random() * 999)}`,
+            category,
+            name,
+            icon,
+            color,
+            components: cleanComps,
+            builtCount: 0
+        };
+        this.blueprints.unshift(bp);
+        if (this.blueprints.length > 24) this.blueprints.length = 24;
+        try { localStorage.setItem('prehistoric_tribes_blueprints_v1', JSON.stringify(this.blueprints)); } catch (e) {}
+        return bp;
+    }
+
+    buildFromBlueprint(bpId, builderUnit = null) {
+        const bp = this.blueprints.find(b => b.id === bpId);
+        if (!bp) return;
+        const comps = bp.components || ['timber'];
+        const hasStone = comps.includes('stone');
+        const hasMetal = comps.includes('metal');
+        const hasGold = comps.includes('gold');
+        const hasCrystal = comps.includes('crystal');
+        const hasGears = comps.includes('gears');
+
+        const u = builderUnit || this.getSelectedUnit();
         const tx = u ? u.x : this.cam.x;
         const ty = Math.max(1450, Math.min(WORLD_H - 220, u ? u.y : this.cam.y));
 
-        if (category === 'house' || category === 'structure') {
+        if (bp.category === 'house' || bp.category === 'structure') {
             const bx = wrapX(tx + (Math.random() - 0.5) * 90);
             const by = Math.max(1450, Math.min(WORLD_H - 220, ty + (Math.random() - 0.5) * 70));
-            const isStruct = category === 'structure';
+            const isStruct = bp.category === 'structure';
+            const hpTotal = (isStruct ? 1200 : 580) + (hasStone ? 350 : 0) + (hasMetal ? 450 : 0);
             this.buildings.push({
                 id: this.nextId++,
                 type: isStruct ? 'wonder' : 'hut',
-                name,
-                icon,
+                name: bp.name,
+                icon: bp.icon,
                 x: bx,
                 y: by,
-                hp: isStruct ? 1400 : 650,
-                maxHp: isStruct ? 1400 : 650,
+                hp: hpTotal,
+                maxHp: hpTotal,
                 radius: isStruct ? 36 : 28,
-                owner: 'player',
-                customColor: color,
-                auraColor: color,
+                owner: (u && u.tribeId) ? u.tribeId : 'player',
+                customColor: bp.color,
+                auraColor: (hasCrystal || hasGold) ? bp.color : null,
+                components: comps,
+                blueprintId: bp.id,
+                progress: this.freeBuildMode ? 1.0 : 0.15,
                 shootTimer: 0
             });
-            this.parryRings.push({ x: bx, y: by, radius: 10, maxRadius: 85, color, life: 0.55 });
-            this.spawnFloatText(bx, by - 42, `${icon} ${name}!`, color);
-            this.sfx.play('kalimba');
-            this.showBanner(icon, `Built Custom ${isStruct ? 'Structure' : 'House'}: ${name}!`);
-        } else if (category === 'tool') {
-            const targets = this.selectedIds.length > 0
-                ? this.villagers.filter(v => this.selectedIds.includes(v.id))
-                : [u].filter(Boolean);
+            this.parryRings.push({ x: bx, y: by, radius: 10, maxRadius: 85, color: bp.color, life: 0.55 });
+            this.spawnFloatText(bx, by - 42, `${bp.icon} ${bp.name}!`, bp.color);
+            if (!builderUnit) {
+                this.sfx.play('kalimba');
+                this.showBanner(bp.icon, `Started Blueprint ${bp.name} (${comps.join(' + ')})!`);
+            }
+        } else if (bp.category === 'tool') {
+            const targets = builderUnit
+                ? [builderUnit]
+                : (this.selectedIds.length > 0 ? this.villagers.filter(v => this.selectedIds.includes(v.id)) : [u].filter(Boolean));
+            const atkBonus = 12 + (hasMetal ? 14 : 0) + (hasCrystal ? 12 : 0) + (hasGears ? 8 : 0);
             targets.forEach(unit => {
-                unit.customTool = { name, icon, color };
+                unit.customTool = { name: bp.name, icon: bp.icon, color: bp.color, components: comps };
                 unit.personalGearLevel = (unit.personalGearLevel || 1) + 1;
-                unit.atk = (unit.atk || 20) + 18;
-                unit.thoughtBubble = `${icon} Crafted ${name}!`;
+                unit.atk = (unit.atk || 20) + atkBonus;
+                unit.thoughtBubble = `${bp.icon} Crafted ${bp.name}!`;
                 unit.thoughtTimer = 3.5;
-                this.spawnFloatText(unit.x, unit.y - 34, `${icon} ${name}`, color);
+                this.spawnFloatText(unit.x, unit.y - 34, `${bp.icon} ${bp.name}`, bp.color);
             });
-            this.sfx.play('ring');
-            this.updateInspector();
-            this.showBanner(icon, `Forged Custom Tool/Weapon "${name}" for ${targets.length} unit(s)!`);
-        } else if (category === 'magic') {
-            const targets = this.selectedIds.length > 0
-                ? this.villagers.filter(v => this.selectedIds.includes(v.id))
-                : [u].filter(Boolean);
+            if (!builderUnit) {
+                this.sfx.play('ring');
+                this.updateInspector();
+                this.showBanner(bp.icon, `Crafted Blueprint Tool "${bp.name}" (+${atkBonus} ATK) for ${targets.length} human(s)!`);
+            }
+        } else if (bp.category === 'magic') {
+            const targets = builderUnit
+                ? [builderUnit]
+                : (this.selectedIds.length > 0 ? this.villagers.filter(v => this.selectedIds.includes(v.id)) : [u].filter(Boolean));
+            const magicDmg = 100 + (hasCrystal ? 80 : 0) + (hasGold ? 45 : 0);
             targets.forEach(unit => {
-                unit.customMagic = { name, icon, color };
+                unit.customMagic = { name: bp.name, icon: bp.icon, color: bp.color, components: comps };
                 unit.bender = unit.bender || 'energy';
-                unit.thoughtBubble = `${icon} ${name}!`;
+                unit.thoughtBubble = `${bp.icon} ${bp.name}!`;
                 unit.thoughtTimer = 3.6;
             });
-            this.parryRings.push({ x: tx, y: ty, radius: 14, maxRadius: 170, color, life: 0.75 });
-            for (let i = 0; i < 18; i++) {
-                const ang = (i / 18) * Math.PI * 2;
+            this.parryRings.push({ x: tx, y: ty, radius: 14, maxRadius: 175, color: bp.color, life: 0.75 });
+            for (let i = 0; i < 16; i++) {
+                const ang = (i / 16) * Math.PI * 2;
                 this.clashSparks.push({
                     x: wrapX(tx + Math.cos(ang) * 24),
                     y: ty + Math.sin(ang) * 18,
                     vx: Math.cos(ang) * 140,
                     vy: Math.sin(ang) * 100,
-                    color,
+                    color: bp.color,
                     life: 0.55
                 });
             }
             this.enemies.forEach(e => {
-                if (!e.controlledByRing && wrappedDist(tx, ty, e.x, e.y) < 190) {
-                    e.hp -= 140;
+                if (!e.controlledByRing && wrappedDist(tx, ty, e.x, e.y) < 195) {
+                    e.hp -= magicDmg;
                     e.hitFlash = 0.25;
                 }
             });
             this.villagers.forEach(v => {
-                if (wrappedDist(tx, ty, v.x, v.y) < 190) {
+                if (wrappedDist(tx, ty, v.x, v.y) < 195) {
                     v.hp = Math.min(v.maxHp, v.hp + 120);
                     v.joy = Math.min(100, v.joy + 15);
                 }
             });
-            this.spawnFloatText(tx, ty - 48, `${icon} ${name.toUpperCase()}!`, color);
-            this.sfx.play('ring');
-            this.updateInspector();
-            this.showBanner(icon, `Conjured Custom Magic "${name}"!`);
-        } else if (category === 'machine') {
+            this.spawnFloatText(tx, ty - 48, `${bp.icon} ${bp.name.toUpperCase()}!`, bp.color);
+            if (!builderUnit) {
+                this.sfx.play('ring');
+                this.updateInspector();
+                this.showBanner(bp.icon, `Cast Blueprint Magic "${bp.name}" (${magicDmg} DMG)!`);
+            }
+        } else if (bp.category === 'machine') {
             this.siegeEngines.push({
                 id: this.nextId++,
-                type: 'trebuchet',
-                name,
-                icon,
-                customColor: color,
+                type: hasGears ? 'trebuchet' : 'ram',
+                name: bp.name,
+                icon: bp.icon,
+                customColor: bp.color,
                 x: wrapX(tx + 42),
                 y: ty,
                 shootTimer: 0
             });
-            this.parryRings.push({ x: tx + 42, y: ty, radius: 10, maxRadius: 75, color, life: 0.5 });
-            this.spawnFloatText(tx + 42, ty - 34, `${icon} ${name}!`, color);
-            this.sfx.play('horn');
-            this.showBanner(icon, `Deployed Custom Machine: ${name}!`);
+            this.parryRings.push({ x: tx + 42, y: ty, radius: 10, maxRadius: 75, color: bp.color, life: 0.5 });
+            this.spawnFloatText(tx + 42, ty - 34, `${bp.icon} ${bp.name}!`, bp.color);
+            if (!builderUnit) {
+                this.sfx.play('horn');
+                this.showBanner(bp.icon, `Assembled Blueprint Machine: ${bp.name}!`);
+            }
         }
-        this.updateHUD();
+
+        bp.builtCount = (bp.builtCount || 0) + 1;
+        if (!builderUnit) {
+            this.updateHUD();
+            if (typeof this.renderBlueprintLibrary === 'function') this.renderBlueprintLibrary();
+        }
+    }
+
+    createCustomEntity({ category = 'house', name = 'Custom Creation', icon = '✨', color = '#38bdf8', components = ['timber', 'stone'] } = {}) {
+        const bp = this.designBlueprint({ category, name, icon, color, components });
+        this.buildFromBlueprint(bp.id);
     }
 
     terraformingAction() {
@@ -1441,18 +1512,14 @@ export class PrehistoricPlanetaryGame {
                     u.thoughtBubble = '🎨 Created Tribal Art!';
                     u.thoughtTimer = 3.2;
                     return;
-                } else if (sandboxChoice < 0.72) {
-                    const tools = [
-                        { name: 'Starlight Pick', icon: '⛏️', color: '#38bdf8' },
-                        { name: 'Obsidian Blade', icon: '🗡️', color: '#f59e0b' },
-                        { name: 'Arcane Staff', icon: '🪄', color: '#c084fc' }
-                    ];
-                    const t = tools[Math.floor(Math.random() * tools.length)];
-                    u.customTool = t;
-                    u.atk = (u.atk || 20) + 10;
+                } else if (sandboxChoice < 0.72 && this.blueprints && this.blueprints.length > 0) {
+                    const bp = this.blueprints[Math.floor(Math.random() * this.blueprints.length)];
+                    if ((bp.category === 'house' || bp.category === 'structure') && this.buildings.length >= 160) return;
+                    if (bp.category === 'machine' && this.siegeEngines.length >= 24) return;
+                    this.buildFromBlueprint(bp.id, u);
                     u.joy = Math.min(100, u.joy + 16);
-                    u.mindDesire = `${t.icon} Crafted ${t.name}`;
-                    u.thoughtBubble = `${t.icon} Made ${t.name}!`;
+                    u.mindDesire = `${bp.icon} Building Blueprint: ${bp.name}`;
+                    u.thoughtBubble = `${bp.icon} ${bp.name}!`;
                     u.thoughtTimer = 3.2;
                     return;
                 } else if (sandboxChoice < 0.85) {
@@ -1661,6 +1728,18 @@ export class PrehistoricPlanetaryGame {
 
         dt = Math.min(0.08, dt * this.simSpeed);
         this.time += dt;
+
+        // Advance 3-stage construction progress for any blueprints under construction
+        for (let i = 0; i < this.buildings.length; i++) {
+            const b = this.buildings[i];
+            if (b.progress !== undefined && b.progress < 1.0) {
+                b.progress = Math.min(1.0, b.progress + dt * 0.22);
+                if (b.progress >= 1.0 && !b._completedBanner) {
+                    b._completedBanner = true;
+                    this.spawnFloatText(b.x, b.y - 45, `${b.icon} ${b.name} Complete!`, '#4ade80');
+                }
+            }
+        }
         if (this.greatCometTimer > 0) this.greatCometTimer = Math.max(0, this.greatCometTimer - dt);
         if (this.globalTimeSlowTimer > 0) this.globalTimeSlowTimer = Math.max(0, this.globalTimeSlowTimer - dt);
         const enemyTimeScale = this.globalTimeSlowTimer > 0 ? 0.12 : 1.0;
