@@ -26,6 +26,7 @@ export class PrehistoricPlanetaryGame {
         this.totalTaxesCollected = 0;
         this.globalTaxTimer = 8.0;
         this.globalFreeWill = true;
+        this.freeBuildMode = false;
         this.simSpeed = 1;
         this.keysDown = new Set();
         this.musicEnabled = false;
@@ -921,12 +922,14 @@ export class PrehistoricPlanetaryGame {
     constructBuilding(type) {
         const spec = BUILDING_SPECS[type];
         if (!spec) return;
-        if (this.resources.wood < spec.costWood || this.resources.stone < spec.costStone) {
-            this.showBanner('⚠️', `Need ${spec.costWood}🪵 Wood & ${spec.costStone}🪨 Stone to build ${spec.name}!`);
-            return;
+        if (!this.freeBuildMode) {
+            if (this.resources.wood < spec.costWood || this.resources.stone < spec.costStone) {
+                this.showBanner('⚠️', `Need ${spec.costWood}🪵 Wood & ${spec.costStone}🪨 Stone to build ${spec.name}!`);
+                return;
+            }
+            this.resources.wood -= spec.costWood;
+            this.resources.stone -= spec.costStone;
         }
-        this.resources.wood -= spec.costWood;
-        this.resources.stone -= spec.costStone;
         const u = this.getSelectedUnit();
         const bx = wrapX((u ? u.x : this.cam.x) + (Math.random() - 0.5) * 140);
         const by = Math.max(1450, Math.min(2650, (u ? u.y : this.cam.y) + (Math.random() - 0.5) * 110));
@@ -959,11 +962,13 @@ export class PrehistoricPlanetaryGame {
     }
 
     trainSiegeEngine() {
-        if (this.resources.wood < 60) {
-            this.showBanner('⚠️', 'Need 60🪵 Hardwood Timber to construct a Siege Engine!');
-            return;
+        if (!this.freeBuildMode) {
+            if (this.resources.wood < 60) {
+                this.showBanner('⚠️', 'Need 60🪵 Hardwood Timber to construct a Siege Engine!');
+                return;
+            }
+            this.resources.wood -= 60;
         }
-        this.resources.wood -= 60;
         const u = this.getSelectedUnit();
         const isTreb = this.siegeEngines.length % 2 === 0;
         this.siegeEngines.push({
@@ -976,6 +981,106 @@ export class PrehistoricPlanetaryGame {
         });
         this.updateHUD();
         this.showBanner('🪨', `Deployed 2.5D ${isTreb ? 'Counterweight Trebuchet' : 'Mammoth-Skull Battering Ram'}!`);
+    }
+
+    createCustomEntity({ category = 'house', name = 'Custom Creation', icon = '✨', color = '#38bdf8' } = {}) {
+        const u = this.getSelectedUnit();
+        const tx = u ? u.x : this.cam.x;
+        const ty = Math.max(1450, Math.min(2650, u ? u.y : this.cam.y));
+
+        if (category === 'house' || category === 'structure') {
+            const bx = wrapX(tx + (Math.random() - 0.5) * 90);
+            const by = Math.max(1450, Math.min(2650, ty + (Math.random() - 0.5) * 70));
+            const isStruct = category === 'structure';
+            this.buildings.push({
+                id: this.nextId++,
+                type: isStruct ? 'wonder' : 'hut',
+                name,
+                icon,
+                x: bx,
+                y: by,
+                hp: isStruct ? 1400 : 650,
+                maxHp: isStruct ? 1400 : 650,
+                radius: isStruct ? 36 : 28,
+                owner: 'player',
+                customColor: color,
+                auraColor: color,
+                shootTimer: 0
+            });
+            this.parryRings.push({ x: bx, y: by, radius: 10, maxRadius: 85, color, life: 0.55 });
+            this.spawnFloatText(bx, by - 42, `${icon} ${name}!`, color);
+            this.sfx.play('kalimba');
+            this.showBanner(icon, `Built Custom ${isStruct ? 'Structure' : 'House'}: ${name}!`);
+        } else if (category === 'tool') {
+            const targets = this.selectedIds.length > 0
+                ? this.villagers.filter(v => this.selectedIds.includes(v.id))
+                : [u].filter(Boolean);
+            targets.forEach(unit => {
+                unit.customTool = { name, icon, color };
+                unit.personalGearLevel = (unit.personalGearLevel || 1) + 1;
+                unit.atk = (unit.atk || 20) + 18;
+                unit.thoughtBubble = `${icon} Crafted ${name}!`;
+                unit.thoughtTimer = 3.5;
+                this.spawnFloatText(unit.x, unit.y - 34, `${icon} ${name}`, color);
+            });
+            this.sfx.play('ring');
+            this.updateInspector();
+            this.showBanner(icon, `Forged Custom Tool/Weapon "${name}" for ${targets.length} unit(s)!`);
+        } else if (category === 'magic') {
+            const targets = this.selectedIds.length > 0
+                ? this.villagers.filter(v => this.selectedIds.includes(v.id))
+                : [u].filter(Boolean);
+            targets.forEach(unit => {
+                unit.customMagic = { name, icon, color };
+                unit.bender = unit.bender || 'energy';
+                unit.thoughtBubble = `${icon} ${name}!`;
+                unit.thoughtTimer = 3.6;
+            });
+            this.parryRings.push({ x: tx, y: ty, radius: 14, maxRadius: 170, color, life: 0.75 });
+            for (let i = 0; i < 18; i++) {
+                const ang = (i / 18) * Math.PI * 2;
+                this.clashSparks.push({
+                    x: wrapX(tx + Math.cos(ang) * 24),
+                    y: ty + Math.sin(ang) * 18,
+                    vx: Math.cos(ang) * 140,
+                    vy: Math.sin(ang) * 100,
+                    color,
+                    life: 0.55
+                });
+            }
+            this.enemies.forEach(e => {
+                if (!e.controlledByRing && wrappedDist(tx, ty, e.x, e.y) < 190) {
+                    e.hp -= 140;
+                    e.hitFlash = 0.25;
+                }
+            });
+            this.villagers.forEach(v => {
+                if (wrappedDist(tx, ty, v.x, v.y) < 190) {
+                    v.hp = Math.min(v.maxHp, v.hp + 120);
+                    v.joy = Math.min(100, v.joy + 15);
+                }
+            });
+            this.spawnFloatText(tx, ty - 48, `${icon} ${name.toUpperCase()}!`, color);
+            this.sfx.play('ring');
+            this.updateInspector();
+            this.showBanner(icon, `Conjured Custom Magic "${name}"!`);
+        } else if (category === 'machine') {
+            this.siegeEngines.push({
+                id: this.nextId++,
+                type: 'trebuchet',
+                name,
+                icon,
+                customColor: color,
+                x: wrapX(tx + 42),
+                y: ty,
+                shootTimer: 0
+            });
+            this.parryRings.push({ x: tx + 42, y: ty, radius: 10, maxRadius: 75, color, life: 0.5 });
+            this.spawnFloatText(tx + 42, ty - 34, `${icon} ${name}!`, color);
+            this.sfx.play('horn');
+            this.showBanner(icon, `Deployed Custom Machine: ${name}!`);
+        }
+        this.updateHUD();
     }
 
     terraformingAction() {
@@ -1322,7 +1427,21 @@ export class PrehistoricPlanetaryGame {
                     u.thoughtBubble = '🎨 Created Tribal Art!';
                     u.thoughtTimer = 3.2;
                     return;
-                } else if (sandboxChoice < 0.75) {
+                } else if (sandboxChoice < 0.72) {
+                    const tools = [
+                        { name: 'Starlight Pick', icon: '⛏️', color: '#38bdf8' },
+                        { name: 'Obsidian Blade', icon: '🗡️', color: '#f59e0b' },
+                        { name: 'Arcane Staff', icon: '🪄', color: '#c084fc' }
+                    ];
+                    const t = tools[Math.floor(Math.random() * tools.length)];
+                    u.customTool = t;
+                    u.atk = (u.atk || 20) + 10;
+                    u.joy = Math.min(100, u.joy + 16);
+                    u.mindDesire = `${t.icon} Crafted ${t.name}`;
+                    u.thoughtBubble = `${t.icon} Made ${t.name}!`;
+                    u.thoughtTimer = 3.2;
+                    return;
+                } else if (sandboxChoice < 0.85) {
                     u.joy = Math.min(100, u.joy + 18);
                     u.dodgeType = 'backflip';
                     u.dodgeAnim = 0.55;

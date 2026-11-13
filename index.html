@@ -242,6 +242,63 @@
                 <div id="techForgeGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[10px]"></div>
             </div>
 
+            <!-- POPUP PANEL 4: UNIVERSAL CREATOR (HOUSES, STRUCTURES, TOOLS, MAGIC, MACHINES) -->
+            <div id="creatorPanel" class="hidden hud-interactive stone-panel rounded-xl p-2.5 mt-1 border border-cyan-400/60 max-w-4xl self-center w-full shadow-2xl">
+                <div class="flex items-center justify-between border-b border-stone-700 pb-1.5 mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-base">✨</span>
+                        <div>
+                            <div class="tribal-font text-xs font-bold text-cyan-300">UNIVERSAL SANDBOX CREATOR — BUILD ANY HOUSE, STRUCTURE, TOOL OR MAGIC</div>
+                            <div class="text-[10px] text-stone-300">Create custom homes, wonders, weapons/tools, arcane spells, or siege machines for your tribe &amp; citizens.</div>
+                        </div>
+                    </div>
+                    <button onclick="game.toggleCreatorPanel()" class="stone-btn px-2 py-0.5 rounded text-[10px] text-rose-300">✖ Close</button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[10px] mb-2">
+                    <div>
+                        <label class="block text-amber-200 font-bold mb-0.5">Category</label>
+                        <select id="creatorCategory" class="w-full bg-stone-900 border border-stone-600 rounded px-2 py-1 text-amber-100">
+                            <option value="house">🏡 House / Villa</option>
+                            <option value="structure">🏛️ Structure / Monument</option>
+                            <option value="tool">🛠️ Tool / Weapon</option>
+                            <option value="magic">🪄 Magic / Spell</option>
+                            <option value="machine">⚙️ Machine / Siege</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-amber-200 font-bold mb-0.5">Custom Name</label>
+                        <input id="creatorName" type="text" value="Crystal Sky-Villa" placeholder="e.g. Sunblade, Treehouse..." class="w-full bg-stone-900 border border-stone-600 rounded px-2 py-1 text-amber-100" />
+                    </div>
+                    <div>
+                        <label class="block text-amber-200 font-bold mb-0.5">Icon (Emoji)</label>
+                        <input id="creatorIcon" type="text" value="🏡" maxlength="4" class="w-full bg-stone-900 border border-stone-600 rounded px-2 py-1 text-amber-100" />
+                    </div>
+                    <div>
+                        <label class="block text-amber-200 font-bold mb-0.5">Aura / Accent Color</label>
+                        <input id="creatorColor" type="color" value="#38bdf8" class="w-full h-7 bg-stone-900 border border-stone-600 rounded cursor-pointer" />
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <div class="flex flex-wrap items-center gap-1">
+                        <span class="text-[10px] text-stone-400 mr-1">Quick Ideas:</span>
+                        <button onclick="game.applyCreatorPreset('house','Treehouse Sanctuary','🌳','#4ade80')" class="stone-btn px-2 py-0.5 rounded text-[10px] text-emerald-200">🌳 Treehouse</button>
+                        <button onclick="game.applyCreatorPreset('structure','Crystal Obelisk','🔮','#38bdf8')" class="stone-btn px-2 py-0.5 rounded text-[10px] text-cyan-200">🔮 Crystal Obelisk</button>
+                        <button onclick="game.applyCreatorPreset('tool','Obsidian Sunblade','🗡️','#f59e0b')" class="stone-btn px-2 py-0.5 rounded text-[10px] text-amber-200">🗡️ Sunblade</button>
+                        <button onclick="game.applyCreatorPreset('magic','Phoenix Nova','🔥','#f43f5e')" class="stone-btn px-2 py-0.5 rounded text-[10px] text-rose-200">🔥 Phoenix Nova</button>
+                        <button onclick="game.applyCreatorPreset('magic','Starlight Healing','✨','#c084fc')" class="stone-btn px-2 py-0.5 rounded text-[10px] text-purple-200">✨ Starlight Heal</button>
+                        <button onclick="game.applyCreatorPreset('machine','Thunder Wagon','⚡','#facc15')" class="stone-btn px-2 py-0.5 rounded text-[10px] text-yellow-200">⚡ Thunder Wagon</button>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="game.toggleSandboxFreeBuild()" class="wood-btn px-2.5 py-1 rounded-lg text-[10px] font-bold text-emerald-100">
+                            🆓 <span id="freeBuildBtnText">Free-Build: OFF</span>
+                        </button>
+                        <button onclick="game.createAnythingFromUI()" class="ring-btn px-3 py-1 rounded-lg text-[10px] font-bold text-yellow-100">
+                            ✨ Create / Conjure Now!
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- FLOATING ANNOUNCEMENT BANNER -->
             <div id="eventBanner" class="self-center stone-panel px-3 py-1 rounded-full border border-amber-400/60 text-[11px] font-bold text-amber-200 shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none">
                 <span id="eventBannerIcon">💍</span> <span id="eventBannerText">Welcome to Prehistoric Tribes!</span>
@@ -269,6 +326,7 @@
                     <button onclick="game.constructBuilding('wonder')" class="ring-btn px-2 py-0.5 rounded text-[10px] text-yellow-200 font-bold shrink-0">🌟 Wonder (180🪨)</button>
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
+                    <button onclick="game.toggleCreatorPanel()" class="imperial-btn px-2 py-0.5 rounded text-[10px] font-bold text-cyan-200 border-cyan-400 shrink-0">✨ Create Anything</button>
                     <button onclick="game.trainSiegeEngine()" class="stone-btn px-2 py-0.5 rounded text-[10px] font-bold text-orange-200 shrink-0">🪨 +Siege (60🪵)</button>
                     <button onclick="game.terraformingAction()" class="stone-btn px-2 py-0.5 rounded text-[10px] font-bold text-emerald-200 shrink-0">🪨 Terraform Bridge/Ramp</button>
                 </div>

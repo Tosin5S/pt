@@ -373,10 +373,21 @@ export const rendererMethods = {
         ctx.fillRect(-w * 0.56, -6, w * 1.12, 12);
     
         ctx.fillStyle = b.owner === 'player' ? epoch.wallColor : '#3f3f46';
-        ctx.strokeStyle = epoch.trimColor;
+        ctx.strokeStyle = b.customColor || epoch.trimColor;
         ctx.lineWidth = 2;
         ctx.fillRect(-w * 0.5, -h, w, h);
         ctx.strokeRect(-w * 0.5, -h, w, h);
+
+        if (b.auraColor) {
+            ctx.save();
+            ctx.globalAlpha = 0.25 + 0.1 * Math.sin(this.time * 3 + b.id);
+            ctx.strokeStyle = b.auraColor;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.ellipse(0, 4, b.radius * 1.35, b.radius * 0.58, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
     
         // Doorway arch
         ctx.fillStyle = '#1c1917';
@@ -769,6 +780,24 @@ export const rendererMethods = {
             ctx.restore();
         }
     
+        if (u.customTool) {
+            ctx.fillStyle = u.customTool.color || '#fbbf24';
+            ctx.beginPath();
+            ctx.arc(arm.endX + u.facing * 6, arm.endY - 4, 3.8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        if (u.customMagic) {
+            ctx.save();
+            ctx.strokeStyle = u.customMagic.color || '#c084fc';
+            ctx.lineWidth = 1.6;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.arc(0, -18, 17 + Math.sin(this.time * 4 + u.id) * 2, this.time * 2, this.time * 2 + Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
         if (u.invincible) {
             ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
             ctx.lineWidth = 1.8;

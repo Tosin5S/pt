@@ -198,7 +198,7 @@ export const uiMethods = {
         }
     
         window.addEventListener('keydown', (e) => {
-            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
             const k = e.key.toLowerCase();
             this.keysDown.add(k);
             if (k === 'h') this.focusHeroT101s();
@@ -209,7 +209,7 @@ export const uiMethods = {
             else if (k === '=' || k === '+') this.zoomByStep(1.25);
             else if (k === '-') this.zoomByStep(0.8);
             else if (k === 'escape') {
-                ['economyPanel', 'emotionsPanel', 'diplomacyPanel', 'techForgePanel'].forEach(id => {
+                ['economyPanel', 'emotionsPanel', 'diplomacyPanel', 'techForgePanel', 'creatorPanel'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.classList.add('hidden');
                 });
@@ -577,6 +577,44 @@ export const uiMethods = {
                 <div class="text-yellow-300 font-bold mt-0.5">👛 ${Math.floor(u.walletGold || 0)}🪙 <span class="text-emerald-300 text-[9px]">(Tax: ${Math.floor(u.taxPaidTotal || 0)}🪙)</span></div>
             </div>
         `).join('');
+    },
+
+    toggleCreatorPanel() {
+        const panel = document.getElementById('creatorPanel');
+        if (!panel) return;
+        panel.classList.toggle('hidden');
+        if (!panel.classList.contains('hidden')) {
+            ['economyPanel', 'emotionsPanel', 'diplomacyPanel', 'techForgePanel'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+        }
+    },
+
+    applyCreatorPreset(category, name, icon, color) {
+        const catEl = document.getElementById('creatorCategory');
+        const nameEl = document.getElementById('creatorName');
+        const iconEl = document.getElementById('creatorIcon');
+        const colEl = document.getElementById('creatorColor');
+        if (catEl) catEl.value = category;
+        if (nameEl) nameEl.value = name;
+        if (iconEl) iconEl.value = icon;
+        if (colEl) colEl.value = color;
+    },
+
+    toggleSandboxFreeBuild() {
+        this.freeBuildMode = !this.freeBuildMode;
+        const el = document.getElementById('freeBuildBtnText');
+        if (el) el.textContent = `Free-Build: ${this.freeBuildMode ? 'ON' : 'OFF'}`;
+        this.showBanner('🆓', this.freeBuildMode ? 'Sandbox Free-Build ON! Anyone can build anything with 0 resource cost!' : 'Sandbox Free-Build OFF (Normal Resource Costs).');
+    },
+
+    createAnythingFromUI() {
+        const category = document.getElementById('creatorCategory')?.value || 'house';
+        const name = (document.getElementById('creatorName')?.value || '').trim() || 'Custom Creation';
+        const icon = (document.getElementById('creatorIcon')?.value || '').trim() || '✨';
+        const color = document.getElementById('creatorColor')?.value || '#38bdf8';
+        this.createCustomEntity({ category, name, icon, color });
     },
 
     toggleEmotionsPanel() {
