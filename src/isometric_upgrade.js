@@ -1,32 +1,26 @@
 /**
- * Drop-in Isometric Graphics, Earth Biome, Martial Arts Choreography, Bending & 2.5D Physics Engine
+ * Drop-in Isometric Graphics, Earth Biome, Martial Arts, Waterbending, Swimming & 2.5D Physics Engine
  * for https://github.com/Tosin5S/pt
- * -------------------------------------------------------------------------------------------------
+ * ----------------------------------------------------------------------------------------------------
  * File target in your repo: src/isometric_upgrade.js
  *
- * New in this version — Authentic Martial Arts, Dodging, Blocking/Parrying & Bending Stances:
- * 1. Pre-Baked 8-State Martial Arts & Bending Choreography in `VillagerSpriteBank`:
- *    - `idle`: Breathing combat-ready stance with raised guard hands.
- *    - `walk`: Grounded isometric stride.
- *    - `chop`: Overhead two-handed wood/mining swing.
- *    - `build`: Rhythmic construction hammer strikes.
- *    - `attack`: 6-frame combo cycling through:
- *        * Frame 0–1: Jab & Cross Punch / Weapon Lunge with shoulder torso twist
- *        * Frame 2–3: High Spinning Roundhouse Kick (extended rear leg + counter-balanced arms)
- *        * Frame 4–5: Overhead Cleave / Bending Palm Thrust with forward knee drive
- *    - `dodge`: Evasive sidestep / back-handspring tuck with 3 translucent motion-blur afterimages
- *      and ground dust kick-up (`unit.dodgeAnim > 0`).
- *    - `block`: Cross-arm / shield-wall defensive brace with leaning back-foot anchor, golden/cyan
- *      deflection dome, and metallic clash sparks (`unit.blockAnim > 0`).
- *    - `bend_cast`: Deep Horse-Stance / Tai-Chi / Hung-Gar / Bagua bending choreography where
- *      limb movements directly drive elemental projectiles, water whips, earth pillars, and fire arcs.
- * 2. Active Combat Reflexes (`SovereignPhysicsEngine.stepCombatReflexes`):
- *    - Units engaged in close combat dynamically trigger real `dodgeAnim` (evasive roll/dash with
- *      afterimages) and `blockAnim` (shield/cross-arm parry with `parryRings` and `clashSparks`)
- *      when attacks or projectiles land nearby!
- * 3. Preserves 2.5D Physics (`u.z`, `u.vz`, mass collisions, river currents, cliff ledges),
- *    Earth 71%/29% Biomes + 24% 3D Mountains, Seamless Path2D Footpaths, 2.5D Bridges, War Galleys,
- *    and Siege Engines.
+ * New in this version — Dedicated Swimming & High-End Waterbending Animations:
+ * 1. Pre-Baked `swim` & `water_surf` States in `VillagerSpriteBank`:
+ *    - `swim` (6 frames): Horizontal freestyle front-crawl posture with rotating shoulders,
+ *      alternating overhead arm-entry strokes, rhythmic flutter kicks, and aqua waterline
+ *      submersion shading so swimmers look genuinely immersed in the river.
+ *    - `water_surf` (6 frames): Low-stance Waterbender hydro-surfing posture balanced atop
+ *      a cresting turquoise wave with curling white sea-foam spray.
+ *    - Also supports treading water (gentle vertical bobbing + waist ripples when idle in water).
+ * 2. Live Swimming & Waterbending VFX:
+ *    - Swimming V-wake & stroke-synced hand splash droplets behind moving swimmers.
+ *    - Tai-Chi Figure-8 Water Ribbon: Multi-layered sinuous Bézier stream (deep cerulean +
+ *      bright cyan core + white foam highlights) that lashes outward into a crashing tidal
+ *      whip when attacking or casting (`swingAnim > 0` / `fight`).
+ *    - Waterbending Hydro-Shield (`blockAnim > 0`) & Cryo-Prison faceted ice spears (`subElement`).
+ * 3. Preserves all 8-state Martial Arts Choreography (kicks, dodging, blocking), 2.5D Physics
+ *    (`u.z`, `u.vz`, mass collisions, river currents, cliff ledges), Earth 71%/29% Biomes +
+ *    24% 3D Mountains, Path2D Footpaths, 2.5D Bridges, War Galleys, and Siege Engines.
  */
 
 import {
@@ -61,7 +55,7 @@ function hash2D(x, y) {
 }
 
 /* ============================================================================
- * 1. VILLAGER, HERO & MARTIAL ARTIST OFFSCREEN SPRITE BANK
+ * 1. VILLAGER, SWIMMER, WATERBENDER & MARTIAL ARTIST SPRITE BANK
  * ========================================================================== */
 
 const UNIT_STATES = {
@@ -69,19 +63,31 @@ const UNIT_STATES = {
   walk: { frames: 8, fps: 12 },
   chop: { frames: 6, fps: 10 },
   build: { frames: 6, fps: 11 },
-  attack: { frames: 6, fps: 13 }, // Combo: Punch/Slash -> High Roundhouse Kick -> Overhead Strike
-  dodge: { frames: 4, fps: 14 },  // Evasive low duck / side-roll / acrobatic backstep
-  block: { frames: 4, fps: 10 },  // Cross-arm / shield-brace parry stance
-  bend_cast: { frames: 6, fps: 11 }, // Deep Horse-Stance / Tai-Chi / Bagua elemental forms
+  attack: { frames: 6, fps: 13 },
+  dodge: { frames: 4, fps: 14 },
+  block: { frames: 4, fps: 10 },
+  bend_cast: { frames: 6, fps: 11 },
+  swim: { frames: 6, fps: 10 },       // Freestyle front-crawl swimming + flutter kick
+  water_surf: { frames: 6, fps: 12 }, // Waterbender hydro-wave surfing stance
 };
 
 const DIRECTIONS = ['SE', 'SW', 'NE', 'NW'];
 
+function isUnitInWater(unit) {
+  return Boolean(unit._inRiverWater || unit.inWater || unit.waterBendingSurf);
+}
+
 function mapUnitStateToAnim(unit) {
   if ((unit.dodgeAnim || 0) > 0.04) return 'dodge';
   if ((unit.blockAnim || 0) > 0.04) return 'block';
+
+  const inWater = isUnitInWater(unit);
+  if (inWater && !unit.skySoar && (unit.z || 0) < 6) {
+    if (unit.bender === 'water' || unit.waterBendingSurf) return 'water_surf';
+    return 'swim';
+  }
+
   if (unit.bender && ((unit.swingAnim || 0) > 0.05 || unit.state === 'attack' || unit.state === 'fight')) {
-    // Alternate between martial combo attacks and deep elemental bending forms
     return ((Math.floor((unit.animTime || 0) * 1.8) + (unit.id || 0)) % 2 === 0) ? 'bend_cast' : 'attack';
   }
   if ((unit.swingAnim || 0) > 0.05) return 'attack';
@@ -124,10 +130,6 @@ function drawLimb(ctx, x1, y1, x2, y2, width, baseColor, highlightColor) {
   ctx.restore();
 }
 
-/**
- * 2-Segment Articulated Limb (Upper + Lower + Joint) for authentic knees & elbows
- * during roundhouse kicks, horse-stance squats, and cross-arm blocks.
- */
 function drawArticulatedLimb(ctx, x1, y1, jx, jy, x2, y2, width, baseColor, highlightColor) {
   drawLimb(ctx, x1, y1, jx, jy, width, baseColor, highlightColor);
   drawLimb(ctx, jx, jy, x2, y2, width * 0.9, baseColor, highlightColor);
@@ -194,7 +196,196 @@ function drawTool(ctx, tool, handX, handY, angle, facingRight) {
   ctx.restore();
 }
 
+/**
+ * Renders a dedicated 6-frame horizontal freestyle front-crawl swimming frame
+ * with rotating arms, flutter-kick legs, and translucent waterline immersion.
+ */
+function renderSwimFrame(ctx, cx, groundY, opts) {
+  const { frameIndex, frameCount, dir, palette } = opts;
+  const t = frameIndex / frameCount;
+  const tau = Math.PI * 2;
+  const facingRight = dir === 'SE' || dir === 'NE';
+  const facingBack = dir === 'NE' || dir === 'NW';
+  const s = facingRight ? 1 : -1;
+
+  const strokePhase = t * tau;
+  const bob = Math.sin(strokePhase) * 1.4;
+  const waterY = groundY - 4;
+  const shoulderX = cx + 6 * s;
+  const shoulderY = waterY - 4 + bob;
+  const hipX = cx - 7 * s;
+  const hipY = waterY - 1 - bob * 0.5;
+
+  // 1. Waterline meniscus ellipse
+  ctx.save();
+  ctx.fillStyle = 'rgba(14, 116, 144, 0.36)';
+  ctx.strokeStyle = 'rgba(186, 230, 253, 0.65)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.ellipse(cx, waterY, 16, 5.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // 2. Flutter-kicking legs trailing behind in the water
+  const kick1 = Math.sin(strokePhase * 2) * 3.5;
+  const kick2 = -kick1;
+  drawLimb(ctx, hipX, hipY, hipX - 10 * s, hipY + kick1, 3.6, '#274659', '#3b647d');
+  drawLimb(ctx, hipX, hipY + 1, hipX - 11 * s, hipY + kick2, 3.6, '#213a4a', '#355a70');
+
+  // 3. Back arm executing underwater pull / overhead recovery
+  const backArmA = strokePhase + Math.PI;
+  const backHandX = shoulderX + Math.cos(backArmA) * 9.5 * s;
+  const backHandY = shoulderY + Math.sin(backArmA) * 6.5;
+  drawLimb(ctx, shoulderX, shoulderY, backHandX, backHandY, 3.4, palette.tunicDark, palette.tunic);
+
+  // 4. Horizontal pitched torso
+  ctx.save();
+  ctx.fillStyle = palette.tunic;
+  ctx.strokeStyle = '#1e1b18';
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.ellipse((shoulderX + hipX) * 0.5, (shoulderY + hipY) * 0.5, 9.5, 4.8, facingRight ? -0.18 : 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // 5. Head lifted above the waterline
+  const headX = shoulderX + 5.5 * s;
+  const headY = shoulderY - 3.5;
+  ctx.save();
+  ctx.fillStyle = '#e4b796';
+  ctx.strokeStyle = '#2b1e16';
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.arc(headX, headY, 4.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = palette.hair;
+  ctx.beginPath();
+  ctx.arc(headX - 0.5 * s, headY - 1.0, 4.9, Math.PI * 0.9, Math.PI * 2.1);
+  ctx.closePath();
+  ctx.fill();
+
+  if (!facingBack) {
+    ctx.fillStyle = '#1f1916';
+    ctx.fillRect(headX + 1.5 * s, headY - 0.5, 1.2, 1.2);
+  }
+  ctx.restore();
+
+  // 6. Front arm executing circular freestyle crawl stroke
+  const frontHandX = shoulderX + Math.cos(strokePhase) * 10.5 * s;
+  const frontHandY = shoulderY + Math.sin(strokePhase) * 7.2;
+  drawLimb(ctx, shoulderX, shoulderY, frontHandX, frontHandY, 3.6, palette.tunic, palette.tunicLight);
+  ctx.fillStyle = '#e4b796';
+  ctx.beginPath();
+  ctx.arc(frontHandX, frontHandY, 1.9, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Splash foam where hand enters the water
+  if (Math.sin(strokePhase) > 0.3) {
+    ctx.fillStyle = 'rgba(224, 242, 254, 0.85)';
+    ctx.beginPath();
+    ctx.arc(frontHandX + 2 * s, waterY - 1, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/**
+ * Renders a dedicated 6-frame Waterbender hydro-wave surfing stance
+ * balanced on a cresting turquoise wave with sea-foam spray.
+ */
+function renderWaterSurfFrame(ctx, cx, groundY, opts) {
+  const { frameIndex, frameCount, dir, palette } = opts;
+  const t = frameIndex / frameCount;
+  const tau = Math.PI * 2;
+  const facingRight = dir === 'SE' || dir === 'NE';
+  const facingBack = dir === 'NE' || dir === 'NW';
+  const s = facingRight ? 1 : -1;
+  const waveBob = Math.sin(t * tau) * 2.2;
+
+  // 1. Cresting Turquoise Hydro-Wave underneath feet
+  ctx.save();
+  const waveY = groundY - 3 + waveBob * 0.4;
+  const waveGrad = ctx.createLinearGradient(cx - 18, waveY - 10, cx + 18, waveY + 4);
+  waveGrad.addColorStop(0, '#0284c7');
+  waveGrad.addColorStop(0.5, '#38bdf8');
+  waveGrad.addColorStop(1, '#e0f2fe');
+  ctx.fillStyle = waveGrad;
+  ctx.beginPath();
+  ctx.moveTo(cx - 17 * s, waveY + 4);
+  ctx.quadraticCurveTo(cx - 4 * s, waveY - 10, cx + 16 * s, waveY - 6);
+  ctx.quadraticCurveTo(cx + 12 * s, waveY + 2, cx + 18 * s, waveY + 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // White curling sea-foam crest
+  ctx.strokeStyle = 'rgba(240, 249, 255, 0.9)';
+  ctx.lineWidth = 2.0;
+  ctx.beginPath();
+  ctx.moveTo(cx - 12 * s, waveY + 1);
+  ctx.quadraticCurveTo(cx + 2 * s, waveY - 8, cx + 15 * s, waveY - 5);
+  ctx.stroke();
+  ctx.restore();
+
+  // 2. Low-stance balanced surfer pose
+  const hipY = groundY - 13 + waveBob;
+  const shoulderY = hipY - 10;
+  const headY = shoulderY - 6;
+
+  drawArticulatedLimb(ctx, cx - 2 * s, hipY, cx - 5 * s, hipY + 4, cx - 7 * s, groundY - 5 + waveBob, 3.8, '#3b2f26', '#5c4a3c');
+  drawArticulatedLimb(ctx, cx + 2 * s, hipY, cx + 6 * s, hipY + 3, cx + 7 * s, groundY - 6 + waveBob, 3.8, '#4a3b30', '#6d5848');
+
+  // Arms outstretched for hydro-balance
+  drawLimb(ctx, cx - 4 * s, shoulderY + 2, cx - 13 * s, shoulderY - 1, 3.4, palette.tunicDark, palette.tunic);
+
+  ctx.save();
+  ctx.fillStyle = palette.tunic;
+  ctx.strokeStyle = '#1e1b18';
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.moveTo(cx - 5, shoulderY);
+  ctx.lineTo(cx + 5, shoulderY);
+  ctx.lineTo(cx + 6.2, hipY + 2);
+  ctx.lineTo(cx - 6.2, hipY + 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.fillStyle = '#e4b796';
+  ctx.strokeStyle = '#2b1e16';
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.arc(cx + 1 * s, headY, 5.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = palette.hair;
+  ctx.beginPath();
+  ctx.arc(cx + 0.5 * s, headY - 1, 5.3, Math.PI * 0.9, Math.PI * 2.1);
+  ctx.closePath();
+  ctx.fill();
+  if (!facingBack) {
+    ctx.fillStyle = '#1f1916';
+    ctx.fillRect(cx + 2 * s, headY - 0.5, 1.3, 1.3);
+  }
+  ctx.restore();
+
+  drawLimb(ctx, cx + 4 * s, shoulderY + 2, cx + 13 * s, shoulderY - 2, 3.6, palette.tunic, palette.tunicLight);
+}
+
 function renderVillagerFrame(ctx, cx, groundY, opts) {
+  if (opts.state === 'swim') {
+    renderSwimFrame(ctx, cx, groundY, opts);
+    return;
+  }
+  if (opts.state === 'water_surf') {
+    renderWaterSurfFrame(ctx, cx, groundY, opts);
+    return;
+  }
+
   const { state, frameIndex, frameCount, dir, palette } = opts;
   const t = frameIndex / frameCount;
   const tau = Math.PI * 2;
@@ -204,7 +395,6 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
 
   let bobY = 0;
   let leanX = 0;
-  let torsoTilt = 0;
   let leftFootX = cx - 2.8 * sideSign;
   let leftFootY = groundY - 1.5;
   let leftKneeX = cx - 2.6 * sideSign;
@@ -267,29 +457,20 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
     backArmAngle = -0.35 * sideSign;
     toolAngle = (-0.5 + strike * 1.1) * sideSign;
   } else if (state === 'attack') {
-    // 6-Frame Authentic Martial Arts & Weapon Combo:
-    // Frames 0-1: Lunging Jab / Cross Slash
-    // Frames 2-3: High Spinning Roundhouse Kick!
-    // Frames 4-5: Overhead Cleave / Jumping Knee Drive
     if (frameIndex === 2 || frameIndex === 3) {
       isRoundhouseKick = true;
       const kickExt = frameIndex === 2 ? 0.75 : 1.0;
       bobY = -2.2;
-      leanX = -2.6 * sideSign; // Lean torso back to counterbalance high kick
-      torsoTilt = -0.28 * sideSign;
-      // Supporting plant leg
+      leanX = -2.6 * sideSign;
       leftFootX = cx - 2.0 * sideSign;
       leftFootY = groundY - 1.0;
-      // High extended roundhouse kick leg!
       rightKneeX = cx + 6.5 * sideSign;
       rightKneeY = groundY - 14;
-      rightFootX = cx + (13.5 * kickExt) * sideSign;
-      rightFootY = groundY - (17.5 * kickExt);
-      // Guard arms Chambered
+      rightFootX = cx + 13.5 * kickExt * sideSign;
+      rightFootY = groundY - 17.5 * kickExt;
       frontArmAngle = -0.75 * sideSign;
       backArmAngle = 0.95 * sideSign;
     } else if (frameIndex === 4) {
-      // Airborne Knee-Drive & Overhead Strike
       tool = 'sword';
       bobY = -3.8;
       leanX = 3.2 * sideSign;
@@ -301,7 +482,6 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
       backArmAngle = -0.85 * sideSign;
       toolAngle = 1.55 * sideSign;
     } else {
-      // Lunging Martial Arts Punch / Sword Thrust
       tool = 'sword';
       const lunge = frameIndex === 1 ? 1.0 : -0.4;
       leanX = (frameIndex === 1 ? 3.8 : -1.0) * sideSign;
@@ -314,10 +494,8 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
       toolAngle = (lunge * 1.25 + 0.35) * sideSign;
     }
   } else if (state === 'dodge') {
-    // Low Evasive Duck / Acrobatic Back-Roll Tuck
-    bobY = 3.8; // Deep crouch duck under incoming blades/arrows
+    bobY = 3.8;
     leanX = -4.2 * sideSign;
-    torsoTilt = -0.35 * sideSign;
     leftFootX = cx - 6.5 * sideSign;
     rightFootX = cx + 2.5 * sideSign;
     leftKneeY = groundY - 4;
@@ -325,30 +503,26 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
     frontArmAngle = -1.1 * sideSign;
     backArmAngle = -1.3 * sideSign;
   } else if (state === 'block') {
-    // Defensive Cross-Arm / Shield-Wall Parry Brace
     isBlockingPose = true;
-    bobY = 1.8; // Wide grounded horse-stance brace
+    bobY = 1.8;
     leanX = -1.8 * sideSign;
     leftFootX = cx - 5.5 * sideSign;
     rightFootX = cx + 4.8 * sideSign;
     frontArmAngle = 0.45 * sideSign;
     backArmAngle = 0.65 * sideSign;
-    frontElbowBend = -0.85; // Forearms raised vertically in front of face/chest
+    frontElbowBend = -0.85;
   } else if (state === 'bend_cast') {
-    // Deep Hung-Gar / Tai-Chi / Bagua Elemental Bending Forms
     const formPhase = Math.sin(t * tau);
-    bobY = 2.6; // Deep grounded horse stance (Ma Bu)
+    bobY = 2.6;
     leanX = formPhase * 2.8 * sideSign;
     leftFootX = cx - 6.2 * sideSign;
     rightFootX = cx + 6.2 * sideSign;
     leftKneeX = cx - 5.8 * sideSign;
     rightKneeX = cx + 5.8 * sideSign;
-    // Pushing dual-palm elemental projection
     frontArmAngle = (1.45 + formPhase * 0.25) * sideSign;
     backArmAngle = (1.15 - formPhase * 0.35) * sideSign;
   }
 
-  // Contact shadow
   ctx.save();
   ctx.fillStyle = 'rgba(10, 14, 18, 0.34)';
   ctx.beginPath();
@@ -360,56 +534,24 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
   const shoulderY = hipY - 11;
   const headY = shoulderY - 6.5;
 
-  // Back arm
   const backShoulderX = cx - 4 * sideSign + leanX * 0.6;
   const backHandX = backShoulderX + Math.sin(backArmAngle) * 8.8;
   const backHandY = shoulderY + 2 + Math.cos(backArmAngle) * 8.8;
   drawLimb(ctx, backShoulderX, shoulderY + 2, backHandX, backHandY, 3.6, palette.tunicDark, palette.tunic);
 
-  // Articulated 2-bone legs (Hip -> Knee -> Boot)
-  drawArticulatedLimb(
-    ctx,
-    cx - 2.6 * sideSign + leanX * 0.2,
-    hipY,
-    leftKneeX,
-    leftKneeY,
-    leftFootX,
-    leftFootY,
-    4.0,
-    '#3b2f26',
-    '#5c4a3c'
-  );
-  drawArticulatedLimb(
-    ctx,
-    cx + 2.6 * sideSign + leanX * 0.2,
-    hipY,
-    rightKneeX,
-    rightKneeY,
-    rightFootX,
-    rightFootY,
-    4.0,
-    '#4a3b30',
-    '#6d5848'
-  );
+  drawArticulatedLimb(ctx, cx - 2.6 * sideSign + leanX * 0.2, hipY, leftKneeX, leftKneeY, leftFootX, leftFootY, 4.0, '#3b2f26', '#5c4a3c');
+  drawArticulatedLimb(ctx, cx + 2.6 * sideSign + leanX * 0.2, hipY, rightKneeX, rightKneeY, rightFootX, rightFootY, 4.0, '#4a3b30', '#6d5848');
 
-  // White/Gold Kick Motion-Blur Crescent on Roundhouse Kick frames
   if (isRoundhouseKick) {
     ctx.save();
     ctx.strokeStyle = 'rgba(254, 240, 138, 0.85)';
     ctx.lineWidth = 3.2;
     ctx.beginPath();
-    ctx.arc(
-      cx + 2 * sideSign,
-      hipY - 3,
-      13.5,
-      facingRight ? -0.95 : Math.PI + 0.15,
-      facingRight ? -0.15 : Math.PI + 0.95
-    );
+    ctx.arc(cx + 2 * sideSign, hipY - 3, 13.5, facingRight ? -0.95 : Math.PI + 0.15, facingRight ? -0.15 : Math.PI + 0.95);
     ctx.stroke();
     ctx.restore();
   }
 
-  // Torso
   ctx.save();
   const torsoGrad = ctx.createLinearGradient(cx - 8, shoulderY, cx + 8, hipY + 3);
   torsoGrad.addColorStop(0, palette.tunicLight);
@@ -428,14 +570,12 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
   ctx.fill();
   ctx.stroke();
 
-  // Martial Arts Belt & Sash
   ctx.fillStyle = '#3b281c';
   ctx.fillRect(cx - 6.2 + leanX * 0.35, hipY - 2.2, 12.4, 2.4);
   ctx.fillStyle = '#d4af37';
   ctx.fillRect(cx + 1.5 * sideSign + leanX * 0.35, hipY - 2.2, 2.2, 2.4);
   ctx.restore();
 
-  // Head
   ctx.save();
   const headX = cx + leanX;
   const skinGrad = ctx.createRadialGradient(headX - 1.8, headY - 2, 1, headX, headY, 6.2);
@@ -470,12 +610,11 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
   }
   ctx.restore();
 
-  // Front arm + tool / blocking guard
   const frontShoulderX = cx + 4.2 * sideSign + leanX * 0.7;
   const frontHandX = frontShoulderX + Math.sin(frontArmAngle) * 8.8;
   const frontHandY =
     isBlockingPose
-      ? shoulderY - 3 // Raised guard in front of face
+      ? shoulderY - 3
       : shoulderY + 2 + Math.cos(frontArmAngle + frontElbowBend * 0.2) * 8.8;
 
   drawTool(ctx, tool, frontHandX, frontHandY, toolAngle, facingRight);
@@ -486,7 +625,6 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
   ctx.arc(frontHandX, frontHandY, 2.1, 0, Math.PI * 2);
   ctx.fill();
 
-  // Subtle golden guard spark when in block pose
   if (isBlockingPose) {
     ctx.strokeStyle = 'rgba(250, 204, 21, 0.85)';
     ctx.lineWidth = 2;
@@ -528,8 +666,8 @@ function drawCarriedResource(ctx, x, y, carryItem, facingRight) {
 }
 
 /**
- * Renders live Martial Arts Blocking Shields, Dodge Afterimages, Kung-Fu Headbands & Chi Strikes,
- * Choreography-synced Elemental Bending Streams, and Sovereign God-Power Auras.
+ * Renders live Swimming Wakes, Tai-Chi Waterbending Ribbons & Tidal Whips,
+ * Martial Arts Blocking Shields, Dodge Afterimages, and Sovereign God-Power Auras.
  */
 function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
   const f = facingRight ? 1 : -1;
@@ -538,34 +676,78 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
   const kata = unit.kataTimer || 0;
   const blockAnim = unit.blockAnim || 0;
   const dodgeAnim = unit.dodgeAnim || 0;
+  const inWater = isUnitInWater(unit);
 
-  // 0. Active Block / Parry Deflection Shield & Clash Sparks (`unit.blockAnim > 0`)
+  // 00. Swimming V-Wake, Foam Ripples & Air Bubbles (`inWater`)
+  if (inWater && !unit.skySoar && (unit.z || 0) < 6) {
+    ctx.save();
+    const speed = Math.hypot(unit.vx || 0, unit.vy || 0);
+    if (unit.bender === 'water' || unit.waterBendingSurf) {
+      // Surfer hydro-wake spray behind wave
+      for (let w = 0; w < 3; w++) {
+        const wt = ((gameTime * 2.2 + w * 0.33) % 1);
+        const wx = -f * (14 + wt * 22) * scale;
+        ctx.strokeStyle = `rgba(186, 230, 253, ${((1 - wt) * 0.72).toFixed(3)})`;
+        ctx.lineWidth = 2.0 * scale;
+        ctx.beginPath();
+        ctx.arc(wx, 1, (5 + wt * 8) * scale, f > 0 ? Math.PI - 0.8 : -0.8, f > 0 ? Math.PI + 0.8 : 0.8);
+        ctx.stroke();
+      }
+    } else if (speed > 4) {
+      // Swimmer V-wake trailing behind kicking feet
+      ctx.strokeStyle = 'rgba(224, 242, 254, 0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-f * 10 * scale, -2);
+      ctx.lineTo(-f * 26 * scale, -8 * scale);
+      ctx.moveTo(-f * 10 * scale, 2);
+      ctx.lineTo(-f * 26 * scale, 8 * scale);
+      ctx.stroke();
+
+      // Trailing bubbles
+      for (let b = 0; b < 3; b++) {
+        const bt = ((gameTime * 2.5 + b * 0.33 + (unit.id || 0) * 0.1) % 1);
+        ctx.fillStyle = `rgba(224, 242, 254, ${((1 - bt) * 0.7).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(-f * (10 + bt * 18) * scale, Math.sin(gameTime * 10 + b) * 3, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      // Treading water concentric ripples
+      const rr = 12 + Math.sin(gameTime * 5 + (unit.id || 0)) * 3;
+      ctx.strokeStyle = 'rgba(186, 230, 253, 0.48)';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rr, rr * 0.42, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 0. Active Block / Parry Deflection Shield (`unit.blockAnim > 0`)
   if (blockAnim > 0.02) {
     ctx.save();
     const shieldAlpha = Math.min(0.92, blockAnim * 2.2);
     const shieldX = 11 * f * scale;
     const shieldY = -17 * scale;
 
-    // Golden-Cyan Martial Parry Barrier Arc
-    ctx.strokeStyle = unit.fightingStyle === 'phalanx' ? `rgba(56, 189, 248, ${shieldAlpha})` : `rgba(250, 204, 21, ${shieldAlpha})`;
+    ctx.strokeStyle =
+      unit.bender === 'water'
+        ? `rgba(56, 189, 248, ${shieldAlpha})`
+        : unit.fightingStyle === 'phalanx'
+        ? `rgba(56, 189, 248, ${shieldAlpha})`
+        : `rgba(250, 204, 21, ${shieldAlpha})`;
     ctx.lineWidth = 3.4 * scale;
     ctx.beginPath();
-    ctx.arc(
-      shieldX * 0.4,
-      shieldY,
-      14 * scale,
-      f > 0 ? -1.15 : Math.PI - 1.15,
-      f > 0 ? 1.15 : Math.PI + 1.15
-    );
+    ctx.arc(shieldX * 0.4, shieldY, 14 * scale, f > 0 ? -1.15 : Math.PI - 1.15, f > 0 ? 1.15 : Math.PI + 1.15);
     ctx.stroke();
 
-    // Radial metallic parry sparks flying off the guard
     ctx.strokeStyle = '#fef08a';
     ctx.lineWidth = 1.5;
     for (let s = 0; s < 4; s++) {
       const sa = (f > 0 ? 0 : Math.PI) + (s - 1.5) * 0.55 + Math.sin(gameTime * 30 + s) * 0.2;
       const r1 = 10 * scale;
-      const r2 = (16 + (blockAnim * 12)) * scale;
+      const r2 = (16 + blockAnim * 12) * scale;
       ctx.beginPath();
       ctx.moveTo(Math.cos(sa) * r1, shieldY + Math.sin(sa) * r1);
       ctx.lineTo(Math.cos(sa) * r2, shieldY + Math.sin(sa) * r2);
@@ -640,10 +822,9 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     }
   }
 
-  // 2. Fighting Style Weapons & Martial Arts Gear (`unit.fightingStyle`)
+  // 2. Fighting Style Weapons & Martial Arts Gear
   const style = unit.fightingStyle;
   if (style === 'kungfu') {
-    // Flowing Crimson Martial Arts Headband + Golden Chi Fist Shockwaves
     const tailWave = Math.sin(gameTime * 9 + (unit.id || 0)) * 3.5;
     ctx.strokeStyle = '#ef4444';
     ctx.lineWidth = 2.0;
@@ -652,7 +833,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.quadraticCurveTo(-11 * f * scale, (-28 + tailWave) * scale, -17 * f * scale, (-24 - tailWave * 0.6) * scale);
     ctx.stroke();
 
-    // Glowing emerald/gold chi fists during strikes
     if (swing > 0.04 || kata > 0) {
       const punchExt = (10 + Math.sin(gameTime * 28) * 5) * f * scale;
       ctx.fillStyle = 'rgba(74, 222, 128, 0.78)';
@@ -735,7 +915,7 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 3. Martial Kata 360-Degree Dragon Spiral & Airborne Kick Trail (`unit.kataTimer > 0`)
+  // 3. Martial Kata 360-Degree Dragon Spiral
   if (kata > 0) {
     ctx.save();
     const kataSpin = gameTime * 16;
@@ -756,7 +936,7 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 4. Choreographed Elemental & Sub-Elemental Bending (`unit.bender` & `unit.subElement`)
+  // 4. Choreographed Elemental & Sub-Elemental Bending
   const bender = unit.bender;
   const isActivelyBending = swing > 0.04 || unit.state === 'attack' || unit.state === 'fight' || kata > 0;
   if (bender) {
@@ -778,7 +958,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         ctx.arc(ox, oy, 5.5, 0, Math.PI * 2);
         ctx.fill();
       }
-      // Choreographed Dragon-Breath Fire Stream projected directly from extended palm/kick!
       if (isActivelyBending) {
         for (let p = 0; p < 5; p++) {
           const dist = (6 + p * 6.5 + ((gameTime * 40) % 6)) * scale;
@@ -806,33 +985,85 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         ctx.stroke();
       }
     } else if (bender === 'water') {
-      // Tai-Chi Flowing Water Whip extending from hands during combat
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.82)';
-      ctx.lineWidth = (isActivelyBending ? 3.8 : 3.0) * scale;
+      // === HIGH-END TAI-CHI WATERBENDING RIBBON & CRASHING TIDAL WHIP ===
+      // Multi-layered sinuous figure-8 water stream orbiting the bender
+      const reach = isActivelyBending ? 26 : 19;
+      ctx.lineCap = 'round';
+
+      // Outer deep cerulean stream
+      ctx.strokeStyle = 'rgba(2, 132, 199, 0.72)';
+      ctx.lineWidth = 5.2 * scale;
       ctx.beginPath();
-      const reach = isActivelyBending ? 26 : 17;
-      for (let i = 0; i <= 16; i++) {
-        const t = (i / 16) * Math.PI * 2;
-        const wx = Math.cos(t + phase * 0.7) * reach * scale;
-        const wy = -16 * scale + Math.sin(t * 2 + phase) * 6.5 * scale;
+      for (let i = 0; i <= 20; i++) {
+        const wt = (i / 20) * Math.PI * 2;
+        const wx = Math.sin(wt + phase * 0.8) * reach * scale;
+        const wy = -17 * scale + Math.sin(wt * 2 + phase * 1.2) * 8.5 * scale;
         if (i === 0) ctx.moveTo(wx, wy);
         else ctx.lineTo(wx, wy);
       }
       ctx.stroke();
 
-      if (unit.subElement) {
-        ctx.fillStyle = 'rgba(186, 230, 253, 0.88)';
-        for (let i = 0; i < 3; i++) {
-          const ia = -phase + (i * Math.PI * 2) / 3;
-          const ix = Math.cos(ia) * 19 * scale;
-          const iy = -18 * scale + Math.sin(ia) * 7 * scale;
+      // Inner bright cyan core + white foam crest
+      ctx.strokeStyle = 'rgba(125, 211, 252, 0.92)';
+      ctx.lineWidth = 2.4 * scale;
+      ctx.stroke();
+
+      // Crashing Tidal Water-Whip lashing forward during attacks!
+      if (isActivelyBending) {
+        const whipReach = 34 * scale;
+        const whipTipX = handX + f * whipReach;
+        const whipTipY = handY + Math.sin(gameTime * 16) * 8 * scale;
+
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.88)';
+        ctx.lineWidth = 4.0 * scale;
+        ctx.beginPath();
+        ctx.moveTo(handX, handY);
+        ctx.bezierCurveTo(
+          handX + f * 12 * scale,
+          handY - 14 * scale,
+          handX + f * 22 * scale,
+          handY + 10 * scale,
+          whipTipX,
+          whipTipY
+        );
+        ctx.stroke();
+
+        // White foam highlight + water droplets at whip tip
+        ctx.strokeStyle = '#f0f9ff';
+        ctx.lineWidth = 1.6 * scale;
+        ctx.stroke();
+
+        for (let d = 0; d < 3; d++) {
+          ctx.fillStyle = 'rgba(224, 242, 254, 0.9)';
           ctx.beginPath();
-          ctx.moveTo(ix, iy - 5);
-          ctx.lineTo(ix + 3, iy);
-          ctx.lineTo(ix, iy + 5);
-          ctx.lineTo(ix - 3, iy);
+          ctx.arc(
+            whipTipX + f * (d * 4) + Math.cos(gameTime * 20 + d) * 3,
+            whipTipY + Math.sin(gameTime * 20 + d) * 4,
+            2.1 * scale,
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+        }
+      }
+
+      // Cryo-Prison Sub-Element: Faceted Floating Ice Spears
+      if (unit.subElement) {
+        ctx.fillStyle = 'rgba(186, 230, 253, 0.92)';
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 1.0;
+        for (let i = 0; i < 4; i++) {
+          const ia = -phase * 0.9 + (i * Math.PI * 2) / 4;
+          const ix = Math.cos(ia) * 21 * scale;
+          const iy = -18 * scale + Math.sin(ia) * 8 * scale;
+          ctx.beginPath();
+          ctx.moveTo(ix, iy - 6.5);
+          ctx.lineTo(ix + 3.5, iy);
+          ctx.lineTo(ix, iy + 6.5);
+          ctx.lineTo(ix - 3.5, iy);
           ctx.closePath();
           ctx.fill();
+          ctx.stroke();
         }
       }
     } else if (bender === 'earth') {
@@ -848,7 +1079,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         ctx.fill();
         ctx.stroke();
       }
-      // Hung-Gar Stomp Erupting Rock Pillar in front of unit during strikes!
       if (isActivelyBending) {
         const pillarH = (12 + Math.abs(Math.sin(gameTime * 10)) * 12) * scale;
         const px = f * 22 * scale;
@@ -873,7 +1103,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         ctx.ellipse(0, (-6 - r * 8) * scale, (14 + r * 4) * scale, 5 * scale, 0, startA, startA + 2.1);
         ctx.stroke();
       }
-      // Bagua Wind-Palm Crescent Gust projected forward on strike
       if (isActivelyBending) {
         const gustDist = (16 + ((gameTime * 55) % 24)) * f * scale;
         ctx.strokeStyle = 'rgba(241, 245, 249, 0.85)';
@@ -900,7 +1129,7 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 5. Invincibility Sacred Geometry Dome (`unit.invincible`)
+  // 5. Invincibility Sacred Geometry Dome
   if (unit.invincible && !unit.isShadowClone) {
     ctx.save();
     const pulse = 0.45 + Math.sin(gameTime * 6) * 0.15;
@@ -921,7 +1150,7 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 6. Lightning Speed Bio-Electric Crackles (`unit.lightningSpeed`)
+  // 6. Lightning Speed Bio-Electric Crackles
   if (unit.lightningSpeed) {
     ctx.save();
     ctx.strokeStyle = '#38bdf8';
@@ -939,7 +1168,7 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 7. Tapered Multi-Layered Weapon / Elemental Slash Arc (`unit.swingAnim > 0.05`)
+  // 7. Tapered Multi-Layered Slash Arc
   if (swing > 0.05) {
     ctx.save();
     const swingColor =
@@ -1075,15 +1304,6 @@ export class VillagerSpriteBank {
       ctx.globalAlpha = 0.68 + Math.sin(gameTime * 12 + (unit.id || 0)) * 0.15;
     }
 
-    if (unit._inRiverWater && physZ < 4) {
-      const rippleR = 11 + Math.sin(gameTime * 6 + (unit.id || 0)) * 2.5;
-      ctx.strokeStyle = 'rgba(186, 230, 253, 0.55)';
-      ctx.lineWidth = 1.3;
-      ctx.beginPath();
-      ctx.ellipse(0, 1, rippleR, rippleR * 0.45, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
     if (hoverOffset < -2) {
       const shadowShrink = Math.max(0.35, 1 - Math.abs(hoverOffset) / 95);
       ctx.fillStyle = `rgba(10, 14, 18, ${(0.28 * shadowShrink).toFixed(3)})`;
@@ -1097,7 +1317,6 @@ export class VillagerSpriteBank {
     const dw = this.cellWidth * baseScale;
     const dh = this.cellHeight * baseScale;
 
-    // Evasive Dodge Motion-Blur Afterimage Ghosts (`unit.dodgeAnim > 0.04`)
     if ((unit.dodgeAnim || 0) > 0.04) {
       const f = facingRight ? 1 : -1;
       for (let g = 2; g >= 1; g--) {
@@ -1237,17 +1456,11 @@ export class SovereignPhysicsEngine {
     });
   }
 
-  /**
-   * Triggers reactive Martial Arts Dodging (`dodgeAnim`), Blocking/Parrying (`blockAnim`),
-   * Parry Shockwaves (`game.parryRings`), and Weapon Clash Sparks (`game.clashSparks`)
-   * when units take hits or trade blows in close quarters.
-   */
   triggerCombatReflexOnImpact(game, target, fromX, fromY, force) {
-    if (!target) return;
+    if (!target) return 'hit';
     const style = target.fightingStyle;
     const roll = Math.random();
 
-    // Agile styles (Kung-Fu, Airbenders, Berserkers, Hero t101s) have a high chance to execute an evasive Dodge Roll/Backflip
     const dodgeChance =
       style === 'kungfu' || target.bender === 'air'
         ? 0.42
@@ -1255,9 +1468,8 @@ export class SovereignPhysicsEngine {
         ? 0.30
         : 0.16;
 
-    // Defensive styles (Phalanx, Earthbenders, One Ring) have a high chance to raise an active Block/Parry
     const blockChance =
-      style === 'phalanx' || target.bender === 'earth'
+      style === 'phalanx' || target.bender === 'earth' || target.bender === 'water'
         ? 0.48
         : target.isT101s || style === 'onering'
         ? 0.35
@@ -1265,13 +1477,12 @@ export class SovereignPhysicsEngine {
 
     if (roll < dodgeChance && (target.dodgeAnim || 0) <= 0) {
       target.dodgeAnim = 0.38;
-      // Lateral evasive sidestep impulse + light hop
       const dx = wrapDX(fromX, target.x);
       const dy = target.y - fromY;
       const len = Math.max(1, Math.hypot(dx, dy));
       const perpX = -dy / len;
       const perpY = dx / len;
-      const side = ((target.id || 0) % 2 === 0 ? 1 : -1);
+      const side = (target.id || 0) % 2 === 0 ? 1 : -1;
       target.kx = (target.kx || 0) + perpX * side * 145;
       target.ky = (target.ky || 0) + perpY * side * 145;
       target.vz = Math.max(target.vz || 0, 110);
@@ -1281,7 +1492,6 @@ export class SovereignPhysicsEngine {
 
     if (roll < dodgeChance + blockChance && (target.blockAnim || 0) <= 0) {
       target.blockAnim = 0.42;
-      // Spawn metallic parry shockwave ring & clash sparks in game state
       if (Array.isArray(game.parryRings) && game.parryRings.length < 30) {
         game.parryRings.push({
           x: target.x,
@@ -1289,7 +1499,7 @@ export class SovereignPhysicsEngine {
           radius: 4,
           maxRadius: 28,
           life: 0.28,
-          color: style === 'phalanx' ? '#38bdf8' : '#facc15',
+          color: target.bender === 'water' || style === 'phalanx' ? '#38bdf8' : '#facc15',
         });
       }
       if (Array.isArray(game.clashSparks) && game.clashSparks.length < 60) {
@@ -1298,7 +1508,7 @@ export class SovereignPhysicsEngine {
             x: target.x + (Math.random() - 0.5) * 16,
             y: target.y - 12 + (Math.random() - 0.5) * 12,
             life: 0.22,
-            color: '#fef08a',
+            color: target.bender === 'water' ? '#bae6fd' : '#fef08a',
           });
         }
       }
@@ -1372,14 +1582,12 @@ export class SovereignPhysicsEngine {
       const u = allUnits[i];
       if (!u) continue;
 
-      // Decay active martial block & dodge timers smoothly
       if ((u.blockAnim || 0) > 0) u.blockAnim = Math.max(0, u.blockAnim - clampedDt);
       if ((u.dodgeAnim || 0) > 0) u.dodgeAnim = Math.max(0, u.dodgeAnim - clampedDt);
 
-      // Spontaneous martial sparring reflexes when actively fighting an opponent
       if ((u.state === 'attack' || u.state === 'fight') && (u.blockAnim || 0) <= 0 && (u.dodgeAnim || 0) <= 0) {
         if (Math.random() < clampedDt * 0.65) {
-          if (u.fightingStyle === 'phalanx' || u.bender === 'earth') {
+          if (u.fightingStyle === 'phalanx' || u.bender === 'earth' || u.bender === 'water') {
             u.blockAnim = 0.35;
           } else if (u.fightingStyle === 'kungfu' || u.bender === 'air') {
             u.dodgeAnim = 0.30;
@@ -1418,13 +1626,13 @@ export class SovereignPhysicsEngine {
         }
       }
 
-      u._inRiverWater = inRiverBand && !onBridge && !u.skySoar && u.z < 4;
+      u._inRiverWater = (inRiverBand && !onBridge && !u.skySoar && u.z < 4) || Boolean(u.inWater);
       if (u._inRiverWater) {
-        if (u.bender === 'water') {
-          u.x = wrapX(u.x + u.vx * 0.25 * clampedDt, WORLD_W);
+        if (u.bender === 'water' || u.waterBendingSurf) {
+          u.x = wrapX(u.x + (u.vx || 0) * 0.25 * clampedDt, WORLD_W);
         } else {
-          u.x = wrapX(u.x + 26 * clampedDt - u.vx * 0.22 * clampedDt, WORLD_W);
-          u.y -= u.vy * 0.22 * clampedDt;
+          u.x = wrapX(u.x + 26 * clampedDt - (u.vx || 0) * 0.22 * clampedDt, WORLD_W);
+          u.y -= (u.vy || 0) * 0.22 * clampedDt;
         }
       }
 
@@ -2953,7 +3161,7 @@ export class EnvironmentSpriteBank {
 }
 
 /* ============================================================================
- * 6. CONSTANT-ALPHA OFFSCREEN FOOTPATH COMPOSITOR (Zero Overlapping Circles)
+ * 6. CONSTANT-ALPHA OFFSCREEN FOOTPATH COMPOSITOR
  * ========================================================================== */
 
 export class PlanetaryFootpathOverlay {
@@ -3012,7 +3220,6 @@ export class PlanetaryFootpathOverlay {
     const minRow = Math.floor((cam.y - halfH) / this.cellSize);
     const maxRow = Math.ceil((cam.y + halfH) / this.cellSize);
     const totalCols = Math.ceil(WORLD_W / this.cellSize);
-    if (typeof Path2D === 'undefined') return;
 
     const dirtPath = new Path2D();
     const cobblePath = new Path2D();
@@ -3094,7 +3301,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   const combatVFX = new CombatAndPowersVFXRenderer();
   const physicsEngine = new SovereignPhysicsEngine();
 
-  // 1. Hook into update(dt) to step 2.5D rigid-body, Z-gravity, martial reflexes & footsteps
   const origUpdate = proto.update;
   if (typeof origUpdate === 'function') {
     proto.update = function (dt) {
@@ -3104,7 +3310,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     };
   }
 
-  // 1b. Hook into resolveUnitPhysics for mass-weighted unit separation & smooth building sliding
   const origResolvePhysics = proto.resolveUnitPhysics;
   if (typeof origResolvePhysics === 'function') {
     proto.resolveUnitPhysics = function (u, dt, isEnemy) {
@@ -3113,18 +3318,14 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     };
   }
 
-  // 1c. Hook into applyKnockback for reactive Martial Dodging, Blocking/Parrying, & 3D Vertical Launches
   const origApplyKnockback = proto.applyKnockback;
   if (typeof origApplyKnockback === 'function') {
     proto.applyKnockback = function (target, fromX, fromY, force = 160) {
       const reflex = physicsEngine.triggerCombatReflexOnImpact(this, target, fromX, fromY, force);
-      if (reflex === 'dodged') {
-        // Evasive dodge avoids main knockback slam!
-        return;
-      }
+      if (reflex === 'dodged') return;
 
       const mass = physicsEngine.getUnitMass(target);
-      const blockMult = reflex === 'blocked' ? 0.28 : 1.0; // Blocking absorbs 72% of knockback force
+      const blockMult = reflex === 'blocked' ? 0.28 : 1.0;
       const scaledForce = (force * blockMult) / Math.pow(mass, 0.65);
       origApplyKnockback.call(this, target, fromX, fromY, scaledForce);
 
@@ -3138,7 +3339,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     };
   }
 
-  // 2. Hook into renderContinentsAndRiver to render smooth Earth biomes, footpaths, 2.5D bridges & War Galleys
   const origRenderTerrain = proto.renderContinentsAndRiver;
   if (typeof origRenderTerrain === 'function') {
     proto.renderContinentsAndRiver = function (ctx, invTilt) {
@@ -3216,7 +3416,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     };
   }
 
-  // 3. Hook into render3DPlanetaryGlobe to display the Earth 71% Ocean / 29% Land Breakdown HUD
   const origRenderGlobe = proto.render3DPlanetaryGlobe;
   if (typeof origRenderGlobe === 'function') {
     proto.render3DPlanetaryGlobe = function (ctx) {
@@ -3225,8 +3424,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     };
   }
 
-  // 4. Upgraded Villager, Hero t101s, Ring-Wraith, Martial Artist & Bender Renderer
-  //    Note: `(unit.dodgeAnim || 0) > 0` now stays in our 2.5D martial sprite renderer!
   const origDrawHuman = proto.drawArticulatedHuman;
   proto.drawArticulatedHuman = function (ctx, unit, dx, sy, invTilt, isEnemy) {
     if (unit.isBoss || unit.mountType || (this.cam && this.cam.zoom < 0.45)) {
@@ -3282,7 +3479,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     }
   };
 
-  // 5. Hook into renderCombatAndArrowVFX for Black Holes, Meteors, Bloodbending, Time-Slow & Physics Landing Dust
   const origRenderCombatVFX = proto.renderCombatAndArrowVFX;
   if (typeof origRenderCombatVFX === 'function') {
     proto.renderCombatAndArrowVFX = function (ctx, invTilt) {
@@ -3292,7 +3488,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     };
   }
 
-  // 6. Buildings
   proto.drawBuilding = function (ctx, building, dx, sy, invTilt) {
     if (!building._footprintStamped) {
       building._footprintStamped = true;
@@ -3322,12 +3517,10 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     );
   };
 
-  // 7. Trees & Ore Nodes
   proto.drawResourceNode = function (ctx, node, dx, sy, invTilt) {
     envBank.drawGameResourceNode(ctx, node, dx, sy, invTilt, this.time || 0);
   };
 
-  // 8. Siege Engines
   proto.drawSiegeEngine = function (ctx, s, sx, sy, invTilt) {
     envBank.drawGameSiegeEngine(
       ctx,
