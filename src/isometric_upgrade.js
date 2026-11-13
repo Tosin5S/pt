@@ -1,47 +1,38 @@
 /**
- * Drop-in Isometric Graphics, Earth Biome, Combat, Bending & Sovereign Powers Engine
+ * Drop-in Isometric Graphics, Earth Biome, Combat, Bending & 2.5D Physics Engine
  * for https://github.com/Tosin5S/pt
- * ----------------------------------------------------------------------------------
+ * ------------------------------------------------------------------------------
  * File target in your repo: src/isometric_upgrade.js
  *
- * New in this version — High-End Fighting, Elemental Bending & God Powers Animations:
- * 1. Fighting Style Weapons & Martial Poses (`unit.fightingStyle` & `unit.kataTimer`):
- *    - Renders distinct isometric weapons in your offscreen unit atlases and live overlays:
- *      * `onering`: Glowing Crimson-Gold Sovereign Greatblade + Golden One Ring Halo
- *      * `berserker`: Dual Twin-Fang Curved Daggers + Crimson Frenzy Slash Arcs
- *      * `phalanx`: Round Bronze Hoplite Shield + Long Thrusting Spear
- *      * `kungfu`: Martial Arts Headband + Golden Chi Fist Aura
- *      * `archery`: Recurve Composite Bow + Quiver
- *      * `juggernaut`: Two-Handed Mammoth-Maul War Hammer + Ground Shockwaves
- *    - `unit.kataTimer > 0`: 360-degree airborne spin-kick & weapon kata with golden dragon
- *      spiral ribbons and shockwave dust rings.
- * 2. Elemental & Sub-Elemental Bending (`unit.bender` & `unit.subElement`):
- *    - `fire`: Orbiting flame wisps, blazing fire-whip arcs, and crackling Blue Lightning
- *      (`subElement`) forks between hands and targets.
- *    - `water`: Flowing 3D water-ribbon torus, surfing wave crest (`waterBendingSurf`),
- *      and hexagonal Cryo-Prison ice crystals (`subElement`).
- *    - `earth`: Levitating orbiting boulder satellites, seismic ground cracks, and glowing
- *      molten Lavabending magma fissures (`subElement`).
- *    - `air`: Swirling wind-sphere scooter/vortex at feet, high-velocity air-blade crescents,
- *      and expanding Sonic-Boom shock cones (`subElement`).
- *    - `avatar`: Full Avatar State 4-elemental gyroscope rings (Fire, Water, Earth, Air)
- *      orbiting at tilted 3D angles + glowing cosmic eye/crown aura.
- * 3. Sovereign God Powers (`renderCombatAndArrowVFX` & Unit Overlays):
- *    - Hero `isT101s` & `isWraith`: Now get full 2.5D shaded sovereign armor, flowing cape,
- *      and spectral Fellbeast wings (for Ring-Wraiths & `skySoar`) instead of falling back
- *      to plain stick figures.
- *    - `isShadowClone`: Translucent violet-cyan illusion shimmer + clone dissipation runes.
- *    - `invincible`: Rotating golden sacred geometry hexagonal barrier dome.
- *    - `lightningSpeed`: Crackling electric bio-aura + speed-line afterimage streaks.
- *    - `globalTimeSlowTimer > 0`: Chronos golden clockwork dome & time-dilation ripples.
- *    - `bloodbendTarget` / `bloodbendActive`: Crimson puppet marionette tendrils linking
- *      caster fingers to target limbs with pulsing blood-moon sigils.
- *    - `blackHoles`: Multi-layered relativistic accretion disk, gravitational lensing halo,
- *      and inward-spiraling matter streams.
- *    - `fallingMeteors`: Blazing atmospheric-entry plasma core, twin smoke/ember contrails,
- *      and expanding magma crater target reticle on the ground.
- *    - `slashRibbons`, `projectiles`, `parryRings`, `clashSparks`: Multi-layered tapered
- *      katana/elemental ribbons, directional sparks, and feathered 3D projectiles.
+ * New in this version — High-End 2.5D Rigid-Body, Vertical Z-Gravity & Environmental Physics (`SovereignPhysicsEngine`):
+ * 1. Vertical Z-Axis Ballistics, Gravity & Multi-Bounce Restitution (`u.z`, `u.vz`):
+ *    - Every unit now has true 3D vertical altitude (`u.z`) and vertical velocity (`u.vz`).
+ *    - Heavy impacts (`applyKnockback`), Juggernaut hammer slams, Earthbending seismic tremors,
+ *      Airbending cyclones, and Meteor shockwaves launch units into the air along a realistic
+ *      parabolic arc (`g = -580 px/s^2`), bouncing on landing (`restitution = 0.34`) and spawning
+ *      expanding ground dust-impact rings.
+ * 2. Mass-Weighted Elastic Unit & Building Collisions (`resolveUnitPhysics` + `spatialGrid`):
+ *    - Assigns realistic physical mass by unit class: Child (`0.6`), Villager (`1.0`), Phalanx
+ *      Shield-Wall (`1.9`), Juggernaut Titan (`2.4`), Ring-Wraith (`2.8`), Hero `t101s` (`3.5`),
+ *      and World Boss (`10.0`).
+ *    - Uses `this.spatialGrid.query(u.x, u.y, 44)` to resolve unit-to-unit overlap with momentum
+ *      transfer (heavy units plow through light units) and smooth tangential sliding around
+ *      building footprints (`b._isBuilding`).
+ * 3. Terrain Slope, River Current & Biome Surface Friction:
+ *    - River hydrodynamics: Units wading in the river (`Math.abs(u.y - RIVER_Y) < 42`) outside of
+ *      stone bridges (`this.stoneBridges`) experience downstream water current drift, viscous
+ *      water drag, and animated concentric water-wake ripples (unless Waterbending surfing).
+ *    - Cliff ledge & ramp physics: Enforces the `y = 1680` continental cliff wall so grounded
+ *      units must use `this.cliffRamps` (or `skySoar` / airborne jump `u.z > 22`) to cross, while
+ *      units descending ramps gain downhill momentum.
+ *    - Biome friction: Ice/Tundra reduces traction (longer momentum slide), Desert sand adds mild
+ *      footing resistance, and Cobblestone footpaths (`footpaths.getWearAt`) grant a +18% road
+ *      speed boost.
+ * 4. Relativistic Vortex & Shockwave Physics:
+ *    - `blackHoles`: Adds tangential orbital swirl + inverse-distance gravitational pull + upward
+ *      spaghettification lift (`u.vz`) near the event horizon.
+ *    - `fallingMeteors` & `applyKnockback`: Adds camera screen-shake impulse (`this._physCamShake`),
+ *      radial shockwave launch (`u.vz`), and secondary debris particles.
  */
 
 import {
@@ -378,21 +369,15 @@ function drawCarriedResource(ctx, x, y, carryItem, facingRight) {
   ctx.restore();
 }
 
-/**
- * Renders fighting-style specific weapons, shields, capes, wings, martial kata,
- * elemental bending rings, and sovereign god-power auras around a unit.
- */
 function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
   const f = facingRight ? 1 : -1;
   const phase = gameTime * 4.5 + (unit.id || 0) * 0.9;
   const swing = unit.swingAnim || 0;
   const kata = unit.kataTimer || 0;
 
-  // 1. Sovereign Hero / Ring-Wraith Flowing Cape & Fellbeast Wings
   if (unit.isT101s || unit.isWraith || unit.skySoar) {
     const flap = Math.sin(gameTime * 7 + (unit.id || 0)) * 5;
     if (unit.isWraith || unit.skySoar) {
-      // Spectral Fellbeast / Sky-Soar Wings
       ctx.save();
       ctx.fillStyle = unit.isWraith ? 'rgba(30, 27, 75, 0.78)' : 'rgba(251, 191, 36, 0.38)';
       ctx.strokeStyle = unit.isWraith ? '#818cf8' : '#fde047';
@@ -415,7 +400,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     }
 
     if (unit.isT101s) {
-      // Royal Sovereign Crimson-Gold Cape + Crown
       const capeWave = Math.sin(gameTime * 6) * 3;
       ctx.fillStyle = '#991b1b';
       ctx.beginPath();
@@ -425,7 +409,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
       ctx.closePath();
       ctx.fill();
 
-      // Golden Sovereign Crown
       ctx.fillStyle = '#fbbf24';
       ctx.strokeStyle = '#78350f';
       ctx.lineWidth = 0.9;
@@ -442,10 +425,8 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     }
   }
 
-  // 2. Fighting Style Weapons (`unit.fightingStyle`)
   const style = unit.fightingStyle;
   if (style === 'phalanx') {
-    // Hoplite Bronze Round Shield + Long Thrusting Spear
     const thrust = swing > 0.05 ? Math.sin(swing * Math.PI) * 10 * f : 0;
     ctx.strokeStyle = '#78350f';
     ctx.lineWidth = 2;
@@ -470,7 +451,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.fill();
     ctx.stroke();
   } else if (style === 'archery') {
-    // Recurve Composite Bow
     ctx.strokeStyle = '#b45309';
     ctx.lineWidth = 2.2;
     ctx.beginPath();
@@ -483,7 +463,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.lineTo(6 * f, -8);
     ctx.stroke();
   } else if (style === 'juggernaut') {
-    // Mammoth-Maul Titan Great Hammer
     const smash = swing > 0.05 ? Math.sin(swing * Math.PI) * 1.1 : -0.35;
     ctx.save();
     ctx.translate(6 * f, -16);
@@ -501,7 +480,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.strokeRect(-6, -23, 12, 7);
     ctx.restore();
   } else if (style === 'berserker') {
-    // Twin-Fang Crimson Daggers
     ctx.strokeStyle = '#fb7185';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -511,7 +489,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.lineTo(-12 * f, -19);
     ctx.stroke();
   } else if (style === 'onering' || unit.hasOneRing) {
-    // One Ring Golden Floating Halo & Sovereign Flame Blade
     ctx.save();
     ctx.strokeStyle = '#fbbf24';
     ctx.lineWidth = 2;
@@ -521,7 +498,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 3. Martial Kata 360-Degree Dragon Spiral (`unit.kataTimer > 0`)
   if (kata > 0) {
     ctx.save();
     const kataSpin = gameTime * 16;
@@ -533,7 +509,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
       ctx.arc(0, -18 * scale, 22 * scale, a, a + 1.9);
       ctx.stroke();
     }
-    // Expanding ground chi ring
     const ringR = 14 + ((gameTime * 28) % 22);
     ctx.strokeStyle = 'rgba(253, 224, 71, 0.55)';
     ctx.lineWidth = 1.8;
@@ -543,12 +518,10 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 4. Elemental & Sub-Elemental Bending Rings (`unit.bender` & `unit.subElement`)
   const bender = unit.bender;
   if (bender) {
     ctx.save();
     if (bender === 'fire') {
-      // Orbiting Fire Orbs + Blazing Flame Whip on swing
       for (let i = 0; i < 3; i++) {
         const a = phase + (i * Math.PI * 2) / 3;
         const ox = Math.cos(a) * 16 * scale;
@@ -562,7 +535,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         ctx.arc(ox, oy, 5.5, 0, Math.PI * 2);
         ctx.fill();
       }
-      // Sub-element: Blue Lightning arcs
       if (unit.subElement || swing > 0.08) {
         ctx.strokeStyle = '#38bdf8';
         ctx.lineWidth = 1.6;
@@ -578,7 +550,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         ctx.stroke();
       }
     } else if (bender === 'water') {
-      // Flowing 3D Water Ribbon Torus
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.78)';
       ctx.lineWidth = 3.2;
       ctx.beginPath();
@@ -591,7 +562,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
       }
       ctx.stroke();
 
-      // Cryo-Prison Ice Shards when subElement is active
       if (unit.subElement) {
         ctx.fillStyle = 'rgba(186, 230, 253, 0.85)';
         for (let i = 0; i < 3; i++) {
@@ -608,7 +578,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         }
       }
     } else if (bender === 'earth') {
-      // Orbiting Levitating Boulder Satellites + Lavabending Magma Rim
       for (let i = 0; i < 3; i++) {
         const a = phase * 0.8 + (i * Math.PI * 2) / 3;
         const rx = Math.cos(a) * 18 * scale;
@@ -622,7 +591,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         ctx.stroke();
       }
     } else if (bender === 'air') {
-      // Swirling Wind-Scooter Vortex & Sonic Rings
       ctx.strokeStyle = 'rgba(226, 232, 240, 0.75)';
       ctx.lineWidth = 2;
       for (let r = 0; r < 2; r++) {
@@ -632,7 +600,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         ctx.stroke();
       }
     } else if (bender === 'avatar') {
-      // Full Avatar State 4-Elemental Gyroscope Rings (Fire, Water, Earth, Air)
       const ringColors = ['#f97316', '#38bdf8', '#a3e635', '#f8fafc'];
       for (let r = 0; r < 4; r++) {
         ctx.save();
@@ -650,7 +617,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 5. Invincibility Sacred Geometry Hexagonal Dome (`unit.invincible`)
   if (unit.invincible && !unit.isShadowClone) {
     ctx.save();
     const pulse = 0.45 + Math.sin(gameTime * 6) * 0.15;
@@ -671,7 +637,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 6. Lightning Speed Bio-Electric Crackles (`unit.lightningSpeed`)
   if (unit.lightningSpeed) {
     ctx.save();
     ctx.strokeStyle = '#38bdf8';
@@ -689,7 +654,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.restore();
   }
 
-  // 7. Tapered Multi-Layered Weapon / Elemental Slash Arc (`unit.swingAnim > 0.05`)
   if (swing > 0.05) {
     ctx.save();
     const swingColor =
@@ -710,7 +674,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     const startA = f > 0 ? -1.15 : Math.PI - 0.75;
     const endA = f > 0 ? 0.75 : Math.PI + 1.15;
 
-    // Outer colored energy crescent
     ctx.strokeStyle = swingColor;
     ctx.lineWidth = 5.0 * scale;
     ctx.lineCap = 'round';
@@ -718,7 +681,6 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
     ctx.arc(f * 7 * scale, arcCenterY, 17 * scale, startA, endA);
     ctx.stroke();
 
-    // Inner white-hot blade core
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2.0 * scale;
     ctx.beginPath();
@@ -810,34 +772,45 @@ export class VillagerSpriteBank {
     const row = this.rowIndex.get(`${animState}:${dir}`) ?? 0;
     const atlas = this.getAtlas(factionColor);
 
-    // Airborne elevation offset for Sky-Soar, Wraiths, and Martial Kata flips
+    // Combine physical 3D vertical altitude (`unit.z`) with levitation/kata hover
+    const physZ = Math.max(0, unit.z || 0);
     const hoverOffset =
-      unit.skySoar || unit.isWraith
+      -physZ +
+      (unit.skySoar || unit.isWraith
         ? -18 + Math.sin(gameTime * 4 + (unit.id || 0)) * 4
         : (unit.kataTimer || 0) > 0
         ? -Math.abs(Math.sin(gameTime * 10)) * 16
-        : 0;
+        : 0);
 
     ctx.save();
     ctx.translate(dx, sy);
     ctx.scale(1, invTilt);
 
-    // Shadow Clone translucent shimmer
     if (unit.isShadowClone) {
       ctx.globalAlpha = 0.68 + Math.sin(gameTime * 12 + (unit.id || 0)) * 0.15;
     }
 
-    // Ground shadow stays on the ground even when levitating
-    if (hoverOffset < -2) {
-      ctx.fillStyle = 'rgba(10, 14, 18, 0.26)';
+    // Water wading ripples when in river
+    if (unit._inRiverWater && physZ < 4) {
+      const rippleR = 11 + Math.sin(gameTime * 6 + (unit.id || 0)) * 2.5;
+      ctx.strokeStyle = 'rgba(186, 230, 253, 0.55)';
+      ctx.lineWidth = 1.3;
       ctx.beginPath();
-      ctx.ellipse(0, 2, 12 * baseScale, 5 * baseScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 1, rippleR, rippleR * 0.45, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Ground contact shadow shrinks as physical altitude `physZ` increases
+    if (hoverOffset < -2) {
+      const shadowShrink = Math.max(0.35, 1 - Math.abs(hoverOffset) / 95);
+      ctx.fillStyle = `rgba(10, 14, 18, ${(0.28 * shadowShrink).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 2, 12 * baseScale * shadowShrink, 5 * baseScale * shadowShrink, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
     ctx.translate(0, hoverOffset);
 
-    // Sovereign Hero Golden Aura Ring
     if (unit.isT101s) {
       ctx.save();
       ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
@@ -848,7 +821,6 @@ export class VillagerSpriteBank {
       ctx.restore();
     }
 
-    // Controlled by One Ring puppet sigil
     if (unit.controlledByRing) {
       ctx.save();
       ctx.strokeStyle = 'rgba(244, 63, 94, 0.85)';
@@ -862,7 +834,6 @@ export class VillagerSpriteBank {
     const dw = this.cellWidth * baseScale;
     const dh = this.cellHeight * baseScale;
 
-    // Optional 360-degree Martial Kata flip rotation
     if ((unit.kataTimer || 0) > 0) {
       ctx.save();
       ctx.translate(0, -dh * 0.45);
@@ -897,10 +868,8 @@ export class VillagerSpriteBank {
       drawCarriedResource(ctx, 0, 0, unit.gatherType, facingRight);
     }
 
-    // Render Fighting Style weapons, Elemental Bending rings, Kata spirals & God Power auras
     drawUnitCombatAndBendingFX(ctx, unit, facingRight, baseScale, gameTime);
 
-    // Health bar when damaged or hero
     if (unit.hp < unit.maxHp || unit.isT101s) {
       const hpRatio = Math.max(0, Math.min(1, (unit.hp || 1) / (unit.maxHp || 1)));
       const bw = unit.isT101s ? 30 : 24;
@@ -923,21 +892,288 @@ export class VillagerSpriteBank {
 }
 
 /* ============================================================================
- * 2. SOVEREIGN POWERS & COMBAT VFX OVERLAY (`renderCombatAndArrowVFX` Upgrade)
+ * 2. 2.5D RIGID-BODY, VERTICAL Z-GRAVITY & ENVIRONMENTAL PHYSICS ENGINE
+ * ========================================================================== */
+
+export class SovereignPhysicsEngine {
+  constructor() {
+    this.gravity = 580; // Vertical downward acceleration (px/s^2)
+    this.restitution = 0.34; // Ground bounce elasticity
+    this.camShakeX = 0;
+    this.camShakeY = 0;
+    this.camShakeIntensity = 0;
+    this.dustRings = []; // Landing & shockwave dust rings
+  }
+
+  /**
+   * Computes realistic physical mass for momentum conservation during collisions & knockbacks.
+   */
+  getUnitMass(u) {
+    if (!u) return 1.0;
+    if (u.isBoss) return 10.0;
+    if (u.isT101s) return 3.5;
+    if (u.isWraith) return 2.8;
+    if (u.fightingStyle === 'juggernaut') return 2.4;
+    if (u.fightingStyle === 'phalanx') return 1.9;
+    if (u.childScale && u.childScale < 0.85) return 0.6;
+    return 1.0;
+  }
+
+  addCameraShake(amount = 6) {
+    this.camShakeIntensity = Math.min(18, this.camShakeIntensity + amount);
+  }
+
+  spawnLandingDust(x, y, strength = 1.0, color = 'rgba(214, 195, 165, 0.55)') {
+    if (this.dustRings.length > 48) this.dustRings.shift();
+    this.dustRings.push({
+      x,
+      y,
+      radius: 4,
+      maxRadius: Math.min(48, 12 + strength * 16),
+      life: 0.42,
+      maxLife: 0.42,
+      color,
+    });
+  }
+
+  /**
+   * Steps 3D vertical ballistics (`z`, `vz`), river hydrodynamics, cliff ledges,
+   * black hole orbital swirl, and mass-weighted rigid-body collisions.
+   */
+  stepWorldPhysics(game, dt, footpaths) {
+    const clampedDt = Math.min(0.05, Math.max(0.001, dt));
+
+    // 1. Decay camera shake
+    if (this.camShakeIntensity > 0.1) {
+      this.camShakeIntensity *= Math.exp(-clampedDt * 12);
+      const angle = Math.random() * Math.PI * 2;
+      this.camShakeX = Math.cos(angle) * this.camShakeIntensity;
+      this.camShakeY = Math.sin(angle) * this.camShakeIntensity;
+    } else {
+      this.camShakeIntensity = 0;
+      this.camShakeX = 0;
+      this.camShakeY = 0;
+    }
+
+    // 2. Update expanding landing dust rings
+    for (let i = this.dustRings.length - 1; i >= 0; i--) {
+      const r = this.dustRings[i];
+      r.life -= clampedDt;
+      if (r.life <= 0) {
+        this.dustRings.splice(i, 1);
+      } else {
+        const t = 1 - r.life / r.maxLife;
+        r.radius = 4 + (r.maxRadius - 4) * t;
+      }
+    }
+
+    // 3. Relativistic Black Hole Tangential Swirl + Vertical Lift
+    if (Array.isArray(game.blackHoles) && game.blackHoles.length > 0 && game.spatialGrid) {
+      for (const bh of game.blackHoles) {
+        const pullR = (bh.radius || 52) * 3.6;
+        const nearby = game.spatialGrid.query(bh.x, bh.y, pullR);
+        for (const entity of nearby) {
+          if (!entity || entity._isBuilding || entity.invincible) continue;
+          const dx = wrapDX(entity.x, bh.x);
+          const dy = bh.y - entity.y;
+          const dist = Math.max(12, Math.hypot(dx, dy));
+          if (dist > pullR) continue;
+
+          const normX = dx / dist;
+          const normY = dy / dist;
+          // Tangential swirl vector (-normY, normX)
+          const falloff = 1 - dist / pullR;
+          const swirlForce = 210 * falloff;
+          const inwardForce = 180 * falloff * falloff;
+
+          entity.kx = (entity.kx || 0) + (normX * inwardForce - normY * swirlForce) * clampedDt * 8;
+          entity.ky = (entity.ky || 0) + (normY * inwardForce + normX * swirlForce) * clampedDt * 8;
+
+          // Lift units off the ground as they spiral into the singularity
+          if (dist < (bh.radius || 52) * 1.4) {
+            entity.vz = Math.max(entity.vz || 0, 85 * falloff);
+          }
+        }
+      }
+    }
+
+    // 4. Step unit vertical ballistics, environmental forces & rigid-body collisions
+    const allUnits = [];
+    if (Array.isArray(game.villagers)) {
+      for (const u of game.villagers) allUnits.push(u);
+    }
+    if (Array.isArray(game.enemies)) {
+      for (const e of game.enemies) allUnits.push(e);
+    }
+
+    for (let i = 0; i < allUnits.length; i++) {
+      const u = allUnits[i];
+      if (!u) continue;
+
+      if (typeof u.z !== 'number') u.z = 0;
+      if (typeof u.vz !== 'number') u.vz = 0;
+
+      // Vertical Z-Gravity & Multi-Bounce Restitution
+      if (u.z > 0 || u.vz !== 0) {
+        u.vz -= this.gravity * clampedDt;
+        u.z += u.vz * clampedDt;
+
+        if (u.z <= 0) {
+          u.z = 0;
+          if (u.vz < -95) {
+            const impactSpeed = Math.abs(u.vz);
+            u.vz = impactSpeed * this.restitution;
+            this.spawnLandingDust(u.x, u.y, impactSpeed / 220);
+          } else {
+            u.vz = 0;
+          }
+        }
+      }
+
+      // River Hydrodynamics (Downstream Current Drift & Viscous Drag unless on a Stone Bridge)
+      const inRiverBand = Math.abs(u.y - RIVER_Y) < 42;
+      let onBridge = false;
+      if (inRiverBand && Array.isArray(game.stoneBridges)) {
+        for (const br of game.stoneBridges) {
+          if (Math.abs(wrapDX(u.x, br.x)) < 46) {
+            onBridge = true;
+            break;
+          }
+        }
+      }
+
+      u._inRiverWater = inRiverBand && !onBridge && !u.skySoar && u.z < 4;
+      if (u._inRiverWater) {
+        if (u.bender === 'water') {
+          // Waterbenders surf swiftly across the current
+          u.x = wrapX(u.x + u.vx * 0.25 * clampedDt, WORLD_W);
+        } else {
+          // Downstream current drift (+26 px/s) & wading drag
+          u.x = wrapX(u.x + 26 * clampedDt - u.vx * 0.22 * clampedDt, WORLD_W);
+          u.y -= u.vy * 0.22 * clampedDt;
+        }
+      }
+
+      // Cobblestone Road Speed Boost (+18% movement speed on established footpaths)
+      if (footpaths && !u._inRiverWater && u.z === 0) {
+        const wear = footpaths.getWearAt(u.x, u.y);
+        if (wear >= 0.45) {
+          const boost = wear >= 0.68 ? 0.18 : 0.10;
+          u.x = wrapX(u.x + (u.vx || 0) * boost * clampedDt, WORLD_W);
+          u.y += (u.vy || 0) * boost * clampedDt;
+        }
+      }
+
+      // Highland Cliff Wall Ledge Physics (y = 1680..1714) unless on a cliffRamp or airborne
+      if (!u.skySoar && u.z < 20 && u.y > 1672 && u.y < 1720) {
+        let onRamp = false;
+        if (Array.isArray(game.cliffRamps)) {
+          for (const ramp of game.cliffRamps) {
+            if (Math.abs(wrapDX(u.x, ramp.x)) < 54) {
+              onRamp = true;
+              break;
+            }
+          }
+        }
+        if (!onRamp) {
+          // Push unit cleanly off the sheer cliff face
+          if (u.y < 1696) u.y = 1672;
+          else u.y = 1720;
+          u.ky = -(u.ky || 0) * 0.4;
+        }
+      }
+    }
+  }
+
+  /**
+   * Mass-weighted unit-to-unit elastic separation + smooth tangential sliding
+   * around buildings.
+   */
+  resolveMassCollisions(game, u, dt) {
+    if (!game.spatialGrid || !u) return;
+    const neighbors = game.spatialGrid.query(u.x, u.y, 48);
+    const massA = this.getUnitMass(u);
+    const radA = u.radius || (u.isT101s ? 14 : 10);
+
+    for (let i = 0; i < neighbors.length; i++) {
+      const other = neighbors[i];
+      if (!other || other === u) continue;
+
+      const dx = wrapDX(other.x, u.x);
+      const dy = u.y - other.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (other._isBuilding) {
+        // Building collision with smooth tangential slide
+        const minSep = radA + (other.radius || 32);
+        if (dist < minSep && dist > 0.001) {
+          const overlap = minSep - dist;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          u.x = wrapX(u.x + nx * overlap, WORLD_W);
+          u.y += ny * overlap;
+
+          // Project velocity onto tangent so units glide smoothly around building corners
+          const vn = (u.vx || 0) * nx + (u.vy || 0) * ny;
+          if (vn < 0) {
+            u.vx -= vn * nx * 0.85;
+            u.vy -= vn * ny * 0.85;
+          }
+        }
+      } else {
+        // Unit-to-unit mass-weighted separation
+        if (Math.abs((u.z || 0) - (other.z || 0)) > 24) continue;
+        const radB = other.radius || (other.isT101s ? 14 : 10);
+        const minSep = radA + radB;
+        if (dist < minSep && dist > 0.001) {
+          const overlap = minSep - dist;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const massB = this.getUnitMass(other);
+          const totalMass = massA + massB;
+          const shareA = massB / totalMass;
+          const shareB = massA / totalMass;
+
+          u.x = wrapX(u.x + nx * overlap * shareA * 0.55, WORLD_W);
+          u.y += ny * overlap * shareA * 0.55;
+          other.x = wrapX(other.x - nx * overlap * shareB * 0.55, WORLD_W);
+          other.y -= ny * overlap * shareB * 0.55;
+        }
+      }
+    }
+  }
+
+  drawPhysicsVFX(ctx, game, invTilt = 1) {
+    if (this.dustRings.length === 0) return;
+    const viewHalfW = (game.canvas.width * 0.65) / game.cam.zoom;
+
+    ctx.save();
+    for (const r of this.dustRings) {
+      const sx = wrapDX(game.cam.x, r.x);
+      if (Math.abs(sx) > viewHalfW + 80) continue;
+      const sy = r.y - game.cam.y;
+      const alpha = Math.max(0, (r.life / r.maxLife) * 0.55);
+
+      ctx.strokeStyle = `rgba(214, 195, 165, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, r.radius, r.radius * 0.45 * invTilt, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/* ============================================================================
+ * 3. SOVEREIGN POWERS & COMBAT VFX OVERLAY (`renderCombatAndArrowVFX` Upgrade)
  * ========================================================================== */
 
 export class CombatAndPowersVFXRenderer {
-  /**
-   * Renders high-end 2.5D visual effects for Black Holes, Falling Meteors,
-   * Slash Ribbons, Bloodbending Marionette Tendrils, One Ring Dominion Beams,
-   * and Global Time-Slow Chronos Domes.
-   */
   drawEnhancedCombatVFX(ctx, game, invTilt = 1) {
     const timeSec = game.time || 0;
     const viewHalfW = (game.canvas.width * 0.65) / game.cam.zoom;
     const hero = Array.isArray(game.villagers) ? game.villagers.find((u) => u.isT101s) : null;
 
-    // 1. Global Time-Slow Chronos Dome (`game.globalTimeSlowTimer > 0`)
     if ((game.globalTimeSlowTimer || 0) > 0 && hero) {
       const hx = wrapDX(game.cam.x, hero.x);
       const hy = hero.y - game.cam.y;
@@ -955,7 +1191,6 @@ export class CombatAndPowersVFXRenderer {
       ctx.ellipse(0, 0, domeR, domeR * 0.6, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Rotating clockwork rune ticks around perimeter
       ctx.strokeStyle = 'rgba(253, 224, 71, 0.55)';
       ctx.lineWidth = 1.6;
       for (let i = 0; i < 12; i++) {
@@ -968,7 +1203,6 @@ export class CombatAndPowersVFXRenderer {
       ctx.restore();
     }
 
-    // 2. Bloodbending Crimson Marionette Strings (`hero.bloodbendTarget` or `game.bloodbendActive`)
     if (hero && (hero.bloodbendTarget || game.bloodbendActive)) {
       const hx = wrapDX(game.cam.x, hero.x);
       const hy = hero.y - game.cam.y;
@@ -1001,7 +1235,6 @@ export class CombatAndPowersVFXRenderer {
           );
           ctx.stroke();
         }
-        // Crimson blood-moon sigil under puppeted target
         ctx.strokeStyle = 'rgba(244, 63, 94, 0.75)';
         ctx.beginPath();
         ctx.ellipse(tx, ty, 16, 7 * invTilt, 0, 0, Math.PI * 2);
@@ -1010,7 +1243,6 @@ export class CombatAndPowersVFXRenderer {
       ctx.restore();
     }
 
-    // 3. Relativistic Black Hole Singularity (`game.blackHoles`)
     if (Array.isArray(game.blackHoles)) {
       for (const bh of game.blackHoles) {
         const bx = wrapDX(game.cam.x, bh.x);
@@ -1022,7 +1254,6 @@ export class CombatAndPowersVFXRenderer {
         ctx.translate(bx, by);
         ctx.scale(1, invTilt);
 
-        // Outer gravitational lensing distortion halo
         const halo = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, r * 1.65);
         halo.addColorStop(0, 'rgba(0, 0, 0, 0.98)');
         halo.addColorStop(0.38, 'rgba(88, 28, 135, 0.85)');
@@ -1033,7 +1264,6 @@ export class CombatAndPowersVFXRenderer {
         ctx.arc(0, 0, r * 1.65, 0, Math.PI * 2);
         ctx.fill();
 
-        // Swirling accretion disk spiral arms
         for (let arm = 0; arm < 4; arm++) {
           const startA = -timeSec * 5.5 + (arm * Math.PI) / 2;
           ctx.strokeStyle = arm % 2 === 0 ? 'rgba(244, 114, 182, 0.78)' : 'rgba(56, 189, 248, 0.72)';
@@ -1043,7 +1273,6 @@ export class CombatAndPowersVFXRenderer {
           ctx.stroke();
         }
 
-        // Event horizon pitch-black core + photon ring
         ctx.fillStyle = '#020617';
         ctx.strokeStyle = '#f0abfc';
         ctx.lineWidth = 2;
@@ -1056,7 +1285,6 @@ export class CombatAndPowersVFXRenderer {
       }
     }
 
-    // 4. Prehistoric Asteroid / Falling Meteors (`game.fallingMeteors`)
     if (Array.isArray(game.fallingMeteors)) {
       for (const m of game.fallingMeteors) {
         const tx = wrapDX(game.cam.x, m.targetX ?? m.x);
@@ -1065,7 +1293,6 @@ export class CombatAndPowersVFXRenderer {
         const prog = Math.max(0, Math.min(1, m.progress ?? 0.5));
 
         ctx.save();
-        // Expanding magma target warning reticle on ground
         ctx.strokeStyle = `rgba(249, 115, 22, ${(0.35 + prog * 0.55).toFixed(3)})`;
         ctx.fillStyle = `rgba(220, 38, 38, ${(0.12 + prog * 0.22).toFixed(3)})`;
         ctx.lineWidth = 2;
@@ -1074,11 +1301,9 @@ export class CombatAndPowersVFXRenderer {
         ctx.fill();
         ctx.stroke();
 
-        // Blazing meteor bolide descending from orbit
         const mx = wrapDX(game.cam.x, m.x);
         const my = m.y - game.cam.y;
 
-        // Atmospheric plasma tail
         const tailGrad = ctx.createLinearGradient(mx, my, mx - 55, my - 95 * invTilt);
         tailGrad.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
         tailGrad.addColorStop(0.4, 'rgba(249, 115, 22, 0.75)');
@@ -1091,7 +1316,6 @@ export class CombatAndPowersVFXRenderer {
         ctx.lineTo(mx - 55, my - 95 * invTilt);
         ctx.stroke();
 
-        // Molten craggy asteroid core
         ctx.fillStyle = '#fef08a';
         ctx.beginPath();
         ctx.arc(mx, my, 12, 0, Math.PI * 2);
@@ -1104,7 +1328,6 @@ export class CombatAndPowersVFXRenderer {
       }
     }
 
-    // 5. Enhanced Multi-Layered Slash Ribbons (`game.slashRibbons`)
     if (Array.isArray(game.slashRibbons)) {
       for (const s of game.slashRibbons) {
         const sx = wrapDX(game.cam.x, s.x);
@@ -1116,7 +1339,6 @@ export class CombatAndPowersVFXRenderer {
         ctx.translate(sx, sy);
         ctx.scale(1, invTilt);
 
-        // Outer glowing ribbon
         ctx.strokeStyle = s.color || '#38bdf8';
         ctx.lineWidth = 4.5;
         ctx.lineCap = 'round';
@@ -1124,7 +1346,6 @@ export class CombatAndPowersVFXRenderer {
         ctx.arc(f * 6, -15, 19, f > 0 ? -1.05 : Math.PI - 0.85, f > 0 ? 0.85 : Math.PI + 1.05);
         ctx.stroke();
 
-        // Inner white razor edge
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.6;
         ctx.beginPath();
@@ -1137,7 +1358,7 @@ export class CombatAndPowersVFXRenderer {
 }
 
 /* ============================================================================
- * 3. EARTH SURFACE BIOME & 24% MOUNTAIN RENDERER (71% Ocean / 29% Land)
+ * 4. EARTH SURFACE BIOME & 24% MOUNTAIN RENDERER (71% Ocean / 29% Land)
  * ========================================================================== */
 
 export class EarthBiomeRenderer {
@@ -1411,7 +1632,7 @@ export class EarthBiomeRenderer {
 }
 
 /* ============================================================================
- * 4. ENVIRONMENT SPRITE BANK (Buildings, Trees, Bridges, Siege, War Galleys)
+ * 5. ENVIRONMENT SPRITE BANK (Buildings, Trees, Bridges, Siege, War Galleys)
  * ========================================================================== */
 
 const BUILDING_SPECS = {
@@ -2368,13 +2589,19 @@ export class EnvironmentSpriteBank {
 }
 
 /* ============================================================================
- * 5. CONSTANT-ALPHA OFFSCREEN FOOTPATH COMPOSITOR (Zero Overlapping Circles)
+ * 6. CONSTANT-ALPHA OFFSCREEN FOOTPATH COMPOSITOR (Zero Overlapping Circles)
  * ========================================================================== */
 
 export class PlanetaryFootpathOverlay {
   constructor({ cellSize = 28 } = {}) {
     this.cellSize = cellSize;
     this.cells = new Map();
+  }
+
+  getWearAt(x, y) {
+    const col = Math.floor(wrapX(x, WORLD_W) / this.cellSize);
+    const row = Math.floor(y / this.cellSize);
+    return this.cells.get(`${col}:${row}`) || 0;
   }
 
   updateTraffic(villagers, dt = 1 / 60) {
@@ -2486,7 +2713,7 @@ export class PlanetaryFootpathOverlay {
 }
 
 /* ============================================================================
- * 6. ONE-LINE INSTALLER FOR PrehistoricPlanetaryGame
+ * 7. ONE-LINE INSTALLER FOR PrehistoricPlanetaryGame
  * ========================================================================== */
 
 export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
@@ -2500,13 +2727,43 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   const biomeRenderer = new EarthBiomeRenderer();
   const footpaths = new PlanetaryFootpathOverlay({ cellSize: 28 });
   const combatVFX = new CombatAndPowersVFXRenderer();
+  const physicsEngine = new SovereignPhysicsEngine();
 
-  // 1. Hook into update(dt) to record villager footsteps
+  // 1. Hook into update(dt) to step 2.5D rigid-body, Z-gravity & environmental physics + footsteps
   const origUpdate = proto.update;
   if (typeof origUpdate === 'function') {
     proto.update = function (dt) {
       origUpdate.call(this, dt);
       footpaths.updateTraffic(this.villagers, dt);
+      physicsEngine.stepWorldPhysics(this, dt, footpaths);
+    };
+  }
+
+  // 1b. Hook into resolveUnitPhysics for mass-weighted unit separation & smooth building sliding
+  const origResolvePhysics = proto.resolveUnitPhysics;
+  if (typeof origResolvePhysics === 'function') {
+    proto.resolveUnitPhysics = function (u, dt, isEnemy) {
+      origResolvePhysics.call(this, u, dt, isEnemy);
+      physicsEngine.resolveMassCollisions(this, u, dt);
+    };
+  }
+
+  // 1c. Hook into applyKnockback to add mass scaling, vertical 3D launch (`u.vz`), and camera shake
+  const origApplyKnockback = proto.applyKnockback;
+  if (typeof origApplyKnockback === 'function') {
+    proto.applyKnockback = function (target, fromX, fromY, force = 160) {
+      const mass = physicsEngine.getUnitMass(target);
+      const scaledForce = force / Math.pow(mass, 0.65);
+      origApplyKnockback.call(this, target, fromX, fromY, scaledForce);
+
+      if (target && !target.invincible) {
+        // Launch knocked-back units into a 3D vertical arc proportional to impact force
+        const lift = Math.min(280, Math.max(65, scaledForce * 0.72));
+        target.vz = Math.max(target.vz || 0, lift);
+        if (force >= 220) {
+          physicsEngine.addCameraShake(Math.min(10, force / 45));
+        }
+      }
     };
   }
 
@@ -2514,6 +2771,10 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   const origRenderTerrain = proto.renderContinentsAndRiver;
   if (typeof origRenderTerrain === 'function') {
     proto.renderContinentsAndRiver = function (ctx, invTilt) {
+      if (physicsEngine.camShakeIntensity > 0.1) {
+        ctx.translate(physicsEngine.camShakeX, physicsEngine.camShakeY);
+      }
+
       const savedGalleys = this.warGalleys;
       const savedBridges = this.stoneBridges;
       const origFillRect = ctx.fillRect;
@@ -2596,7 +2857,6 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   // 4. Upgraded Villager, Hero t101s, Ring-Wraith & Bender Renderer
   const origDrawHuman = proto.drawArticulatedHuman;
   proto.drawArticulatedHuman = function (ctx, unit, dx, sy, invTilt, isEnemy) {
-    // Only fall back to stick-figure renderer for World Bosses, mounted beasts, or extreme zoom-out LOD
     if (unit.isBoss || unit.mountType || (this.cam && this.cam.zoom < 0.45)) {
       if (typeof origDrawHuman === 'function') {
         origDrawHuman.call(this, ctx, unit, dx, sy, invTilt, isEnemy);
@@ -2650,10 +2910,11 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     }
   };
 
-  // 5. Hook into renderCombatAndArrowVFX for Black Holes, Meteors, Bloodbending, Time-Slow & Slash Ribbons
+  // 5. Hook into renderCombatAndArrowVFX for Black Holes, Meteors, Bloodbending, Time-Slow & Physics Landing Dust
   const origRenderCombatVFX = proto.renderCombatAndArrowVFX;
   if (typeof origRenderCombatVFX === 'function') {
     proto.renderCombatAndArrowVFX = function (ctx, invTilt) {
+      physicsEngine.drawPhysicsVFX(ctx, this, invTilt);
       origRenderCombatVFX.call(this, ctx, invTilt);
       combatVFX.drawEnhancedCombatVFX(ctx, this, invTilt);
     };
