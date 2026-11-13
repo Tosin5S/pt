@@ -218,8 +218,8 @@ export const uiMethods = {
                 if (cont) {
                     this.globeMode = false;
                     this.cam.followSelected = false;
-                    this.cam.targetX = (cont.xStart + cont.xEnd) * 0.5;
-                    this.cam.targetY = 2280;
+                    this.cam.targetX = cont.xStart + 820;
+                    this.cam.targetY = 2320;
                     this.updateZoomHUD();
                     this.showBanner('🗺️', `Jumped to ${cont.name}`);
                 }
@@ -545,8 +545,8 @@ export const uiMethods = {
         const styles = ['berserker', 'phalanx', 'kungfu', 'archery', 'juggernaut'];
         for (let i = 0; i < toAdd; i++) {
             const c = i % 6;
-            const vx = CONTINENTS[c].xStart + 1200 + (i * 193) % 7200;
-            const vy = 2250 + (i * 137) % 5200;
+            const vx = CONTINENTS[c].xStart + 600 + (i * 47) % 1200;
+            const vy = 2160 + (i * 39) % 800;
             const u = this.createVillager(vx, vy, `Settler-${this.villagers.length + 1}`, false);
             u.fightingStyle = styles[i % styles.length];
             this.villagers.push(u);

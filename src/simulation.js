@@ -294,19 +294,19 @@ export class PrehistoricPlanetaryGame {
             });
         });
 
-        // Bridges, Cliff Ramps & Mithril Caverns across all 6 Massive Continents
+        // Bridges, Cliff Ramps & Mithril Caverns across all 6 Ultra-Massive Continents (576,000 x 96,000)
         for (let c = 0; c < CONTINENTS.length; c++) {
             const base = CONTINENTS[c].xStart;
-            [1400, 3200, 4800, 6400, 8200].forEach(ox => {
-                this.stoneBridges.push({ x: base + ox, y: RIVER_Y });
-            });
-            [1800, 4200, 6200, 8400].forEach(ox => {
-                this.cliffRamps.push({ x: base + ox, y: 1680 });
-            });
+            for (let b = 0; b < 12; b++) {
+                this.stoneBridges.push({ x: base + 1200 + b * 8000, y: RIVER_Y });
+            }
+            for (let r = 0; r < 10; r++) {
+                this.cliffRamps.push({ x: base + 1500 + r * 9500, y: 1680 });
+            }
             this.mithrilCaverns.push({
                 id: this.nextId++,
                 name: `${CONTINENTS[c].name} Mithril Cavern`,
-                x: base + 4800,
+                x: base + 1400,
                 y: 1540,
                 mithrilReserve: 450
             });
@@ -316,14 +316,26 @@ export class PrehistoricPlanetaryGame {
                 biome: CONTINENTS[c].biome
             });
 
-            // Forests, Stone & Gold Veins spread across the massive 9600x8400 continent
-            for (let n = 0; n < 70; n++) {
+            // Starter resource cluster near each continent's capital
+            for (let s = 0; s < 16; s++) {
+                const rType = s % 3 === 0 ? 'gold' : (s % 2 === 0 ? 'stone' : 'tree');
+                this.resourcesNodes.push({
+                    id: this.nextId++,
+                    type: rType,
+                    x: base + 320 + (s * 137) % 1600,
+                    y: 2120 + (s * 193) % 900,
+                    amount: 350
+                });
+            }
+
+            // Wilderness Forests, Stone & Gold Veins across the 96,000 x 94,000 continent
+            for (let n = 0; n < 104; n++) {
                 const rType = n % 3 === 0 ? 'gold' : (n % 2 === 0 ? 'stone' : 'tree');
                 this.resourcesNodes.push({
                     id: this.nextId++,
                     type: rType,
-                    x: base + 180 + (n * 197) % 9200,
-                    y: 1460 + (n * 313) % 7600,
+                    x: base + 400 + (n * 7919) % 95000,
+                    y: 1460 + (n * 12497) % 90000,
                     amount: 350
                 });
             }
@@ -461,10 +473,10 @@ export class PrehistoricPlanetaryGame {
 
         // 4 Colossal Prehistoric World Bosses
         const bossSpecs = [
-            { name: '🦖 Elder Titan Mammoth',     x: 12500, y: 3600 },
-            { name: '🌋 Ashland Magma Behemoth',  x: 24200, y: 4200 },
-            { name: '🐉 Abyssal River Leviathan', x: 34800, y: RIVER_Y },
-            { name: '🦅 Celestial Thunder-Roc',   x: 46400, y: 1620 }
+            { name: '🦖 Elder Titan Mammoth',     x: 125000, y: 18000 },
+            { name: '🌋 Ashland Magma Behemoth',  x: 242000, y: 32000 },
+            { name: '🐉 Abyssal River Leviathan', x: 348000, y: RIVER_Y },
+            { name: '🦅 Celestial Thunder-Roc',   x: 464000, y: 1620 }
         ];
         bossSpecs.forEach(b => {
             const boss = this.createEnemyRaider(b.x, b.y, b.name, true, null);

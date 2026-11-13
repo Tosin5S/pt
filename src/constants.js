@@ -1,14 +1,14 @@
-export const WORLD_W = 57600;
-export const WORLD_H = 9600;
+export const WORLD_W = 576000;
+export const WORLD_H = 96000;
 export const RIVER_Y = 2020;
 
 export const CONTINENTS = [
-    { id: 0, name: 'Cradle of Aethelgard', biome: 'temperate', xStart: 0,     xEnd: 9600,  color: '#2e4f27', grass: '#3b6e33', cliff: '#57534e' },
-    { id: 1, name: 'Gondwana Savanna',     biome: 'savanna',   xStart: 9600,  xEnd: 19200, color: '#6b5322', grass: '#85682a', cliff: '#78552b' },
-    { id: 2, name: 'Obsidian Ashlands',    biome: 'volcanic',  xStart: 19200, xEnd: 28800, color: '#272024', grass: '#3f2e36', cliff: '#451a1c' },
-    { id: 3, name: 'Jade Lotus Highlands', biome: 'bamboo',    xStart: 28800, xEnd: 38400, color: '#1b4d3e', grass: '#226b54', cliff: '#334155' },
-    { id: 4, name: 'Boreal Frost Tundra',  biome: 'tundra',    xStart: 38400, xEnd: 48000, color: '#334e68', grass: '#486581', cliff: '#64748b' },
-    { id: 5, name: 'Sovereign Ring Lands', biome: 'imperial',  xStart: 48000, xEnd: 57600, color: '#3b1d2e', grass: '#592642', cliff: '#4c1d95' }
+    { id: 0, name: 'Cradle of Aethelgard', biome: 'temperate', xStart: 0,      xEnd: 96000,  color: '#2e4f27', grass: '#3b6e33', cliff: '#57534e' },
+    { id: 1, name: 'Gondwana Savanna',     biome: 'savanna',   xStart: 96000,  xEnd: 192000, color: '#6b5322', grass: '#85682a', cliff: '#78552b' },
+    { id: 2, name: 'Obsidian Ashlands',    biome: 'volcanic',  xStart: 192000, xEnd: 288000, color: '#272024', grass: '#3f2e36', cliff: '#451a1c' },
+    { id: 3, name: 'Jade Lotus Highlands', biome: 'bamboo',    xStart: 288000, xEnd: 384000, color: '#1b4d3e', grass: '#226b54', cliff: '#334155' },
+    { id: 4, name: 'Boreal Frost Tundra',  biome: 'tundra',    xStart: 384000, xEnd: 480000, color: '#334e68', grass: '#486581', cliff: '#64748b' },
+    { id: 5, name: 'Sovereign Ring Lands', biome: 'imperial',  xStart: 480000, xEnd: 576000, color: '#3b1d2e', grass: '#592642', cliff: '#4c1d95' }
 ];
 
 export const AGE_EPOCHS = [
@@ -71,6 +71,12 @@ export function wrapDX(fromX, toX) {
 }
 export function wrappedDist(x1, y1, x2, y2) {
     return Math.hypot(wrapDX(x1, x2), y2 - y1);
+}
+
+export function hash2D(x, y) {
+    let n = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263);
+    n = (n ^ (n >>> 13)) * 1274126177;
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
 }
 
 export function solve2BoneIK(rootX, rootY, targetX, targetY, len1, len2, bendDir = 1) {

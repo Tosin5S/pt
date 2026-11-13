@@ -1,6 +1,6 @@
 import {
-    WORLD_W, RIVER_Y, CONTINENTS, AGE_EPOCHS,
-    wrapX, wrapDX, solve2BoneIK
+    WORLD_W, WORLD_H, RIVER_Y, CONTINENTS, AGE_EPOCHS,
+    wrapX, wrapDX, solve2BoneIK, hash2D
 } from './constants.js';
 
 export const rendererMethods = {
@@ -40,14 +40,14 @@ export const rendererMethods = {
             const cont = CONTINENTS[c];
             const center = (cont.xStart + cont.xEnd) * 0.5;
             const dx = wrapDX(this.cam.x, center);
-            if (Math.abs(dx) > viewHalfW + 5000) continue;
+            if (Math.abs(dx) > viewHalfW + 48500) continue;
     
             const drawX = dx - (cont.xEnd - cont.xStart) * 0.5;
             const cw = cont.xEnd - cont.xStart;
             const topY = 1200 - this.cam.y;
     
             ctx.fillStyle = cont.grass;
-            ctx.fillRect(drawX, topY, cw, 8400);
+            ctx.fillRect(drawX, topY, cw, WORLD_H - 1200);
     
             // Highland plateau + striated 2.5D cliff face + drop shadow
             ctx.fillStyle = cont.color;
@@ -74,10 +74,10 @@ export const rendererMethods = {
             ctx.save();
             ctx.globalAlpha = 0.45;
             ctx.fillStyle = seamGrad;
-            ctx.fillRect(drawX + cw - 90, 1714 - this.cam.y, 180, 7886);
+            ctx.fillRect(drawX + cw - 90, 1714 - this.cam.y, 180, WORLD_H - 1714);
             ctx.restore();
     
-            // Procedural biome ground details (culled by zoom & viewport)
+            // Infinite-grid procedural biome ground details (constant O(visible screen) cost at any map size)
             if (this.cam.zoom >= 0.42) {
                 const detailColor = cont.biome === 'volcanic' ? 'rgba(249, 115, 22, 0.35)'
                     : cont.biome === 'boreal' ? 'rgba(241, 245, 249, 0.35)'
@@ -85,23 +85,30 @@ export const rendererMethods = {
                     : cont.biome === 'coral' ? 'rgba(103, 232, 249, 0.28)'
                     : 'rgba(134, 239, 172, 0.25)';
                 ctx.fillStyle = detailColor;
+                const cell = 180;
                 const viewHalfH = (this.canvas.height * 0.65) / (this.cam.zoom * this.cam.tiltScale);
-                for (let i = 0; i < 90; i++) {
-                    const gx = drawX + ((i * 397 + c * 137) % (cw - 60)) + 30;
-                    if (Math.abs(gx) > viewHalfW + 80) continue;
-                    const gy = 1750 + ((i * 271 + c * 89) % 7400);
-                    if (Math.abs(gy - this.cam.y) > viewHalfH + 60) continue;
-                    if (Math.abs(gy - RIVER_Y) < 85) continue;
-                    const sy = gy - this.cam.y;
-                    if (cont.biome === 'volcanic') {
-                        ctx.fillRect(gx - 8, sy, 16, 2.5);
-                    } else if (cont.biome === 'boreal') {
-                        ctx.beginPath();
-                        ctx.ellipse(gx, sy, 14, 5, 0, 0, Math.PI * 2);
-                        ctx.fill();
-                    } else {
-                        ctx.fillRect(gx - 2, sy - 5, 2, 6);
-                        ctx.fillRect(gx + 2, sy - 4, 2, 5);
+                const minCol = Math.floor(Math.max(cont.xStart, this.cam.x - viewHalfW) / cell);
+                const maxCol = Math.ceil(Math.min(cont.xEnd, this.cam.x + viewHalfW) / cell);
+                const minRow = Math.floor(Math.max(1750, this.cam.y - viewHalfH) / cell);
+                const maxRow = Math.ceil(Math.min(WORLD_H - 250, this.cam.y + viewHalfH) / cell);
+                for (let r = minRow; r <= maxRow; r++) {
+                    for (let col = minCol; col <= maxCol; col++) {
+                        if (hash2D(col, r) < 0.55) continue;
+                        const worldX = col * cell + hash2D(col + 17, r) * (cell - 40) + 20;
+                        const worldY = r * cell + hash2D(col, r + 31) * (cell - 40) + 20;
+                        if (Math.abs(worldY - RIVER_Y) < 85) continue;
+                        const gx = wrapDX(this.cam.x, worldX);
+                        const sy = worldY - this.cam.y;
+                        if (cont.biome === 'volcanic') {
+                            ctx.fillRect(gx - 8, sy, 16, 2.5);
+                        } else if (cont.biome === 'tundra' || cont.biome === 'boreal') {
+                            ctx.beginPath();
+                            ctx.ellipse(gx, sy, 14, 5, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                        } else {
+                            ctx.fillRect(gx - 2, sy - 5, 2, 6);
+                            ctx.fillRect(gx + 2, sy - 4, 2, 5);
+                        }
                     }
                 }
             }
@@ -1265,7 +1272,7 @@ export const rendererMethods = {
         if (hero) {
             mctx.fillStyle = '#fde047';
             mctx.beginPath();
-            mctx.arc((hero.x / WORLD_W) * mw, ((hero.y - 1200) / 8200) * mh, 3.5, 0, Math.PI * 2);
+            mctx.arc((hero.x / WORLD_W) * mw, ((hero.y - 1200) / (WORLD_H - 1400)) * mh, 3.5, 0, Math.PI * 2);
             mctx.fill();
         }
     
