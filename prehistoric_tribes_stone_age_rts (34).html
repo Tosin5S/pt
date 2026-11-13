@@ -181,6 +181,9 @@
                     <button onclick="game.toggleHD2D()" class="stone-btn px-2 py-1 rounded-lg text-[10px] font-bold text-purple-200 shrink-0">
                         ✨ <span id="hd2dBtnText">HD-2D ON</span>
                     </button>
+                    <button onclick="game.cycleSimSpeed()" class="stone-btn px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-200 shrink-0" title="Cycle Simulation Speed (P to Pause)">
+                        ⏯️ <span id="simSpeedBtnText">1x</span>
+                    </button>
                     <button onclick="game.toggleMusic()" class="stone-btn px-2 py-1 rounded-lg text-[10px] font-bold text-emerald-200 shrink-0">
                         🥁 <span id="musicBtnText">Music OFF</span>
                     </button>
@@ -643,6 +646,8 @@
                 this.totalTaxesCollected = 0;
                 this.globalTaxTimer = 8.0;
                 this.globalFreeWill = true;
+                this.simSpeed = 1;
+                this.keysDown = new Set();
                 this.musicEnabled = false;
                 this.musicBeatTimer = 0;
 
@@ -1146,9 +1151,11 @@
                             return;
                         }
                     }
-                    if (isDragging && !dragMoved) this.handleWorldTap(e.clientX, e.clientY);
+                    if (isDragging && !dragMoved) this.handleWorldTap(e.clientX, e.clientY, e.button === 2);
                     isDragging = false;
                 });
+
+                this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
                 this.canvas.addEventListener('dblclick', (e) => {
                     if (this.globeMode) {
@@ -1275,6 +1282,39 @@
                         if (ev.buttons === 1) jumpRadar(ev);
                     });
                 }
+
+                window.addEventListener('keydown', (e) => {
+                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+                    const k = e.key.toLowerCase();
+                    this.keysDown.add(k);
+                    if (k === 'h') this.focusHeroT101s();
+                    else if (k === 'p') this.togglePause();
+                    else if (k === 'g') this.toggleGlobeMode();
+                    else if (k === 'f') this.toggleCameraFollow();
+                    else if (k === 'l') this.toggleBoxSelectMode();
+                    else if (k === '=' || k === '+') this.zoomByStep(1.25);
+                    else if (k === '-') this.zoomByStep(0.8);
+                    else if (k === 'escape') {
+                        ['economyPanel', 'emotionsPanel', 'diplomacyPanel', 'techForgePanel'].forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el) el.classList.add('hidden');
+                        });
+                    } else if (k >= '1' && k <= '6') {
+                        const cont = CONTINENTS[parseInt(k, 10) - 1];
+                        if (cont) {
+                            this.globeMode = false;
+                            this.cam.followSelected = false;
+                            this.cam.targetX = (cont.xStart + cont.xEnd) * 0.5;
+                            this.cam.targetY = 2280;
+                            this.updateZoomHUD();
+                            this.showBanner('🗺️', `Jumped to ${cont.name}`);
+                        }
+                    }
+                });
+                window.addEventListener('keyup', (e) => {
+                    this.keysDown.delete(e.key.toLowerCase());
+                });
+                window.addEventListener('blur', () => this.keysDown.clear());
             }
 
             zoomAtScreenPoint(newZoom, sx, sy) {
@@ -1464,7 +1504,7 @@
                 if (followEl) followEl.textContent = `Follow: ${this.cam.followSelected ? 'ON' : 'OFF'}`;
             }
 
-            handleWorldTap(sx, sy) {
+            handleWorldTap(sx, sy, forceCommand = false) {
                 if (this.globeMode) {
                     const w = this.canvas.width;
                     const h = this.canvas.height;
@@ -1507,15 +1547,17 @@
 
                 const wp = this.screenToWorld(sx, sy);
 
-                // 1. Check if tapping a friendly villager/hero to select
-                for (let i = 0; i < this.villagers.length; i++) {
-                    const u = this.villagers[i];
-                    if (wrappedDist(wp.x, wp.y, u.x, u.y) < 30) {
-                        this.selectedIds = [u.id];
-                        this.selectedBuildingId = null;
-                        this.sfx.play('kalimba');
-                        this.updateInspector();
-                        return;
+                // 1. Check if tapping a friendly villager/hero to select (skipped on right-click move/attack order)
+                if (!forceCommand) {
+                    for (let i = 0; i < this.villagers.length; i++) {
+                        const u = this.villagers[i];
+                        if (wrappedDist(wp.x, wp.y, u.x, u.y) < 30) {
+                            this.selectedIds = [u.id];
+                            this.selectedBuildingId = null;
+                            this.sfx.play('kalimba');
+                            this.updateInspector();
+                            return;
+                        }
                     }
                 }
 
@@ -2060,6 +2102,85 @@
                 }
             }
 
+            setTaxRate(rate) {
+                this.taxRate = Math.max(0, Math.min(0.5, Number(rate) || 0));
+                const pct = Math.round(this.taxRate * 100) + '%';
+                const lbl = document.getElementById('taxRateBtnLabel');
+                if (lbl) lbl.textContent = pct;
+                this.renderEconomyPanel();
+                this.showBanner('💰', `Imperial Tax Rate set to ${pct}! Citizens pay tax from their personal wallets every 8s.`);
+            }
+
+            collectTaxesNow() {
+                if (this.taxRate <= 0) {
+                    this.showBanner('⚠️', 'Tax Rate is 0% (Haven) — select a higher tax rate to collect a levy!');
+                    return;
+                }
+                let collected = 0;
+                let payers = 0;
+                for (let i = 0; i < this.villagers.length; i++) {
+                    const u = this.villagers[i];
+                    if ((u.walletGold || 0) > 2) {
+                        const tax = Math.max(1, Math.round(u.walletGold * this.taxRate));
+                        u.walletGold = Math.max(0, u.walletGold - tax);
+                        u.taxPaidTotal = (u.taxPaidTotal || 0) + tax;
+                        collected += tax;
+                        payers++;
+                    }
+                }
+                this.resources.gold += collected;
+                this.totalTaxesCollected += collected;
+                this.sfx.play('ring');
+                this.updateHUD();
+                this.updateInspector();
+                this.renderEconomyPanel();
+                this.showBanner('🧺', `Collected +${collected}🪙 Gold in Imperial Taxes from ${payers} Individual Citizen Wallets!`);
+            }
+
+            spawnPopulationBoom(count = 40) {
+                const room = Math.max(0, this.maxBrowserAgents - this.villagers.length);
+                const toAdd = Math.min(count, room);
+                if (toAdd <= 0) {
+                    this.showBanner('👥', `Browser Agent Cap (${this.maxBrowserAgents} Individual Characters) Reached!`);
+                    return;
+                }
+                const styles = ['berserker', 'phalanx', 'kungfu', 'archery', 'juggernaut'];
+                for (let i = 0; i < toAdd; i++) {
+                    const c = i % 6;
+                    const vx = c * 1600 + 520 + (i * 47) % 620;
+                    const vy = 2160 + (i * 39) % 420;
+                    const u = this.createVillager(vx, vy, `Settler-${this.villagers.length + 1}`, false);
+                    u.fightingStyle = styles[i % styles.length];
+                    this.villagers.push(u);
+                }
+                this.empirePopBillions = +(this.empirePopBillions + 0.35).toFixed(2);
+                this.sfx.play('horn');
+                this.updateHUD();
+                this.renderEconomyPanel();
+                this.showBanner('👶', `+${toAdd} Autonomous Tax-Paying Citizens Joined Your Planetary Empire (${this.villagers.length} Active)!`);
+            }
+
+            renderEconomyPanel() {
+                const summary = document.getElementById('econSummaryText');
+                const list = document.getElementById('wealthiestCitizensList');
+                if (!summary || !list) return;
+
+                let totalWallet = 0;
+                for (let i = 0; i < this.villagers.length; i++) totalWallet += (this.villagers[i].walletGold || 0);
+                const avg = Math.round(totalWallet / Math.max(1, this.villagers.length));
+                const pct = Math.round(this.taxRate * 100);
+                summary.textContent = `${this.villagers.length} Active Citizens (Max ${this.maxBrowserAgents}) • Tax: ${pct}% • Total Wealth: ${Math.floor(totalWallet)}🪙 (Avg ${avg}🪙) • Collected: ${Math.floor(this.totalTaxesCollected)}🪙`;
+
+                const top = [...this.villagers].sort((a, b) => (b.walletGold || 0) - (a.walletGold || 0)).slice(0, 8);
+                list.innerHTML = top.map(u => `
+                    <div onclick="game.selectCitizenById(${u.id})" class="stone-btn p-1.5 rounded-lg cursor-pointer">
+                        <div class="font-bold text-amber-200 truncate">${u.isT101s ? '💍 ' : (u.personalityIcon || '🧑 ')}${u.name}</div>
+                        <div class="text-stone-300 text-[9px] truncate">${u.profession} • Lv.${u.personalGearLevel || 1}</div>
+                        <div class="text-yellow-300 font-bold mt-0.5">👛 ${Math.floor(u.walletGold || 0)}🪙 <span class="text-emerald-300 text-[9px]">(Tax: ${Math.floor(u.taxPaidTotal || 0)}🪙)</span></div>
+                    </div>
+                `).join('');
+            }
+
             toggleEmotionsPanel() {
                 const panel = document.getElementById('emotionsPanel');
                 if (!panel) return;
@@ -2488,6 +2609,26 @@
                 if (el) el.textContent = `HD-2D ${this.hd2dEnabled ? 'ON' : 'OFF'}`;
             }
 
+            cycleSimSpeed() {
+                const speeds = [1, 2, 0];
+                const idx = speeds.indexOf(this.simSpeed);
+                this.simSpeed = speeds[(idx + 1) % speeds.length];
+                this.updateSimSpeedHUD();
+                const labels = { 0: '⏸️ Simulation Paused (Camera & WASD still active)', 1: '▶️ Simulation Speed: 1x Normal', 2: '⏩ Simulation Speed: 2x Fast Forward' };
+                this.showBanner('⏯️', labels[this.simSpeed]);
+            }
+
+            togglePause() {
+                this.simSpeed = this.simSpeed === 0 ? 1 : 0;
+                this.updateSimSpeedHUD();
+                this.showBanner('⏯️', this.simSpeed === 0 ? '⏸️ Simulation Paused' : '▶️ Simulation Resumed (1x)');
+            }
+
+            updateSimSpeedHUD() {
+                const el = document.getElementById('simSpeedBtnText');
+                if (el) el.textContent = this.simSpeed === 0 ? 'Paused' : `${this.simSpeed}x`;
+            }
+
             toggleMusic() {
                 this.musicEnabled = !this.musicEnabled;
                 const el = document.getElementById('musicBtnText');
@@ -2521,7 +2662,11 @@
                     if (typeof data.ageLevel === 'number') this.ageLevel = data.ageLevel;
                     if (typeof data.taxRate === 'number') this.taxRate = data.taxRate;
                     if (typeof data.totalTaxesCollected === 'number') this.totalTaxesCollected = data.totalTaxesCollected;
+                    if (typeof data.empirePopBillions === 'number') this.empirePopBillions = data.empirePopBillions;
+                    const lbl = document.getElementById('taxRateBtnLabel');
+                    if (lbl) lbl.textContent = Math.round(this.taxRate * 100) + '%';
                     this.updateHUD();
+                    this.renderEconomyPanel();
                     this.showBanner('📂', 'Restored Planetary Empire State!');
                 } catch (e) {}
             }
@@ -2826,6 +2971,40 @@
             }
 
             update(dt) {
+                // Smooth WASD / Arrow camera panning (active even when simulation is paused)
+                if (this.keysDown && this.keysDown.size > 0) {
+                    let panX = 0;
+                    let panY = 0;
+                    if (this.keysDown.has('a') || this.keysDown.has('arrowleft')) panX -= 1;
+                    if (this.keysDown.has('d') || this.keysDown.has('arrowright')) panX += 1;
+                    if (this.keysDown.has('w') || this.keysDown.has('arrowup')) panY -= 1;
+                    if (this.keysDown.has('s') || this.keysDown.has('arrowdown')) panY += 1;
+                    if (panX !== 0 || panY !== 0) {
+                        const boost = this.keysDown.has('shift') ? 2.0 : 1.0;
+                        if (this.globeMode) {
+                            this.globeYaw -= panX * dt * 1.4 * boost;
+                            this.globePitch = Math.max(-0.9, Math.min(0.9, this.globePitch + panY * dt * 1.1 * boost));
+                        } else {
+                            if (this.cam.followSelected) {
+                                this.cam.followSelected = false;
+                                this.updateZoomHUD();
+                            }
+                            const spd = (680 / Math.max(0.25, this.cam.zoom)) * boost;
+                            this.cam.targetX = wrapX(this.cam.targetX + panX * spd * dt);
+                            this.cam.targetY = Math.max(1220, Math.min(WORLD_H - 180, this.cam.targetY + panY * spd * dt));
+                        }
+                    }
+                }
+
+                // Keep camera & globe interpolation responsive even while paused
+                if (this.simSpeed === 0) {
+                    this.cam.zoom += (this.cam.targetZoom - this.cam.zoom) * Math.min(1, dt * 10);
+                    this.cam.x = wrapX(this.cam.x + wrappedDeltaX(this.cam.x, this.cam.targetX) * Math.min(1, dt * 10));
+                    this.cam.y += (this.cam.targetY - this.cam.y) * Math.min(1, dt * 10);
+                    return;
+                }
+
+                dt = Math.min(0.08, dt * this.simSpeed);
                 this.time += dt;
                 if (this.greatCometTimer > 0) this.greatCometTimer = Math.max(0, this.greatCometTimer - dt);
                 if (this.globalTimeSlowTimer > 0) this.globalTimeSlowTimer = Math.max(0, this.globalTimeSlowTimer - dt);
@@ -3160,14 +3339,65 @@
 
                     const drawX = dx - (cont.xEnd - cont.xStart) * 0.5;
                     const cw = cont.xEnd - cont.xStart;
+                    const topY = 1200 - this.cam.y;
 
                     ctx.fillStyle = cont.grass;
-                    ctx.fillRect(drawX, 1200 - this.cam.y, cw, 1800);
+                    ctx.fillRect(drawX, topY, cw, 1800);
 
+                    // Highland plateau + striated 2.5D cliff face + drop shadow
                     ctx.fillStyle = cont.color;
-                    ctx.fillRect(drawX, 1200 - this.cam.y, cw, 480);
+                    ctx.fillRect(drawX, topY, cw, 480);
                     ctx.fillStyle = cont.cliff;
                     ctx.fillRect(drawX, 1680 - this.cam.y, cw, 34);
+                    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+                    ctx.fillRect(drawX, 1714 - this.cam.y, cw, 10);
+                    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+                    ctx.lineWidth = 1.5;
+                    for (let sx = 40; sx < cw; sx += 90) {
+                        ctx.beginPath();
+                        ctx.moveTo(drawX + sx, 1682 - this.cam.y);
+                        ctx.lineTo(drawX + sx - 8, 1712 - this.cam.y);
+                        ctx.stroke();
+                    }
+
+                    // Feathered biome transition seam with next continent
+                    const nextCont = CONTINENTS[(c + 1) % CONTINENTS.length];
+                    const seamGrad = ctx.createLinearGradient(drawX + cw - 90, 0, drawX + cw + 90, 0);
+                    seamGrad.addColorStop(0, 'rgba(0,0,0,0)');
+                    seamGrad.addColorStop(0.5, nextCont.grass);
+                    seamGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.save();
+                    ctx.globalAlpha = 0.45;
+                    ctx.fillStyle = seamGrad;
+                    ctx.fillRect(drawX + cw - 90, 1714 - this.cam.y, 180, 1286);
+                    ctx.restore();
+
+                    // Procedural biome ground details (culled by zoom & viewport)
+                    if (this.cam.zoom >= 0.42) {
+                        const detailColor = cont.biome === 'volcanic' ? 'rgba(249, 115, 22, 0.35)'
+                            : cont.biome === 'boreal' ? 'rgba(241, 245, 249, 0.35)'
+                            : cont.biome === 'savanna' ? 'rgba(250, 204, 21, 0.25)'
+                            : cont.biome === 'coral' ? 'rgba(103, 232, 249, 0.28)'
+                            : 'rgba(134, 239, 172, 0.25)';
+                        ctx.fillStyle = detailColor;
+                        for (let i = 0; i < 24; i++) {
+                            const gx = drawX + ((i * 293 + c * 137) % (cw - 60)) + 30;
+                            if (Math.abs(gx) > viewHalfW + 80) continue;
+                            const gy = 1750 + ((i * 197 + c * 89) % 1100);
+                            if (Math.abs(gy - RIVER_Y) < 85) continue;
+                            const sy = gy - this.cam.y;
+                            if (cont.biome === 'volcanic') {
+                                ctx.fillRect(gx - 8, sy, 16, 2.5);
+                            } else if (cont.biome === 'boreal') {
+                                ctx.beginPath();
+                                ctx.ellipse(gx, sy, 14, 5, 0, 0, Math.PI * 2);
+                                ctx.fill();
+                            } else {
+                                ctx.fillRect(gx - 2, sy - 5, 2, 6);
+                                ctx.fillRect(gx + 2, sy - 4, 2, 5);
+                            }
+                        }
+                    }
                 }
 
                 // Stone Staircase Ramps
@@ -3184,12 +3414,29 @@
                     }
                 });
 
-                // Winding Turquoise Continental River
+                // Winding Turquoise Continental River with Animated Ripples & Foam
                 const rY = RIVER_Y - this.cam.y;
-                ctx.fillStyle = '#0284c7';
-                ctx.fillRect(-viewHalfW - 200, rY - 56, (viewHalfW + 200) * 2, 112);
-                ctx.fillStyle = 'rgba(125, 211, 252, 0.32)';
-                ctx.fillRect(-viewHalfW - 200, rY - 46, (viewHalfW + 200) * 2, 16);
+                const rW = (viewHalfW + 200) * 2;
+                const rGrad = ctx.createLinearGradient(0, rY - 56, 0, rY + 56);
+                rGrad.addColorStop(0, '#0369a1');
+                rGrad.addColorStop(0.5, '#0284c7');
+                rGrad.addColorStop(1, '#0c4a6e');
+                ctx.fillStyle = rGrad;
+                ctx.fillRect(-viewHalfW - 200, rY - 56, rW, 112);
+
+                // Shoreline foam strips
+                ctx.fillStyle = 'rgba(224, 242, 254, 0.25)';
+                ctx.fillRect(-viewHalfW - 200, rY - 56, rW, 4);
+                ctx.fillRect(-viewHalfW - 200, rY + 52, rW, 4);
+
+                // Scrolling shimmering wave streaks
+                const waveShift = (this.time * 48) % 140;
+                ctx.fillStyle = 'rgba(186, 230, 253, 0.28)';
+                for (let wx = -viewHalfW - 200 + waveShift; wx < viewHalfW + 200; wx += 140) {
+                    ctx.fillRect(wx, rY - 28, 48, 3);
+                    ctx.fillRect(wx + 65, rY + 8, 52, 3);
+                    ctx.fillRect(wx + 25, rY + 32, 36, 2.5);
+                }
 
                 // Swimming Prehistoric Fish
                 ctx.fillStyle = 'rgba(12, 74, 110, 0.65)';
@@ -3397,6 +3644,24 @@
                 ctx.fillRect(-w * 0.5, -h, w, h);
                 ctx.strokeRect(-w * 0.5, -h, w, h);
 
+                // Doorway arch
+                ctx.fillStyle = '#1c1917';
+                ctx.fillRect(-5, -13, 10, 13);
+
+                // Warm flickering hearth / forge glow
+                if (b.type === 'forge' || b.type === 'kitchen' || b.type === 'hut' || b.type === 'shrine' || b.type === 'wonder') {
+                    const flicker = 0.85 + Math.sin(this.time * 9 + b.id) * 0.15;
+                    const glowR = (b.type === 'wonder' || b.type === 'forge' ? 38 : 24) * flicker;
+                    const glowCol = (b.type === 'shrine' || b.type === 'wonder') ? 'rgba(56, 189, 248, 0.26)' : 'rgba(251, 146, 60, 0.28)';
+                    const gGrad = ctx.createRadialGradient(0, -h * 0.4, 2, 0, -h * 0.4, glowR);
+                    gGrad.addColorStop(0, glowCol);
+                    gGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = gGrad;
+                    ctx.beginPath();
+                    ctx.arc(0, -h * 0.4, glowR, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
                 if (b.type === 'sawmill') {
                     ctx.save();
                     ctx.translate(w * 0.28, -h * 0.45);
@@ -3427,6 +3692,38 @@
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
+
+                // Rising chimney smoke wisps for Forge / Kitchen / Hut
+                if ((b.type === 'forge' || b.type === 'kitchen' || b.type === 'hut') && this.cam.zoom >= 0.5) {
+                    ctx.fillStyle = 'rgba(203, 213, 225, 0.35)';
+                    for (let sp = 0; sp < 3; sp++) {
+                        const phase = ((this.time * 0.9 + b.id * 0.3 + sp * 0.33) % 1);
+                        const smX = Math.sin(this.time * 2 + sp + b.id) * 5 + phase * 8;
+                        const smY = -h - b.radius * 0.7 - phase * 26;
+                        ctx.beginPath();
+                        ctx.arc(smX, smY, 3 + phase * 4.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                // Waving tribal banner on military / wonder structures
+                if (b.type === 'barracks' || b.type === 'tower' || b.type === 'gatehouse' || b.type === 'wonder') {
+                    const topY = -h - b.radius * 0.85;
+                    const wave = Math.sin(this.time * 7 + b.id) * 3;
+                    ctx.strokeStyle = '#fef08a';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(0, topY);
+                    ctx.lineTo(0, topY - 14);
+                    ctx.stroke();
+                    ctx.fillStyle = b.customColor || (b.owner === 'player' ? '#ef4444' : '#a855f7');
+                    ctx.beginPath();
+                    ctx.moveTo(0, topY - 14);
+                    ctx.lineTo(12, topY - 11 + wave);
+                    ctx.lineTo(0, topY - 7);
+                    ctx.closePath();
+                    ctx.fill();
+                }
 
                 ctx.fillStyle = '#fef08a';
                 ctx.font = 'bold 10px Inter';
@@ -3468,9 +3765,11 @@
                 const scale = u.isBoss ? 1.85 : (u.isT101s ? 1.24 : 1.0);
                 ctx.scale(scale, scale);
 
-                ctx.fillStyle = 'rgba(0,0,0,0.38)';
+                // Height-responsive ground shadow
+                const shadowScale = Math.max(0.35, 1 - zOff / 140);
+                ctx.fillStyle = `rgba(0,0,0,${(0.38 * shadowScale).toFixed(2)})`;
                 ctx.beginPath();
-                ctx.ellipse(0, 3, 10, 4.5, 0, 0, Math.PI * 2);
+                ctx.ellipse(0, 3, 10 * shadowScale, 4.5 * shadowScale, 0, 0, Math.PI * 2);
                 ctx.fill();
 
                 if (this.selectedIds.includes(u.id)) {
@@ -3479,6 +3778,28 @@
                     ctx.beginPath();
                     ctx.ellipse(0, 3, 15, 6.5, 0, 0, Math.PI * 2);
                     ctx.stroke();
+                }
+
+                // Sprint / dodge landing dust puffs
+                if (this.cam.zoom >= 0.7 && (u.dodgeAnim > 0 || Math.abs(Math.sin(u.walkPhase || 0)) > 0.94)) {
+                    ctx.fillStyle = 'rgba(214, 211, 209, 0.35)';
+                    ctx.beginPath();
+                    ctx.arc(-u.facing * 6, 1, u.dodgeAnim > 0 ? 5.5 : 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Zoom-based LOD for 500-agent performance at strategic map zoom
+                if (this.cam.zoom < 0.45 && !u.isT101s && !u.isBoss) {
+                    ctx.translate(0, -zOff);
+                    ctx.fillStyle = u.hitFlash > 0 ? '#ffffff' : (isEnemy ? '#ef4444' : (u.tribeColor || '#10b981'));
+                    ctx.beginPath();
+                    ctx.arc(0, -14, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#0f172a';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                    ctx.restore();
+                    return;
                 }
 
                 ctx.translate(0, -zOff);
@@ -3490,15 +3811,32 @@
                 if (u.mountType) {
                     const mDir = u.facing || 1;
                     const mBob = Math.sin((u.walkPhase || 0) * 1.4) * 2.5;
+                    const mStride = Math.sin((u.walkPhase || 0) * 1.4) * 5;
                     ctx.save();
                     ctx.translate(0, 4 + mBob);
                     if (u.mountType === 'mammoth') {
+                        // Animated 4 legs
+                        ctx.strokeStyle = '#3e2723';
+                        ctx.lineWidth = 3.2;
+                        ctx.beginPath();
+                        ctx.moveTo(-10, -4); ctx.lineTo(-10 - mStride, 5);
+                        ctx.moveTo(-4, -4);  ctx.lineTo(-4 + mStride, 5);
+                        ctx.moveTo(6, -4);   ctx.lineTo(6 - mStride, 5);
+                        ctx.moveTo(11, -4);  ctx.lineTo(11 + mStride, 5);
+                        ctx.stroke();
                         ctx.fillStyle = '#5c4033';
                         ctx.strokeStyle = '#fbbf24';
                         ctx.lineWidth = 1.6;
                         ctx.beginPath();
                         ctx.ellipse(0, -10, 18, 12, 0, 0, Math.PI * 2);
                         ctx.fill();
+                        ctx.stroke();
+                        // Swinging trunk & ivory tusks
+                        ctx.strokeStyle = '#5c4033';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.moveTo(mDir * 15, -10);
+                        ctx.quadraticCurveTo(mDir * 24, -4 + mBob, mDir * 20, 2);
                         ctx.stroke();
                         ctx.strokeStyle = '#fef3c7';
                         ctx.lineWidth = 2.6;
@@ -3507,6 +3845,12 @@
                         ctx.quadraticCurveTo(mDir * 26, -2, mDir * 24, -14);
                         ctx.stroke();
                     } else if (u.mountType === 'sabre') {
+                        ctx.strokeStyle = '#b45309';
+                        ctx.lineWidth = 2.4;
+                        ctx.beginPath();
+                        ctx.moveTo(-9, -4); ctx.lineTo(-11 - mStride, 4);
+                        ctx.moveTo(9, -4);  ctx.lineTo(11 + mStride, 4);
+                        ctx.stroke();
                         ctx.fillStyle = '#d97706';
                         ctx.strokeStyle = '#fef08a';
                         ctx.lineWidth = 1.5;
@@ -3514,7 +3858,34 @@
                         ctx.ellipse(0, -8, 15, 8, 0, 0, Math.PI * 2);
                         ctx.fill();
                         ctx.stroke();
+                        // Swishing tail & fangs
+                        ctx.beginPath();
+                        ctx.moveTo(-mDir * 14, -9);
+                        ctx.quadraticCurveTo(-mDir * 22, -16 + mBob, -mDir * 20, -4);
+                        ctx.stroke();
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.beginPath();
+                        ctx.moveTo(mDir * 14, -6); ctx.lineTo(mDir * 15, 0);
+                        ctx.stroke();
                     } else if (u.mountType === 'drake') {
+                        const flap = Math.sin(this.time * 10 + u.id) * 9;
+                        ctx.fillStyle = 'rgba(190, 18, 60, 0.72)';
+                        ctx.strokeStyle = '#fda4af';
+                        ctx.lineWidth = 1.4;
+                        ctx.beginPath();
+                        ctx.moveTo(0, -10);
+                        ctx.lineTo(-22, -24 + flap);
+                        ctx.lineTo(-10, -6);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(0, -10);
+                        ctx.lineTo(22, -24 + flap);
+                        ctx.lineTo(10, -6);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
                         ctx.fillStyle = '#881337';
                         ctx.strokeStyle = '#f43f5e';
                         ctx.lineWidth = 1.6;
@@ -3649,6 +4020,19 @@
                     ctx.moveTo(arm.endX, arm.endY);
                     ctx.lineTo(arm.endX + u.facing * 12, arm.endY - 8);
                     ctx.stroke();
+                }
+
+                // Crescent melee swing trail
+                if ((u.swingAnim || 0) > 0.08) {
+                    ctx.save();
+                    ctx.globalAlpha = Math.min(1, u.swingAnim * 1.4);
+                    ctx.strokeStyle = u.isT101s ? '#fde047' : (u.bender ? '#38bdf8' : '#f8fafc');
+                    ctx.lineWidth = u.isT101s ? 3.5 : 2.2;
+                    ctx.beginPath();
+                    const arcStart = u.facing > 0 ? -0.9 : Math.PI - 0.9;
+                    ctx.arc(u.facing * 8, -16, u.isT101s ? 22 : 16, arcStart, arcStart + 1.8);
+                    ctx.stroke();
+                    ctx.restore();
                 }
 
                 if (u.invincible) {
