@@ -760,8 +760,7 @@ export const rendererMethods = {
             ctx.beginPath();
             ctx.arc(0, -18, 20 + Math.sin(this.time * 5) * 2, 0, Math.PI * 2);
             ctx.stroke();
-        }
-        if (u.isT101s) {
+
             ctx.strokeStyle = '#f43f5e';
             ctx.lineWidth = 2.2;
             ctx.beginPath();

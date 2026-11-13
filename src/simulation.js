@@ -214,15 +214,15 @@ export class PrehistoricPlanetaryGame {
             isWraith: false,
             isShadowClone: false,
             cloneLife: 0,
-            hp: isT101s ? 980 : 210,
-            maxHp: isT101s ? 980 : 210,
-            attack: isT101s ? 68 : 24,
-            fightingStyle: isT101s ? 'onering' : styles[Math.floor(Math.random() * styles.length)],
-            bender: isT101s ? 'avatar' : (Math.random() < 0.28 ? ['fire', 'water', 'earth', 'air'][Math.floor(Math.random() * 4)] : null),
-            skySoar: isT101s,
+            hp: isT101s ? 280 : 210,
+            maxHp: isT101s ? 280 : 210,
+            attack: isT101s ? 30 : 24,
+            fightingStyle: isT101s ? 'berserker' : styles[Math.floor(Math.random() * styles.length)],
+            bender: isT101s ? 'fire' : (Math.random() < 0.28 ? ['fire', 'water', 'earth', 'air'][Math.floor(Math.random() * 4)] : null),
+            skySoar: false,
             invincible: false,
-            lightningSpeed: isT101s,
-            mountType: isT101s ? 'drake' : null,
+            lightningSpeed: false,
+            mountType: null,
             age: isT101s ? 26 : (18 + Math.floor(Math.random() * 14)),
             maxAge: isT101s ? 115 : (72 + Math.floor(Math.random() * 24)),
             kills: 0,
@@ -606,19 +606,40 @@ export class PrehistoricPlanetaryGame {
         return this.villagers.find(v => this.selectedIds.includes(v.id)) || this.villagers[0];
     }
 
+    getFriendlyRingBearer() {
+        const bearer = this.getRingBearer();
+        if (bearer && this.villagers.includes(bearer)) return bearer;
+        return null;
+    }
+
+    requireRingBearer(actionName = 'Ring power') {
+        const bearer = this.getFriendlyRingBearer();
+        if (!bearer) {
+            this.showBanner('💍', `No human wears the One Ring! Reclaim & equip the Ring to use ${actionName}.`);
+            return null;
+        }
+        return bearer;
+    }
+
     focusHeroT101s() {
-        const hero = this.villagers.find(v => v.isT101s);
-        if (!hero) return;
+        const bearer = this.getRingBearer() || this.villagers.find(v => v.isT101s);
         this.globeMode = false;
-        this.selectedIds = [hero.id];
-        this.cam.targetX = hero.x;
-        this.cam.targetY = hero.y;
-        this.updateInspector();
-        this.showBanner('💍', 'Camera centered on Hero t101s (Invincible One Ring Sovereign)!');
+        if (bearer) {
+            if (this.villagers.includes(bearer)) this.selectedIds = [bearer.id];
+            this.cam.targetX = bearer.x;
+            this.cam.targetY = bearer.y;
+            this.updateInspector();
+            this.showBanner('💍', `Camera centered on Ring-Bearer ${bearer.name}!`);
+        } else if (this.oneRing.dropped) {
+            this.cam.targetX = this.oneRing.x;
+            this.cam.targetY = this.oneRing.y;
+            this.showBanner('💍', 'Camera centered on the unclaimed One Ring!');
+        }
     }
 
     toggleSquadSelection() {
-        const hero = this.villagers.find(v => v.isT101s) || this.villagers[0];
+        const hero = this.getFriendlyRingBearer() || this.villagers.find(v => v.isT101s) || this.villagers[0];
+        if (!hero) return;
         if (!this.squadSelectActive) {
             this.squadSelectActive = true;
             const nearby = this.villagers
@@ -626,11 +647,11 @@ export class PrehistoricPlanetaryGame {
                 .slice(0, 18)
                 .map(v => v.id);
             this.selectedIds = nearby.length ? nearby : [hero.id];
-            this.showBanner('🔲', `Selected Strike Squad (${this.selectedIds.length} Warriors) around t101s!`);
+            this.showBanner('🔲', `Selected Strike Squad (${this.selectedIds.length} Warriors) around ${hero.name}!`);
         } else {
             this.squadSelectActive = false;
             this.selectedIds = [hero.id];
-            this.showBanner('💍', 'Focused Selection on Hero t101s.');
+            this.showBanner('💍', `Focused Selection on ${hero.name}.`);
         }
         const el = document.getElementById('squadBtnLabel');
         if (el) el.textContent = `Squad (${this.selectedIds.length})`;
@@ -653,7 +674,7 @@ export class PrehistoricPlanetaryGame {
     }
 
     triggerHeroTeleport() {
-        const hero = this.villagers.find(v => v.isT101s);
+        const hero = this.requireRingBearer('Flash Teleport');
         if (!hero) return;
         this.heroTeleportOnTap = !this.heroTeleportOnTap;
         const el = document.getElementById('teleportBtnText');
@@ -677,7 +698,7 @@ export class PrehistoricPlanetaryGame {
     }
 
     toggleHeroInvincibility() {
-        const hero = this.villagers.find(v => v.isT101s);
+        const hero = this.requireRingBearer('Ring Invincibility');
         if (!hero) return;
         hero.invincible = !hero.invincible;
         if (hero.invincible) hero.hp = hero.maxHp;
@@ -688,7 +709,7 @@ export class PrehistoricPlanetaryGame {
     }
 
     toggleHeroLightningSpeed() {
-        const hero = this.villagers.find(v => v.isT101s);
+        const hero = this.requireRingBearer('Lightning Speed');
         if (!hero) return;
         hero.lightningSpeed = !hero.lightningSpeed;
         const el = document.getElementById('lightningSpdBtnText');
@@ -698,25 +719,24 @@ export class PrehistoricPlanetaryGame {
     }
 
     triggerOneRingTimeDome() {
+        const hero = this.requireRingBearer('Time-Dilation');
+        if (!hero) return;
         this.globalTimeSlowTimer = 14.0;
-        const hero = this.villagers.find(v => v.isT101s);
-        if (hero) {
-            this.parryRings.push({ x: hero.x, y: hero.y, radius: 15, maxRadius: 260, color: '#c084fc', life: 0.9 });
-            this.spawnFloatText(hero.x, hero.y - 42, '⏳ WORLD TIME SLOWED (12% SPEED)!', '#e879f9');
-        }
+        this.parryRings.push({ x: hero.x, y: hero.y, radius: 15, maxRadius: 260, color: '#c084fc', life: 0.9 });
+        this.spawnFloatText(hero.x, hero.y - 42, '⏳ WORLD TIME SLOWED (12% SPEED)!', '#e879f9');
         this.sfx.play('ring');
-        this.showBanner('⏳', 'One Ring Sovereign Time-Dilation Active: All enemies & enemy arrows slowed to 12% speed for 14s!');
+        this.showBanner('⏳', `${hero.name} unleashed One Ring Time-Dilation: enemies slowed to 12% speed for 14s!`);
     }
 
     triggerShadowCloneLegion() {
-        const hero = this.villagers.find(v => v.isT101s);
+        const hero = this.requireRingBearer('Shadow-Clones');
         if (!hero) return;
         for (let c = 0; c < 6; c++) {
             const ang = (c / 6) * Math.PI * 2;
             const clone = this.createVillager(
                 hero.x + Math.cos(ang) * 65,
                 hero.y + Math.sin(ang) * 45,
-                `t101s Shadow-Clone #${c + 1}`,
+                `${hero.name} Shadow-Clone #${c + 1}`,
                 false
             );
             clone.isShadowClone = true;
@@ -729,11 +749,11 @@ export class PrehistoricPlanetaryGame {
             this.villagers.push(clone);
         }
         this.sfx.play('ring');
-        this.showBanner('👥', 't101s split into 6 Hyper-Speed Lightning Shadow-Clones for 18s!');
+        this.showBanner('👥', `${hero.name} split into 6 Hyper-Speed Lightning Shadow-Clones for 18s!`);
     }
 
     triggerBlackHoleSingularity() {
-        const hero = this.villagers.find(v => v.isT101s) || this.getSelectedUnit();
+        const hero = this.requireRingBearer('Black Hole Singularity');
         if (!hero) return;
         this.blackHoles.push({
             x: wrapX(hero.x + hero.facing * 140),
@@ -742,11 +762,11 @@ export class PrehistoricPlanetaryGame {
             life: 6.5
         });
         this.sfx.play('ring');
-        this.showBanner('🕳️', 't101s unleashed a Gravitational Black Hole Singularity!');
+        this.showBanner('🕳️', `${hero.name} unleashed a Gravitational Black Hole Singularity!`);
     }
 
     summonRingWraiths() {
-        const hero = this.villagers.find(v => v.isT101s) || this.getSelectedUnit();
+        const hero = this.requireRingBearer('Ring-Wraiths');
         if (!hero) return;
         for (let w = 0; w < 3; w++) {
             const wraith = this.createVillager(
@@ -770,7 +790,7 @@ export class PrehistoricPlanetaryGame {
     }
 
     toggleHeroSkySoar() {
-        const u = this.getSelectedUnit();
+        const u = this.requireRingBearer('Sky-Soar');
         if (!u) return;
         u.skySoar = !u.skySoar;
         const el = document.getElementById('soarBtnText');
@@ -789,7 +809,7 @@ export class PrehistoricPlanetaryGame {
     }
 
     triggerOneRingDominion() {
-        const hero = this.villagers.find(v => v.isT101s) || this.getSelectedUnit();
+        const hero = this.requireRingBearer('One Ring Dominion');
         if (!hero) return;
         this.parryRings.push({ x: hero.x, y: hero.y, radius: 12, maxRadius: 280, color: '#f43f5e', life: 0.75 });
         let captured = 0;
@@ -1660,11 +1680,11 @@ export class PrehistoricPlanetaryGame {
         u.facing = wrapDX(u.x, target.x) >= 0 ? 1 : -1;
 
         const highGroundBonus = this.getTerrainElevation(u.x, u.y) > this.getTerrainElevation(target.x, target.y) ? 1.25 : 1.0;
-        const cometMult = this.greatCometTimer > 0 && (u.isT101s || u.bender === 'fire' || u.bender === 'avatar') ? 2.5 : 1.0;
+        const cometMult = this.greatCometTimer > 0 && (u.hasOneRing || u.bender === 'fire' || u.bender === 'avatar') ? 2.5 : 1.0;
         let weatherMult = 1.0;
         if (this.weatherMode === 1 && u.bender === 'water') weatherMult = 1.35;
         if (this.weatherMode === 2 && u.bender === 'fire') weatherMult = 1.35;
-        if (this.weatherMode === 4 && u.isT101s) weatherMult = 1.5;
+        if (this.weatherMode === 4 && u.hasOneRing) weatherMult = 1.5;
 
         const dmg = u.attack * highGroundBonus * cometMult * weatherMult * (u.comboStep === 2 ? 1.45 : 1.0);
 
@@ -1680,7 +1700,7 @@ export class PrehistoricPlanetaryGame {
             x: u.x + u.facing * 18,
             y: u.y - 12,
             facing: u.facing,
-            color: u.isT101s ? '#f43f5e' : (FIGHTING_STYLES[u.fightingStyle]?.color || '#fbbf24'),
+            color: u.hasOneRing ? '#f43f5e' : (FIGHTING_STYLES[u.fightingStyle]?.color || '#fbbf24'),
             life: 0.26
         });
         for (let s = 0; s < 5; s++) {
@@ -1694,8 +1714,8 @@ export class PrehistoricPlanetaryGame {
             });
         }
 
-        // Non-Lethal Bloodbending Control for Hero t101s
-        if (u.isT101s && this.ringControlSpareMode && !target.isBoss && target.hp - dmg <= 35) {
+        // Non-Lethal Bloodbending Control for the Ring-Bearer
+        if (u.hasOneRing && this.ringControlSpareMode && !target.isBoss && target.hp - dmg <= 35) {
             target.controlledByRing = true;
             target.hp = target.maxHp;
             this.spawnFloatText(target.x, target.y - 34, '👑 BLOOD-CONTROLLED PUPPET!', '#fde047');
@@ -1755,14 +1775,18 @@ export class PrehistoricPlanetaryGame {
             unit._preRingStats = {
                 attack: unit.attack || 20,
                 maxHp: unit.maxHp || 200,
-                lightningSpeed: !!unit.lightningSpeed,
-                skySoar: !!unit.skySoar
+                fightingStyle: unit.fightingStyle || 'berserker',
+                bender: unit.bender || null,
+                lightningSpeed: false,
+                skySoar: false
             };
         }
         unit.hasOneRing = true;
-        unit.maxHp = Math.round(unit._preRingStats.maxHp * 2.2);
-        unit.hp = Math.min(unit.maxHp, unit.hp + Math.round(unit.maxHp * 0.4));
-        unit.attack = Math.round(unit._preRingStats.attack * 2.4);
+        unit.maxHp = Math.round(unit._preRingStats.maxHp * 2.8);
+        unit.hp = Math.min(unit.maxHp, unit.hp + Math.round(unit.maxHp * 0.45));
+        unit.attack = Math.round(unit._preRingStats.attack * 2.8);
+        unit.fightingStyle = 'onering';
+        unit.bender = 'avatar';
         unit.lightningSpeed = true;
         unit.skySoar = true;
         this.oneRing.bearerId = unit.id;
@@ -1787,9 +1811,12 @@ export class PrehistoricPlanetaryGame {
             bearer.maxHp = bearer._preRingStats.maxHp;
             bearer.hp = Math.min(bearer.hp, bearer.maxHp);
             bearer.attack = bearer._preRingStats.attack;
-            bearer.lightningSpeed = bearer._preRingStats.lightningSpeed;
-            bearer.skySoar = bearer._preRingStats.skySoar;
+            bearer.fightingStyle = bearer._preRingStats.fightingStyle;
+            bearer.bender = bearer._preRingStats.bender;
+            bearer.lightningSpeed = false;
+            bearer.skySoar = false;
         }
+        bearer.invincible = false;
         bearer.hasOneRing = false;
         this.oneRing.bearerId = null;
         this.oneRing.dropped = true;
@@ -2120,7 +2147,7 @@ export class PrehistoricPlanetaryGame {
                         this.afterimages.push({
                             x: u.x,
                             y: u.y,
-                            color: u.isT101s ? '#f43f5e' : '#38bdf8',
+                            color: u.hasOneRing ? '#f43f5e' : '#38bdf8',
                             alpha: 0.55,
                             life: 0.25
                         });
