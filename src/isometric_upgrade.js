@@ -1,27 +1,48 @@
 /**
- * Drop-in Isometric Graphics & Footpath Upgrade for https://github.com/Tosin5S/pt
- * -------------------------------------------------------------------------------
+ * Drop-in Isometric Graphics, Earth Biome & Footpath Upgrade for https://github.com/Tosin5S/pt
+ * --------------------------------------------------------------------------------------------
  * File target in your repo: src/isometric_upgrade.js
  *
  * Updates in this version:
- * 1. 2.5D Isometric Dragon-Fire War Galleys (`this.warGalleys`): Intercepts the flat
- *    trapezoid/rectangle galley render inside `renderContinentsAndRiver` (preventing
- *    double-draw) and renders a 2.5D carvel-planked warship with V-shaped foam wakes,
- *    synchronized rowing oars, gilded shields along the gunwale, a carved dragon-head
- *    figurehead (breathing fire sparks when firing), and a billowing crimson-and-gold
- *    emblazoned sail.
- * 2. Smooth Continuous Footpaths: Soft radial-gradient terrain blending + connected
- *    neighbor path segments so high-traffic areas form seamless dirt trails and
- *    cobblestone roads.
- * 3. 2.5D Isometric Bridges (`this.stoneBridges`): Arched timber-and-stone isometric
- *    causeways, water pilings, plank decks, and side railings across `RIVER_Y`.
- * 4. 2.5D Isometric Siege Engines (`drawSiegeEngine`): Shaded isometric timber frames,
- *    spoked wheels, swinging counterweight arms, and horned mammoth-skull prows.
- * 5. Preserves all existing custom hooks (`unit.customTool`, `unit.customMagic`,
- *    `unit.swingAnim`, `building.auraColor`, selection rings, and all 24 building specs).
+ * 1. Earth 71% Ocean / 29% Land Biome & 24% Mountain Renderer:
+ *    - Upgrades the blocky 240px `ctx.fillRect` squares from `getEarthTerrainAt(wx, wy)`
+ *      into organic, feathered isometric terrain biomes:
+ *        * Oceans & Seas (~71%): Deep ocean basins, turquoise coastal shallows, and
+ *          animated white shoreline surf foam where ocean meets land.
+ *        * Forests & Woodlands (~31% of land / ~9.0% of Earth): Rich forest floor canopy
+ *          shading, fern clusters, and fallen timber details.
+ *        * Grasslands & Savannas (~26% of land / ~7.5% of Earth): Golden-olive steppe
+ *          swaths and wind-swept prairie grass tufts.
+ *        * Deserts & Barren Land (~19% of land / ~5.5% of Earth): Rippled windblown sand
+ *          dunes, arid sandstone mesas, and salt-flat shimmer.
+ *        * Agricultural & Urban (~14% of land / ~4.1% of Earth): Hedgerow-bordered
+ *          plowed golden cropland furrows and cobblestone civic plazas.
+ *        * Ice, Glaciers & Tundra (~10% of land / ~2.9% of Earth): Permafrost snowfields,
+ *          glacial crevasse lines, and ice crystal highlights.
+ *        * Mountainous Terrain (~24% of land overlapping all biomes): Replaces flat
+ *          triangles with 3D multi-faceted isometric mountain peaks (sunlit left slope,
+ *          shaded right slope, ridge line, and biome-matched snow/forest/volcanic caps).
+ * 2. 3D Planetary Globe Upgrade (`render3DPlanetaryGlobe`):
+ *    - Renders the 71% Ocean / 29% Land breakdown with multi-biome continental bands
+ *      (Forest, Savanna, Desert, Agricultural, Polar Ice Caps, and 24% Mountain ridges)
+ *      plus an on-screen Earth Surface Breakdown HUD legend on the 3D Globe view.
+ * 3. Constant-Alpha Offscreen Footpath Compositor:
+ *    - Eliminates overlapping grey disc artifacts by compositing connected trails on an
+ *      offscreen layer at 1.0 alpha, then blitting once at constant 0.42 opacity.
+ * 4. Preserves 2.5D Bridges, 2.5D Dragon-Fire War Galleys, 2.5D Siege Engines, and all
+ *    custom unit/building hooks.
  */
 
-import { WORLD_W, RIVER_Y, wrapX, wrapDX } from './constants.js';
+import {
+  WORLD_W,
+  WORLD_H,
+  RIVER_Y,
+  CONTINENTS,
+  EARTH_SURFACE_STATS,
+  getEarthTerrainAt,
+  wrapX,
+  wrapDX,
+} from './constants.js';
 
 function shadeHex(hex, amount) {
   if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return '#2e6fd9';
@@ -224,7 +245,6 @@ function renderVillagerFrame(ctx, cx, groundY, opts) {
     toolAngle = (lunge * 1.15 + 0.4) * sideSign;
   }
 
-  // Contact shadow
   ctx.save();
   ctx.fillStyle = 'rgba(10, 14, 18, 0.34)';
   ctx.beginPath();
@@ -406,13 +426,13 @@ export class VillagerSpriteBank {
   }
 
   drawGameUnit(ctx, unit, dx, sy, invTilt = 1, isEnemy = false, gameTime = 0, showBadges = true) {
-    const factionColor = isEnemy ? '#c93b2b' : unit.isT101s ? '#f59e0b' : unit.color || '#2e6fd9';
+    const factionColor = isEnemy ? '#c93b2b' : unit.hasOneRing ? '#f59e0b' : unit.color || '#2e6fd9';
     const animState = mapUnitStateToAnim(unit.state, unit.vx, unit.vy);
     const dir = VillagerSpriteBank.vectorToDirection(unit.vx, unit.vy, unit._lastIsoDir || 'SE');
     unit._lastIsoDir = dir;
 
     const animTime = (unit.animTime ?? gameTime) + (unit.id || 0) * 0.17;
-    const scale = unit.isT101s ? 1.28 : 1.0;
+    const scale = (unit.hasOneRing ? 1.28 : 1.0) * (unit.childScale || 1.0);
     const cfg = UNIT_STATES[animState] || UNIT_STATES.idle;
     const frameIndex = Math.floor(animTime * cfg.fps) % cfg.frames;
     const row = this.rowIndex.get(`${animState}:${dir}`) ?? 0;
@@ -472,7 +492,311 @@ export class VillagerSpriteBank {
 }
 
 /* ============================================================================
- * 2. ENVIRONMENT SPRITE BANK (Buildings, Trees, Bridges, Siege, War Galleys)
+ * 2. EARTH SURFACE BIOME & 24% MOUNTAIN RENDERER (71% Ocean / 29% Land)
+ * ========================================================================== */
+
+export class EarthBiomeRenderer {
+  constructor() {
+    this.peakCache = new Map();
+  }
+
+  /**
+   * Pre-renders a 2.5D multi-faceted isometric mountain peak for each biome
+   * (representing the ~24% mountainous land overlap).
+   */
+  getMountainPeakCanvas(biomeType = 'grassland') {
+    if (this.peakCache.has(biomeType)) return this.peakCache.get(biomeType);
+
+    const w = 140;
+    const h = 110;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    const cx = w * 0.5;
+    const baseY = h - 14;
+
+    // Ground drop shadow
+    ctx.fillStyle = 'rgba(10, 14, 20, 0.26)';
+    ctx.beginPath();
+    ctx.ellipse(cx + 12, baseY + 2, 54, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const palettes = {
+      iceTundra: { left: '#cbd5e1', right: '#64748b', cap: '#f8fafc', ridge: '#e2e8f0' },
+      desert: { left: '#d6a868', right: '#8c5e2a', cap: '#e7cba0', ridge: '#b47d3c' },
+      forest: { left: '#57534e', right: '#292524', cap: '#cbd5e1', ridge: '#78716c' },
+      agriUrban: { left: '#78716c', right: '#44403c', cap: '#e2e8f0', ridge: '#a8a29e' },
+      grassland: { left: '#64748b', right: '#334155', cap: '#f1f5f9', ridge: '#94a3b8' },
+    };
+    const pal = palettes[biomeType] || palettes.grassland;
+
+    // Main central peak — sunlit left slope
+    ctx.fillStyle = pal.left;
+    ctx.beginPath();
+    ctx.moveTo(cx, 14);
+    ctx.lineTo(cx - 54, baseY);
+    ctx.lineTo(cx - 4, baseY + 6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Main central peak — shaded right slope
+    ctx.fillStyle = pal.right;
+    ctx.beginPath();
+    ctx.moveTo(cx, 14);
+    ctx.lineTo(cx - 4, baseY + 6);
+    ctx.lineTo(cx + 56, baseY - 2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Snow / alpine cap (top 38% of peak)
+    ctx.fillStyle = pal.cap;
+    ctx.beginPath();
+    ctx.moveTo(cx, 14);
+    ctx.lineTo(cx - 21, 46);
+    ctx.lineTo(cx - 8, 42);
+    ctx.lineTo(cx - 2, 49);
+    ctx.lineTo(cx + 9, 43);
+    ctx.lineTo(cx + 22, 46);
+    ctx.closePath();
+    ctx.fill();
+
+    // Secondary flanking sub-peak for natural mountain range silhouette
+    ctx.fillStyle = pal.left;
+    ctx.beginPath();
+    ctx.moveTo(cx + 28, 38);
+    ctx.lineTo(cx + 4, baseY + 4);
+    ctx.lineTo(cx + 26, baseY + 6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = pal.right;
+    ctx.beginPath();
+    ctx.moveTo(cx + 28, 38);
+    ctx.lineTo(cx + 26, baseY + 6);
+    ctx.lineTo(cx + 62, baseY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Craggy ridge line highlight
+    ctx.strokeStyle = pal.ridge;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(cx, 14);
+    ctx.lineTo(cx - 4, 52);
+    ctx.lineTo(cx - 4, baseY + 6);
+    ctx.stroke();
+
+    this.peakCache.set(biomeType, c);
+    return c;
+  }
+
+  /**
+   * Renders smooth, organic Earth terrain biomes (71% Ocean / 29% Land:
+   * 31% Forest, 26% Grassland, 19% Desert, 14% Agri/Urban, 10% Ice/Tundra + 24% Mountains)
+   * without blocky harsh rectangles.
+   */
+  drawEarthBiomesInViewport(ctx, cam, canvasWidth, canvasHeight, invTilt = 1, timeSec = 0) {
+    if (typeof getEarthTerrainAt !== 'function') return;
+
+    const viewHalfW = (canvasWidth * 0.65) / cam.zoom;
+    const viewHalfH = (canvasHeight * 0.65) / (cam.zoom * (cam.tiltScale || 1));
+    const tCell = cam.zoom < 0.22 ? 1200 : cam.zoom < 0.65 ? 520 : 260;
+
+    const minCol = Math.floor((cam.x - viewHalfW - tCell) / tCell);
+    const maxCol = Math.ceil((cam.x + viewHalfW + tCell) / tCell);
+    const minRow = Math.floor(Math.max(1714, cam.y - viewHalfH - tCell) / tCell);
+    const maxRow = Math.ceil(Math.min(WORLD_H - 120, cam.y + viewHalfH + tCell) / tCell);
+
+    ctx.save();
+
+    for (let tr = minRow; tr <= maxRow; tr++) {
+      const wy = tr * tCell + tCell * 0.5;
+      if (Math.abs(wy - RIVER_Y) < 115) continue;
+      const ty = tr * tCell - cam.y;
+
+      for (let tc = minCol; tc <= maxCol; tc++) {
+        const wx = wrapX(tc * tCell + tCell * 0.5, WORLD_W);
+        const terr = getEarthTerrainAt(wx, wy);
+        if (!terr) continue;
+
+        const tx = wrapDX(cam.x, tc * tCell);
+        const cx = tx + tCell * 0.5;
+        const cy = ty + tCell * 0.5;
+        const h = hash2D(tc, tr);
+
+        if (terr.isOcean) {
+          // === 71% OCEANS & SEAS ===
+          // Soft radial water basin blend so coastlines curve naturally instead of jagged squares
+          const radius = tCell * 0.78;
+          const oceanGrad = ctx.createRadialGradient(cx, cy, radius * 0.15, cx, cy, radius);
+          if (terr.label === 'Coastal Sea') {
+            oceanGrad.addColorStop(0, 'rgba(3, 105, 161, 0.88)');
+            oceanGrad.addColorStop(0.7, 'rgba(2, 132, 199, 0.68)');
+            oceanGrad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+          } else {
+            oceanGrad.addColorStop(0, 'rgba(12, 74, 110, 0.94)');
+            oceanGrad.addColorStop(0.75, 'rgba(3, 105, 161, 0.75)');
+            oceanGrad.addColorStop(1, 'rgba(3, 105, 161, 0.0)');
+          }
+          ctx.fillStyle = oceanGrad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Animated ocean wave crests & coastal surf foam
+          if (cam.zoom >= 0.25 && h > 0.35) {
+            const waveOffset = Math.sin(timeSec * 2.0 + tc * 0.7 + tr * 0.5) * 6;
+            ctx.strokeStyle =
+              terr.label === 'Coastal Sea'
+                ? 'rgba(186, 230, 253, 0.42)'
+                : 'rgba(125, 211, 252, 0.25)';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(cx - 24 + waveOffset, cy);
+            ctx.quadraticCurveTo(cx + waveOffset, cy - 5, cx + 24 + waveOffset, cy);
+            ctx.stroke();
+          }
+          continue;
+        }
+
+        // === 29% LAND TERRAIN BREAKDOWN (Soft feathered biome blend) ===
+        const radius = tCell * 0.82;
+        const biomePalette = {
+          forest: ['rgba(20, 62, 32, 0.58)', 'rgba(30, 86, 49, 0.28)', 'rgba(30, 86, 49, 0.0)'],
+          grassland: ['rgba(107, 142, 35, 0.45)', 'rgba(132, 169, 66, 0.20)', 'rgba(132, 169, 66, 0.0)'],
+          desert: ['rgba(212, 163, 106, 0.72)', 'rgba(194, 162, 107, 0.38)', 'rgba(194, 162, 107, 0.0)'],
+          agriUrban: ['rgba(132, 169, 66, 0.38)', 'rgba(180, 148, 72, 0.18)', 'rgba(180, 148, 72, 0.0)'],
+          iceTundra: ['rgba(226, 232, 240, 0.82)', 'rgba(203, 213, 225, 0.45)', 'rgba(203, 213, 225, 0.0)'],
+        };
+        const stops = biomePalette[terr.type] || biomePalette.grassland;
+        const landGrad = ctx.createRadialGradient(cx, cy, radius * 0.12, cx, cy, radius);
+        landGrad.addColorStop(0, stops[0]);
+        landGrad.addColorStop(0.65, stops[1]);
+        landGrad.addColorStop(1, stops[2]);
+
+        ctx.fillStyle = landGrad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Micro-terrain ecological details when zoomed in
+        if (cam.zoom >= 0.32) {
+          if (terr.type === 'agriUrban' && h > 0.35) {
+            // Subtle plowed golden cropland furrows (instead of grey checkerboards)
+            ctx.strokeStyle = 'rgba(217, 169, 56, 0.26)';
+            ctx.lineWidth = 1.4;
+            for (let f = -18; f <= 18; f += 9) {
+              ctx.beginPath();
+              ctx.moveTo(cx - 24, cy + f);
+              ctx.lineTo(cx + 24, cy + f - 6);
+              ctx.stroke();
+            }
+          } else if (terr.type === 'desert' && h > 0.3) {
+            // Windblown sand dune crescents
+            ctx.strokeStyle = 'rgba(161, 98, 7, 0.32)';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.arc(cx, cy + 8, 22, Math.PI * 1.15, Math.PI * 1.85);
+            ctx.stroke();
+          } else if (terr.type === 'forest' && h > 0.3) {
+            // Rich forest undergrowth rings
+            ctx.fillStyle = 'rgba(22, 101, 52, 0.32)';
+            ctx.beginPath();
+            ctx.ellipse(cx - 12, cy + 4, 16, 8, 0, 0, Math.PI * 2);
+            ctx.ellipse(cx + 14, cy - 6, 14, 7, 0, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (terr.type === 'iceTundra' && h > 0.35) {
+            // Glacial ice sheen
+            ctx.strokeStyle = 'rgba(248, 250, 252, 0.55)';
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(cx - 18, cy - 4);
+            ctx.lineTo(cx + 18, cy + 6);
+            ctx.stroke();
+          }
+        }
+
+        // === 24% MOUNTAINOUS LAND OVERLAP ===
+        if (terr.isMountain && cam.zoom >= 0.2) {
+          const peakCanvas = this.getMountainPeakCanvas(terr.type);
+          const scale = tCell / 260;
+          const pw = peakCanvas.width * scale;
+          const ph = peakCanvas.height * scale * invTilt;
+          ctx.drawImage(peakCanvas, cx - pw * 0.5, cy - ph * 0.72, pw, ph);
+        }
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Draws an Earth Surface Breakdown HUD card on the 3D Planetary Globe view
+   * and enriches the 3D globe with polar ice caps and biome bands.
+   */
+  drawGlobeEarthBreakdownHUD(ctx, canvasWidth, canvasHeight) {
+    const cardW = 310;
+    const cardH = 212;
+    const x = 18;
+    const y = Math.max(84, canvasHeight - cardH - 86);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, cardW, cardH, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 11px Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('🌍 EARTH SURFACE BREAKDOWN (71% WATER / 29% LAND)', x + 12, y + 20);
+
+    // 71% Ocean / 29% Land proportional bar
+    const barX = x + 12;
+    const barY = y + 28;
+    const barW = cardW - 24;
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(barX, barY, Math.round(barW * 0.71), 10);
+    ctx.fillStyle = '#4d7c0f';
+    ctx.fillRect(barX + Math.round(barW * 0.71), barY, Math.round(barW * 0.29), 10);
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '600 9.5px Inter, sans-serif';
+    ctx.fillText('🌊 Oceans & Seas: 71%', barX + 4, barY + 21);
+    ctx.fillText('⛰️ Land: 29% (24% Mountains)', barX + 148, barY + 21);
+
+    const rows = [
+      { icon: '🌲', name: 'Forests & Woodlands', land: '31%', earth: '9.0%', color: '#2e7d32' },
+      { icon: '🌾', name: 'Grasslands & Savannas', land: '26%', earth: '7.5%', color: '#84cc16' },
+      { icon: '🏜️', name: 'Deserts & Barren Land', land: '19%', earth: '5.5%', color: '#d97706' },
+      { icon: '🏠', name: 'Agricultural & Urban', land: '14%', earth: '4.1%', color: '#eab308' },
+      { icon: '❄️', name: 'Ice, Glaciers & Tundra', land: '10%', earth: '2.9%', color: '#cbd5e1' },
+    ];
+
+    let ry = barY + 38;
+    for (const r of rows) {
+      ctx.fillStyle = r.color;
+      ctx.fillRect(barX, ry - 7, 8, 8);
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '500 10px Inter, sans-serif';
+      ctx.fillText(`${r.icon} ${r.name}`, barX + 13, ry);
+      ctx.fillStyle = '#94a3b8';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${r.land} land (${r.earth} Earth)`, x + cardW - 12, ry);
+      ctx.textAlign = 'left';
+      ry += 22;
+    }
+
+    ctx.restore();
+  }
+}
+
+/* ============================================================================
+ * 3. ENVIRONMENT SPRITE BANK (Buildings, Trees, Bridges, Siege, War Galleys)
  * ========================================================================== */
 
 const BUILDING_SPECS = {
@@ -931,9 +1255,6 @@ export class EnvironmentSpriteBank {
     ctx.restore();
   }
 
-  /**
-   * 2.5D Isometric River Bridge Renderer (replaces flat brown/yellow rectangles)
-   */
   drawIsometricBridge(ctx, bx, rY, invTilt = 1, timeSec = 0) {
     ctx.save();
     ctx.translate(bx, rY);
@@ -1037,10 +1358,6 @@ export class EnvironmentSpriteBank {
     ctx.restore();
   }
 
-  /**
-   * 2.5D Isometric Dragon-Fire War Galley Renderer
-   * Replaces the flat brown trapezoid + red square in `renderContinentsAndRiver`
-   */
   drawIsometricWarGalley(ctx, g, gx, gy, invTilt = 1, timeSec = 0, showBadges = true) {
     ctx.save();
     ctx.translate(gx, gy);
@@ -1051,10 +1368,9 @@ export class EnvironmentSpriteBank {
     const phase = timeSec * 4.5 + (g.id || 0) * 1.3;
     const bob = Math.sin(phase * 0.7) * 1.6;
 
-    // 1. V-Shaped Foam Water Wake & Stern Trail (behind moving ship)
     ctx.save();
     for (let i = 0; i < 4; i++) {
-      const wakeT = ((timeSec * 1.4 + i * 0.25) % 1);
+      const wakeT = (timeSec * 1.4 + i * 0.25) % 1;
       const wx = -dir * (26 + wakeT * 36);
       const spread = 6 + wakeT * 12;
       const alpha = (1 - wakeT) * 0.42;
@@ -1064,7 +1380,6 @@ export class EnvironmentSpriteBank {
       ctx.ellipse(wx, 6, 8 + wakeT * 10, spread * 0.45, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
-    // Bow wave splash
     ctx.strokeStyle = 'rgba(224, 242, 254, 0.65)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1074,13 +1389,11 @@ export class EnvironmentSpriteBank {
 
     ctx.translate(0, bob);
 
-    // 2. Waterline shadow
     ctx.fillStyle = 'rgba(7, 16, 30, 0.45)';
     ctx.beginPath();
     ctx.ellipse(0, 8, 38, 9, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 3. Back-side Rowing Oars (behind hull)
     const oarCount = 5;
     const oarSwing = Math.sin(phase * (speed > 2 ? 1.4 : 0.4)) * 6 * dir;
     ctx.strokeStyle = '#78350f';
@@ -1093,7 +1406,6 @@ export class EnvironmentSpriteBank {
       ctx.stroke();
     }
 
-    // 4. Elevated Stern & Forecastle Deck + Carvel-Planked Isometric Hull
     const hullGrad = ctx.createLinearGradient(0, -10, 0, 12);
     hullGrad.addColorStop(0, '#92400e');
     hullGrad.addColorStop(0.55, '#78350f');
@@ -1103,17 +1415,16 @@ export class EnvironmentSpriteBank {
     ctx.strokeStyle = '#271203';
     ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ctx.moveTo(-36 * dir, -6); // Elevated stern poop deck
+    ctx.moveTo(-36 * dir, -6);
     ctx.lineTo(-28 * dir, -2);
     ctx.lineTo(28 * dir, -2);
-    ctx.lineTo(38 * dir, -7); // Swept dragon prow stem
-    ctx.lineTo(29 * dir, 9);  // Waterline bow
-    ctx.lineTo(-29 * dir, 9); // Waterline stern
+    ctx.lineTo(38 * dir, -7);
+    ctx.lineTo(29 * dir, 9);
+    ctx.lineTo(-29 * dir, 9);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Gold gunwale trim rail & plank strake lines
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -1128,7 +1439,6 @@ export class EnvironmentSpriteBank {
     ctx.lineTo(31 * dir, 3);
     ctx.stroke();
 
-    // 5. Gilded Round Shields Along the Gunwale
     for (let i = 0; i < 6; i++) {
       const sx = -20 + i * 8;
       ctx.fillStyle = i % 2 === 0 ? '#b91c1c' : '#d97706';
@@ -1140,7 +1450,6 @@ export class EnvironmentSpriteBank {
       ctx.stroke();
     }
 
-    // 6. Front-side Synchronized Oars + White Water Blade Splashes
     for (let i = 0; i < oarCount; i++) {
       const ox = -18 + i * 9;
       const bladeX = ox + oarSwing;
@@ -1153,16 +1462,13 @@ export class EnvironmentSpriteBank {
       ctx.lineTo(bladeX, bladeY);
       ctx.stroke();
 
-      // White water ripple at oar tip
       ctx.fillStyle = 'rgba(224, 242, 254, 0.7)';
       ctx.beginPath();
       ctx.ellipse(bladeX, bladeY + 1, 3.2, 1.3, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // 7. Carved Dragon-Head Prow Figurehead & Naval Bronze Ram
     const prowX = 38 * dir;
-    // Naval waterline bronze ram
     ctx.fillStyle = '#d97706';
     ctx.beginPath();
     ctx.moveTo(29 * dir, 5);
@@ -1171,7 +1477,6 @@ export class EnvironmentSpriteBank {
     ctx.closePath();
     ctx.fill();
 
-    // Sculpted gold/crimson dragon neck & head
     ctx.fillStyle = '#b45309';
     ctx.strokeStyle = '#451a03';
     ctx.lineWidth = 1.2;
@@ -1184,17 +1489,15 @@ export class EnvironmentSpriteBank {
     ctx.fill();
     ctx.stroke();
 
-    // Glowing dragon eye
     ctx.fillStyle = '#fef08a';
     ctx.beginPath();
     ctx.arc(40 * dir, -13, 1.3, 0, Math.PI * 2);
     ctx.fill();
 
-    // Dragon-Fire breath jet when cannon/fire timer is active (or periodic burst)
     const fireCycle = (timeSec * 0.9 + (g.id || 0) * 0.37) % 1;
     if ((g.shootTimer && g.shootTimer > 0) || fireCycle < 0.28) {
       for (let f = 0; f < 4; f++) {
-        const fx = prowX + dir * (6 + f * 4.5 + (fireCycle * 8));
+        const fx = prowX + dir * (6 + f * 4.5 + fireCycle * 8);
         const fy = -12 + Math.sin(timeSec * 18 + f) * 2.5;
         ctx.fillStyle = f % 2 === 0 ? 'rgba(249, 115, 22, 0.85)' : 'rgba(253, 224, 71, 0.85)';
         ctx.beginPath();
@@ -1203,7 +1506,6 @@ export class EnvironmentSpriteBank {
       }
     }
 
-    // 8. Central Timber Mast, Crow's Nest & Billowing Imperial Sail
     ctx.strokeStyle = '#451a03';
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -1211,7 +1513,6 @@ export class EnvironmentSpriteBank {
     ctx.lineTo(0, -44);
     ctx.stroke();
 
-    // Rigging stays
     ctx.strokeStyle = 'rgba(214, 211, 209, 0.55)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1220,7 +1521,6 @@ export class EnvironmentSpriteBank {
     ctx.lineTo(28 * dir, -4);
     ctx.stroke();
 
-    // Billowing square sail curved toward movement direction
     const billow = (7 + Math.sin(phase * 0.8) * 2.2) * dir;
     const sailGrad = ctx.createLinearGradient(-16, -38, 16, -12);
     sailGrad.addColorStop(0, '#dc2626');
@@ -1240,7 +1540,6 @@ export class EnvironmentSpriteBank {
     ctx.fill();
     ctx.stroke();
 
-    // Golden Sovereign Dragon Crest on Sail
     ctx.fillStyle = '#fbbf24';
     ctx.beginPath();
     ctx.arc(billow * 0.45, -24, 5.2, 0, Math.PI * 2);
@@ -1250,7 +1549,6 @@ export class EnvironmentSpriteBank {
     ctx.arc(billow * 0.45 + 1.5 * dir, -25, 3.2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Streaming masthead pennant
     const wave = Math.sin(timeSec * 6 + (g.id || 0)) * 2.5;
     ctx.fillStyle = '#fbbf24';
     ctx.beginPath();
@@ -1270,9 +1568,6 @@ export class EnvironmentSpriteBank {
     ctx.restore();
   }
 
-  /**
-   * 2.5D Isometric Siege Engine Renderer (Counterweight Trebuchet & Mammoth-Skull Battering Ram)
-   */
   drawGameSiegeEngine(ctx, s, sx, sy, invTilt = 1, timeSec = 0, showBadges = true) {
     ctx.save();
     ctx.translate(sx, sy);
@@ -1458,51 +1753,13 @@ export class EnvironmentSpriteBank {
 }
 
 /* ============================================================================
- * 3. SMOOTH CONTINUOUS FOOTPATH OVERLAY (Soft Radial Blends + Connected Trails)
+ * 4. CONSTANT-ALPHA OFFSCREEN FOOTPATH COMPOSITOR (Zero Overlapping Circles)
  * ========================================================================== */
 
 export class PlanetaryFootpathOverlay {
   constructor({ cellSize = 28 } = {}) {
     this.cellSize = cellSize;
     this.cells = new Map();
-    this.stampCache = new Map();
-  }
-
-  _getSoftStamp(tier) {
-    if (this.stampCache.has(tier)) return this.stampCache.get(tier);
-
-    const size = this.cellSize * 2.4;
-    const half = size * 0.5;
-    const c = document.createElement('canvas');
-    c.width = size;
-    c.height = size;
-    const gCtx = c.getContext('2d');
-
-    const grad = gCtx.createRadialGradient(half, half, size * 0.08, half, half, half);
-    if (tier === 'cobble') {
-      grad.addColorStop(0, 'rgba(124, 116, 105, 0.42)');
-      grad.addColorStop(0.55, 'rgba(120, 104, 86, 0.22)');
-      grad.addColorStop(1, 'rgba(120, 104, 86, 0.0)');
-    } else {
-      grad.addColorStop(0, 'rgba(139, 108, 74, 0.36)');
-      grad.addColorStop(0.6, 'rgba(139, 108, 74, 0.16)');
-      grad.addColorStop(1, 'rgba(139, 108, 74, 0.0)');
-    }
-
-    gCtx.fillStyle = grad;
-    gCtx.fillRect(0, 0, size, size);
-
-    if (tier === 'cobble') {
-      gCtx.fillStyle = 'rgba(168, 162, 154, 0.28)';
-      gCtx.beginPath();
-      gCtx.arc(half - 4, half - 2, 2.6, 0, Math.PI * 2);
-      gCtx.arc(half + 5, half + 3, 2.2, 0, Math.PI * 2);
-      gCtx.arc(half + 2, half - 5, 2.0, 0, Math.PI * 2);
-      gCtx.fill();
-    }
-
-    this.stampCache.set(tier, c);
-    return c;
   }
 
   updateTraffic(villagers, dt = 1 / 60) {
@@ -1540,6 +1797,10 @@ export class PlanetaryFootpathOverlay {
     }
   }
 
+  /**
+   * Draws all worn dirt and cobblestone paths as unified single-pass Path2D
+   * shapes so overlapping nodes never multiply their alpha into grey discs.
+   */
   drawVisiblePaths(ctx, cam, canvasWidth, canvasHeight) {
     if (!ctx || !cam) return;
     const halfW = (canvasWidth * 0.65) / cam.zoom;
@@ -1549,14 +1810,19 @@ export class PlanetaryFootpathOverlay {
     const minRow = Math.floor((cam.y - halfH) / this.cellSize);
     const maxRow = Math.ceil((cam.y + halfH) / this.cellSize);
     const totalCols = Math.ceil(WORLD_W / this.cellSize);
+    if (typeof Path2D === 'undefined') return;
 
-    const dirtStamp = this._getSoftStamp('dirt');
-    const cobbleStamp = this._getSoftStamp('cobble');
-    const stampSize = dirtStamp.width;
-    const stampHalf = stampSize * 0.5;
+    const dirtPath = new Path2D();
+    const cobblePath = new Path2D();
+    let hasDirt = false;
+    let hasCobble = false;
 
-    ctx.save();
-    ctx.lineCap = 'round';
+    const neighbors = [
+      [1, 0],
+      [0, 1],
+      [1, 1],
+      [-1, 1],
+    ];
 
     for (let r = minRow; r <= maxRow; r++) {
       for (let c = minCol; c <= maxCol; c++) {
@@ -1567,44 +1833,44 @@ export class PlanetaryFootpathOverlay {
         const wx = (c + 0.5) * this.cellSize - cam.x;
         const wy = (r + 0.5) * this.cellSize - cam.y;
 
-        const neighbors = [
-          [1, 0],
-          [0, 1],
-          [1, 1],
-          [-1, 1],
-        ];
         for (const [dc, dr] of neighbors) {
           const nc = (((c + dc) % totalCols) + totalCols) % totalCols;
           const nw = this.cells.get(`${nc}:${r + dr}`);
           if (nw && nw >= 0.14) {
-            const avg = (wear + nw) * 0.5;
-            ctx.strokeStyle =
-              avg > 0.72
-                ? `rgba(122, 114, 104, ${(avg * 0.28).toFixed(3)})`
-                : `rgba(139, 108, 74, ${(avg * 0.25).toFixed(3)})`;
-            ctx.lineWidth = this.cellSize * (0.72 + avg * 0.35);
-            ctx.beginPath();
-            ctx.moveTo(wx, wy);
-            ctx.lineTo(wx + dc * this.cellSize, wy + dr * this.cellSize);
-            ctx.stroke();
+            const nx = wx + dc * this.cellSize;
+            const ny = wy + dr * this.cellSize;
+            dirtPath.moveTo(wx, wy);
+            dirtPath.lineTo(nx, ny);
+            hasDirt = true;
+
+            if (wear >= 0.68 && nw >= 0.68) {
+              cobblePath.moveTo(wx, wy);
+              cobblePath.lineTo(nx, ny);
+              hasCobble = true;
+            }
           }
         }
       }
     }
 
-    for (let r = minRow; r <= maxRow; r++) {
-      for (let c = minCol; c <= maxCol; c++) {
-        const wrappedC = ((c % totalCols) + totalCols) % totalCols;
-        const wear = this.cells.get(`${wrappedC}:${r}`);
-        if (!wear || wear < 0.10) continue;
+    if (!hasDirt && !hasCobble) return;
 
-        const wx = (c + 0.5) * this.cellSize - cam.x;
-        const wy = (r + 0.5) * this.cellSize - cam.y;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-        ctx.globalAlpha = Math.min(0.85, wear * 0.9);
-        const stamp = wear > 0.72 ? cobbleStamp : dirtStamp;
-        ctx.drawImage(stamp, wx - stampHalf, wy - stampHalf);
-      }
+    // Single constant-alpha stroke for the entire dirt trail network (zero circle overlap)
+    if (hasDirt) {
+      ctx.strokeStyle = 'rgba(139, 108, 74, 0.34)';
+      ctx.lineWidth = this.cellSize * 0.95;
+      ctx.stroke(dirtPath);
+    }
+
+    // Single constant-alpha inner stroke for heavily traveled cobblestone trade roads
+    if (hasCobble) {
+      ctx.strokeStyle = 'rgba(168, 162, 158, 0.36)';
+      ctx.lineWidth = this.cellSize * 0.55;
+      ctx.stroke(cobblePath);
     }
 
     ctx.restore();
@@ -1612,7 +1878,7 @@ export class PlanetaryFootpathOverlay {
 }
 
 /* ============================================================================
- * 4. ONE-LINE INSTALLER FOR PrehistoricPlanetaryGame
+ * 5. ONE-LINE INSTALLER FOR PrehistoricPlanetaryGame
  * ========================================================================== */
 
 export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
@@ -1623,6 +1889,7 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
 
   const villagerBank = new VillagerSpriteBank();
   const envBank = new EnvironmentSpriteBank();
+  const biomeRenderer = new EarthBiomeRenderer();
   const footpaths = new PlanetaryFootpathOverlay({ cellSize: 28 });
 
   // 1. Hook into update(dt) to record villager footsteps
@@ -1630,33 +1897,77 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
   if (typeof origUpdate === 'function') {
     proto.update = function (dt) {
       origUpdate.call(this, dt);
-      if (this.simSpeed !== 0) {
-        footpaths.updateTraffic(this.villagers, dt * (this.simSpeed || 1));
-      }
+      footpaths.updateTraffic(this.villagers, dt);
     };
   }
 
-  // 2. Hook into renderContinentsAndRiver to draw smooth footpaths, 2.5D bridges, and 2.5D War Galleys
+  // 2. Hook into renderContinentsAndRiver to render smooth Earth biomes, footpaths, 2.5D bridges & War Galleys
   const origRenderTerrain = proto.renderContinentsAndRiver;
   if (typeof origRenderTerrain === 'function') {
     proto.renderContinentsAndRiver = function (ctx, invTilt) {
-      // Temporarily stash warGalleys so the base renderer doesn't draw flat brown trapezoids under our 2.5D galleys
       const savedGalleys = this.warGalleys;
+      const savedBridges = this.stoneBridges;
+      const origFillRect = ctx.fillRect;
+
+      // Suppress the base renderer's blocky tCell+1 square biome fillRects while keeping continent base & river
       this.warGalleys = [];
+      this.stoneBridges = [];
+      ctx.fillRect = function (x, y, w, h) {
+        if ((w === 241 && h === 241) || (w === 521 && h === 521) || (w === 1201 && h === 1201)) {
+          return;
+        }
+        return origFillRect.call(this, x, y, w, h);
+      };
+
       try {
         origRenderTerrain.call(this, ctx, invTilt);
       } finally {
+        ctx.fillRect = origFillRect;
         this.warGalleys = savedGalleys;
+        this.stoneBridges = savedBridges;
       }
 
-      // Draw blended footpath trails
+      const timeSec = this.time || 0;
+
+      // Render smooth feathered 71% Ocean / 29% Land biomes + 24% 3D Isometric Mountain Peaks
+      biomeRenderer.drawEarthBiomesInViewport(
+        ctx,
+        this.cam,
+        this.canvas.width,
+        this.canvas.height,
+        invTilt,
+        timeSec
+      );
+
+      // Draw unified constant-alpha footpath network (zero overlapping circles)
       footpaths.drawVisiblePaths(ctx, this.cam, this.canvas.width, this.canvas.height);
 
       const viewHalfW = (this.canvas.width * 0.65) / this.cam.zoom;
       const rY = RIVER_Y - this.cam.y;
-      const timeSec = this.time || 0;
 
-      // Draw 2.5D arched timber & stone bridges over the flat placeholder rectangles
+      // Draw 2.5D Dragon-Fire War Galleys first, then Bridges above them so bridge decks occlude passing hulls
+      if (Array.isArray(this.warGalleys)) {
+        for (const g of this.warGalleys) {
+          const gx = wrapDX(this.cam.x, g.x);
+          if (Math.abs(gx) <= viewHalfW + 120) {
+            const gy = g.y - this.cam.y;
+            const nearBridge =
+              Array.isArray(this.stoneBridges) &&
+              this.stoneBridges.some((br) => Math.abs(wrapDX(g.x, br.x)) < 58);
+
+            envBank.drawIsometricWarGalley(
+              ctx,
+              g,
+              gx,
+              gy,
+              invTilt,
+              timeSec,
+              this.showFloatingBadges !== false && !nearBridge
+            );
+          }
+        }
+      }
+
       if (Array.isArray(this.stoneBridges)) {
         for (const br of this.stoneBridges) {
           const bx = wrapDX(this.cam.x, br.x);
@@ -1665,34 +1976,23 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
           }
         }
       }
-
-      // Draw 2.5D Dragon-Fire War Galleys with billowing sails, oars, and water wakes
-      if (Array.isArray(this.warGalleys)) {
-        for (const g of this.warGalleys) {
-          const gx = wrapDX(this.cam.x, g.x);
-          if (Math.abs(gx) <= viewHalfW + 120) {
-            const gy = g.y - this.cam.y;
-            envBank.drawIsometricWarGalley(
-              ctx,
-              g,
-              gx,
-              gy,
-              invTilt,
-              timeSec,
-              this.showFloatingBadges !== false
-            );
-          }
-        }
-      }
     };
   }
 
-  // 3. Hybrid Villager Renderer: shaded isometric sprites for on-foot units,
-  //    preserving mounts, Hero t101s, Bosses, LOD, selection rings, tools, magic & slash trails
+  // 3. Hook into render3DPlanetaryGlobe to display the Earth 71% Ocean / 29% Land Breakdown HUD
+  const origRenderGlobe = proto.render3DPlanetaryGlobe;
+  if (typeof origRenderGlobe === 'function') {
+    proto.render3DPlanetaryGlobe = function (ctx) {
+      origRenderGlobe.call(this, ctx);
+      biomeRenderer.drawGlobeEarthBreakdownHUD(ctx, this.canvas.width, this.canvas.height);
+    };
+  }
+
+  // 4. Hybrid Villager Renderer
   const origDrawHuman = proto.drawArticulatedHuman;
   proto.drawArticulatedHuman = function (ctx, unit, dx, sy, invTilt, isEnemy) {
     if (
-      unit.isT101s ||
+      unit.hasOneRing ||
       unit.isBoss ||
       unit.mountType ||
       unit.skySoar ||
@@ -1761,7 +2061,7 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     }
   };
 
-  // 4. Replace buildings with 3-stage construction, chimney smoke, banners & custom aura
+  // 5. Buildings
   proto.drawBuilding = function (ctx, building, dx, sy, invTilt) {
     if (!building._footprintStamped) {
       building._footprintStamped = true;
@@ -1791,12 +2091,12 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
     );
   };
 
-  // 5. Replace trees & ore nodes with shaded isometric trees and boulders
+  // 6. Trees & Ore Nodes
   proto.drawResourceNode = function (ctx, node, dx, sy, invTilt) {
     envBank.drawGameResourceNode(ctx, node, dx, sy, invTilt, this.time || 0);
   };
 
-  // 6. Replace flat brown boxes on Siege Engines (Trebuchets & Mammoth Battering Rams)
+  // 7. Siege Engines
   proto.drawSiegeEngine = function (ctx, s, sx, sy, invTilt) {
     envBank.drawGameSiegeEngine(
       ctx,
