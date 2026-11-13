@@ -545,8 +545,8 @@ export const uiMethods = {
         const styles = ['berserker', 'phalanx', 'kungfu', 'archery', 'juggernaut'];
         for (let i = 0; i < toAdd; i++) {
             const c = i % 6;
-            const vx = c * 1600 + 520 + (i * 47) % 620;
-            const vy = 2160 + (i * 39) % 420;
+            const vx = CONTINENTS[c].xStart + 820 + (i * 73) % 1400;
+            const vy = 2220 + (i * 59) % 900;
             const u = this.createVillager(vx, vy, `Settler-${this.villagers.length + 1}`, false);
             u.fightingStyle = styles[i % styles.length];
             this.villagers.push(u);
