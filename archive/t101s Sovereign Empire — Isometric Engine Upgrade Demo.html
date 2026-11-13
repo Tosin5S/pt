@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>t101s Sovereign Empire — Isometric Engine Upgrade Demo</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+      overflow: hidden;
+      background-color: #1a2418;
+    }
+    canvas {
+      display: block;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body class="w-screen h-screen relative text-slate-100">
+
+  <!-- Main Game Canvas -->
+  <canvas id="gameCanvas" class="w-full h-full cursor-crosshair"></canvas>
+
+  <!-- Top Resource & Controls Bar -->
+  <header class="fixed top-2 left-2 right-2 z-20 flex flex-wrap items-center justify-between gap-2 bg-slate-900/85 backdrop-blur-md border border-amber-500/30 rounded-xl px-3 py-2 shadow-xl">
+    <div class="flex items-center gap-3 flex-wrap">
+      <div class="flex items-center gap-1.5">
+        <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+        <span class="font-bold text-sm tracking-tight text-amber-300">t101s Isometric Upgrade</span>
+      </div>
+
+      <!-- Resources -->
+      <div class="flex items-center gap-3 text-xs font-semibold bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700">
+        <span title="Wood">🌲 <span id="woodCount">240</span></span>
+        <span title="Stone">🪨 <span id="stoneCount">160</span></span>
+        <span title="Gold">🪙 <span id="goldCount">120</span></span>
+        <span title="Active Citizens">👥 <span id="popCount">24</span></span>
+        <span title="Frame Rate" class="text-emerald-400"><span id="fpsCount">60</span> FPS</span>
+      </div>
+    </div>
+
+    <!-- Right Quick Toggles -->
+    <div class="flex items-center gap-1.5 flex-wrap">
+      <select id="factionSelect" aria-label="Faction Color" class="bg-slate-800 text-xs font-medium text-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-600 focus:outline-none">
+        <option value="#2e6fd9">Royal Azure (#2e6fd9)</option>
+        <option value="#c93b2b">Crimson Order (#c93b2b)</option>
+        <option value="#d99b26">Golden Sun (#d99b26)</option>
+        <option value="#2b9e66">Emerald Clan (#2b9e66)</option>
+      </select>
+
+      <button id="btnToggleBadges" type="button" class="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        🏷️ Badges: <span id="badgeStateText">Hover</span>
+      </button>
+
+      <button id="btnSpeed" type="button" class="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        ⏩ <span id="speedText">1x</span>
+      </button>
+
+      <button id="btnAudio" type="button" class="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        🔊 SFX: <span id="audioText">ON</span>
+      </button>
+
+      <button id="btnCenterCam" type="button" class="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        🎯 Center
+      </button>
+    </div>
+  </header>
+
+  <!-- Dismissible 3-Step Starter Checklist Card -->
+  <aside id="onboardingCard" class="fixed top-16 left-2 z-20 w-72 max-w-[calc(100vw-1rem)] bg-slate-900/90 backdrop-blur-md border border-amber-500/40 rounded-xl p-3 shadow-xl text-xs">
+    <div class="flex items-center justify-between mb-1.5">
+      <span class="font-bold text-amber-300 uppercase tracking-wider text-[11px]">Quick Test Guide</span>
+      <button id="btnCloseOnboarding" type="button" class="text-slate-400 hover:text-white px-1">✕</button>
+    </div>
+    <ul class="space-y-1.5 text-slate-200">
+      <li id="step1" class="flex items-center gap-2">
+        <span id="step1Icon" class="text-amber-400">○</span>
+        <span>1. Select a building below &amp; click grass to start 3-stage construction.</span>
+      </li>
+      <li id="step2" class="flex items-center gap-2">
+        <span id="step2Icon" class="text-amber-400">○</span>
+        <span>2. Watch citizens chop trees, carry resources &amp; wear dirt/cobble footpaths.</span>
+      </li>
+      <li id="step3" class="flex items-center gap-2">
+        <span id="step3Icon" class="text-amber-400">○</span>
+        <span>3. Click <b>+10 Citizens</b> or <b>Pave Road</b> to test high-traffic cobblestone paths.</span>
+      </li>
+    </ul>
+  </aside>
+
+  <!-- Toast Banner -->
+  <div id="toastBanner" class="fixed top-16 right-2 z-20 hidden bg-amber-500/95 text-slate-950 font-semibold text-xs px-3 py-2 rounded-lg shadow-lg transition-all"></div>
+
+  <!-- Bottom Responsive Build & Action Toolbar -->
+  <footer class="fixed bottom-2 left-2 right-2 z-20 flex flex-wrap items-center justify-between gap-2 bg-slate-900/85 backdrop-blur-md border border-slate-700/80 rounded-xl px-3 py-2 shadow-xl">
+    <!-- Tool / Build Mode Buttons -->
+    <div class="flex items-center gap-1.5 flex-wrap">
+      <button data-mode="inspect" class="mode-btn text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 transition">
+        🔍 Inspect / Pan
+      </button>
+      <button data-mode="hut" class="mode-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        🏠 Hut (30🌲)
+      </button>
+      <button data-mode="sawmill" class="mode-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        🪚 Sawmill (50🌲)
+      </button>
+      <button data-mode="forge" class="mode-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        ⚒️ Forge (40🌲 30🪨)
+      </button>
+      <button data-mode="citadel" class="mode-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        🏰 Citadel (80🌲 60🪨)
+      </button>
+      <button data-mode="road" class="mode-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        🛣️ Pave Road
+      </button>
+    </div>
+
+    <!-- Simulation Actions -->
+    <div class="flex items-center gap-1.5 flex-wrap">
+      <button id="btnSpawnCitizens" type="button" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition">
+        +10 Citizens
+      </button>
+      <button id="btnPlantTrees" type="button" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        🌳 +15 Trees
+      </button>
+      <button id="btnInstantFinish" type="button" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition">
+        ⚡ Finish Build
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    /*************************************************************************
+     * 0. PROCEDURAL WEB AUDIO SFX SYNTHESIZER (Zero external audio files)
+     *************************************************************************/
+    class SoundEffects {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+
+      _init() {
+        if (!this.ctx && typeof (window.AudioContext || window.webkitAudioContext) !== 'undefined') {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playTone(freqStart, freqEnd, duration = 0.12, type = 'triangle', gainVal = 0.08) {
+        if (!this.enabled) return;
+        this._init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freqStart, now);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), now + duration);
+
+        gain.gain.setValueAtTime(gainVal, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + duration);
+      }
+
+      placeBuilding() {
+        this.playTone(190, 110, 0.14, 'triangle', 0.12);
+      }
+
+      completeBuilding() {
+        this.playTone(330, 660, 0.22, 'sine', 0.1);
+      }
+
+      spawnUnits() {
+        this.playTone(260, 520, 0.16, 'triangle', 0.09);
+      }
+    }
+
+    const sfx = new SoundEffects();
+
+    /*************************************************************************
+     * 1. SHARED COLOR & HASH HELPERS
+     *************************************************************************/
+    function shadeHex(hex, amount) {
+      const clean = hex.replace('#', '');
+      const num = parseInt(
+        clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean,
+        16
+      );
+      const r = Math.min(255, Math.max(0, ((num >> 16) & 0xff) + Math.round(255 * amount)));
+      const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + Math.round(255 * amount)));
+      const b = Math.min(255, Math.max(0, (num & 0xff) + Math.round(255 * amount)));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    function hash2D(x, y) {
+      let n = Math.imul(x, 374761393) + Math.imul(y, 668265263);
+      n = (n ^ (n >>> 13)) * 1274126177;
+      return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
+    }
+
+    /*************************************************************************
+     * 2. MODULE 1: VILLAGER SPRITE BANK (Shaded Isometric Units + Tools + Carry)
+     *************************************************************************/
+    const STATES = {
+      idle: { frames: 4, fps: 4 },
+      walk: { frames: 8, fps: 12 },
+      chop: { frames: 6, fps: 10 },
+      build: { frames: 6, fps: 11 },
+      attack: { frames: 6, fps: 12 },
+    };
+    const DIRECTIONS = ['SE', 'SW', 'NE', 'NW'];
+
+    function drawLimb(ctx, x1, y1, x2, y2, width, baseColor, highlightColor) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineWidth = width;
+      ctx.strokeStyle = baseColor;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      ctx.lineWidth = Math.max(1, width * 0.35);
+      ctx.strokeStyle = highlightColor;
+      ctx.beginPath();
+      ctx.moveTo(x1 - 0.6, y1 - 0.6);
+      ctx.lineTo(x2 - 0.6, y2 - 0.6);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawTool(ctx, tool, handX, handY, angle, facingRight) {
+      if (!tool) return;
+      ctx.save();
+      ctx.translate(handX, handY);
+      ctx.rotate(angle);
+
+      if (tool === 'axe') {
+        ctx.strokeStyle = '#6d4c2f';
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, 2);
+        ctx.lineTo(0, -14);
+        ctx.stroke();
+
+        const dir = facingRight ? 1 : -1;
+        ctx.fillStyle = '#aeb9c4';
+        ctx.strokeStyle = '#4a5562';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, -13);
+        ctx.quadraticCurveTo(7 * dir, -15, 7 * dir, -9);
+        ctx.quadraticCurveTo(4 * dir, -8, 0, -10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (tool === 'hammer') {
+        ctx.strokeStyle = '#6d4c2f';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(0, 2);
+        ctx.lineTo(0, -12);
+        ctx.stroke();
+
+        ctx.fillStyle = '#7f8c98';
+        ctx.strokeStyle = '#3c4650';
+        ctx.lineWidth = 1;
+        ctx.fillRect(-4.5, -15, 9, 4.5);
+        ctx.strokeRect(-4.5, -15, 9, 4.5);
+      } else if (tool === 'sword') {
+        ctx.strokeStyle = '#c89b3c';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-3.5, -2);
+        ctx.lineTo(3.5, -2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#dce5ee';
+        ctx.strokeStyle = '#5d6b78';
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(-1.8, -2);
+        ctx.lineTo(0, -18);
+        ctx.lineTo(1.8, -2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function renderVillagerFrame(ctx, cx, groundY, opts) {
+      const { state, frameIndex, frameCount, dir, palette } = opts;
+      const t = frameIndex / frameCount;
+      const tau = Math.PI * 2;
+      const facingRight = dir === 'SE' || dir === 'NE';
+      const facingBack = dir === 'NE' || dir === 'NW';
+      const sideSign = facingRight ? 1 : -1;
+
+      let bobY = 0;
+      let leanX = 0;
+      let leftLeg = 0;
+      let rightLeg = 0;
+      let frontArmAngle = 0.25 * sideSign;
+      let backArmAngle = -0.2 * sideSign;
+      let tool = null;
+      let toolAngle = 0;
+
+      if (state === 'idle') {
+        bobY = Math.sin(t * tau) * 0.9;
+        frontArmAngle = (0.18 + Math.sin(t * tau) * 0.05) * sideSign;
+        backArmAngle = (-0.18 - Math.sin(t * tau) * 0.05) * sideSign;
+      } else if (state === 'walk') {
+        const stride = Math.sin(t * tau);
+        bobY = -Math.abs(stride) * 2.1;
+        leanX = 1.2 * sideSign;
+        leftLeg = stride * 5.2;
+        rightLeg = -stride * 5.2;
+        frontArmAngle = (-stride * 0.65 + 0.15) * sideSign;
+        backArmAngle = (stride * 0.65 - 0.15) * sideSign;
+      } else if (state === 'chop') {
+        tool = 'axe';
+        const swing =
+          t < 0.45
+            ? -1.25 * (t / 0.45)
+            : t < 0.7
+            ? -1.25 + 2.35 * ((t - 0.45) / 0.25)
+            : 1.1 * (1 - (t - 0.7) / 0.3);
+        bobY = t >= 0.6 && t <= 0.78 ? 1.5 : -0.5;
+        leanX = (t >= 0.55 && t <= 0.75 ? 2.5 : -0.8) * sideSign;
+        frontArmAngle = swing * sideSign;
+        backArmAngle = (swing * 0.7 - 0.2) * sideSign;
+        toolAngle = (swing + 0.35) * sideSign;
+      } else if (state === 'build') {
+        tool = 'hammer';
+        const strike = Math.sin(t * tau);
+        bobY = strike > 0.5 ? 1.0 : 0;
+        leanX = 1.4 * sideSign;
+        frontArmAngle = (-0.65 + strike * 0.85) * sideSign;
+        backArmAngle = -0.35 * sideSign;
+        toolAngle = (-0.5 + strike * 1.1) * sideSign;
+      } else if (state === 'attack') {
+        tool = 'sword';
+        const lunge =
+          t < 0.35
+            ? -t / 0.35
+            : t < 0.65
+            ? -1 + 2.2 * ((t - 0.35) / 0.3)
+            : 1.2 * (1 - (t - 0.65) / 0.35);
+        leanX = (t >= 0.45 && t <= 0.7 ? 3.4 : -0.8) * sideSign;
+        bobY = t >= 0.45 && t <= 0.7 ? 1.2 : -0.8;
+        leftLeg = t >= 0.45 && t <= 0.7 ? 3.5 * sideSign : -1.5 * sideSign;
+        rightLeg = -leftLeg * 0.6;
+        frontArmAngle = lunge * 0.95 * sideSign;
+        backArmAngle = -0.55 * sideSign;
+        toolAngle = (lunge * 1.15 + 0.4) * sideSign;
+      }
+
+      // Ground contact shadow
+      ctx.save();
+      ctx.fillStyle = 'rgba(10, 14, 18, 0.34)';
+      ctx.beginPath();
+      ctx.ellipse(cx + 1.5, groundY, 10.5, 4.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      const hipY = groundY - 9 + bobY;
+      const shoulderY = hipY - 11;
+      const headY = shoulderY - 6.5;
+
+      // Back arm
+      const backShoulderX = cx - 4 * sideSign + leanX * 0.6;
+      const backHandX = backShoulderX + Math.sin(backArmAngle) * 8.5;
+      const backHandY = shoulderY + 2 + Math.cos(backArmAngle) * 8.5;
+      drawLimb(ctx, backShoulderX, shoulderY + 2, backHandX, backHandY, 3.6, palette.tunicDark, palette.tunic);
+
+      // Legs
+      drawLimb(ctx, cx - 2.6 * sideSign, hipY, cx - 2.8 * sideSign + leftLeg, groundY - 1.5, 4.0, '#3b2f26', '#5c4a3c');
+      drawLimb(ctx, cx + 2.6 * sideSign, hipY, cx + 2.8 * sideSign + rightLeg, groundY - 1.0, 4.0, '#4a3b30', '#6d5848');
+
+      // Shaded tunic
+      ctx.save();
+      const torsoGrad = ctx.createLinearGradient(cx - 8, shoulderY, cx + 8, hipY + 3);
+      torsoGrad.addColorStop(0, palette.tunicLight);
+      torsoGrad.addColorStop(0.55, palette.tunic);
+      torsoGrad.addColorStop(1, palette.tunicDark);
+      ctx.fillStyle = torsoGrad;
+      ctx.strokeStyle = '#1e1b18';
+      ctx.lineWidth = 1.1;
+
+      ctx.beginPath();
+      ctx.moveTo(cx - 5.5 + leanX * 0.7, shoulderY);
+      ctx.lineTo(cx + 5.5 + leanX * 0.7, shoulderY);
+      ctx.lineTo(cx + 6.8 + leanX * 0.2, hipY + 2);
+      ctx.quadraticCurveTo(cx + leanX * 0.2, hipY + 4.5, cx - 6.8 + leanX * 0.2, hipY + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#3b281c';
+      ctx.fillRect(cx - 6.2 + leanX * 0.35, hipY - 2.2, 12.4, 2.4);
+      ctx.fillStyle = '#d4af37';
+      ctx.fillRect(cx + 1.5 * sideSign + leanX * 0.35, hipY - 2.2, 2.2, 2.4);
+      ctx.restore();
+
+      // Head
+      ctx.save();
+      const headX = cx + leanX;
+      const skinGrad = ctx.createRadialGradient(headX - 1.8, headY - 2, 1, headX, headY, 6.2);
+      skinGrad.addColorStop(0, '#f3cfb3');
+      skinGrad.addColorStop(0.7, '#d9a784');
+      skinGrad.addColorStop(1, '#a97454');
+
+      ctx.fillStyle = skinGrad;
+      ctx.strokeStyle = '#2b1e16';
+      ctx.lineWidth = 1.0;
+      ctx.beginPath();
+      ctx.arc(headX, headY, 5.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = palette.hair;
+      ctx.beginPath();
+      if (facingBack) {
+        ctx.arc(headX, headY - 0.5, 5.7, Math.PI * 0.85, Math.PI * 2.15);
+        ctx.lineTo(headX + 4.5, headY + 3.5);
+        ctx.lineTo(headX - 4.5, headY + 3.5);
+      } else {
+        ctx.arc(headX - 0.4 * sideSign, headY - 1.2, 5.5, Math.PI * 0.95, Math.PI * 2.05);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      if (!facingBack) {
+        ctx.fillStyle = '#1f1916';
+        ctx.fillRect(headX + 1.2 * sideSign, headY - 0.4, 1.3, 1.4);
+        ctx.fillRect(headX + 3.4 * sideSign, headY - 0.4, 1.2, 1.3);
+      }
+      ctx.restore();
+
+      // Front arm + tool
+      const frontShoulderX = cx + 4.2 * sideSign + leanX * 0.7;
+      const frontHandX = frontShoulderX + Math.sin(frontArmAngle) * 8.8;
+      const frontHandY = shoulderY + 2 + Math.cos(frontArmAngle) * 8.8;
+
+      drawTool(ctx, tool, frontHandX, frontHandY, toolAngle, facingRight);
+      drawLimb(ctx, frontShoulderX, shoulderY + 2, frontHandX, frontHandY, 3.8, palette.tunic, palette.tunicLight);
+
+      ctx.fillStyle = '#e4b796';
+      ctx.beginPath();
+      ctx.arc(frontHandX, frontHandY, 2.0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawCarriedResource(ctx, x, y, carryItem, facingRight) {
+      if (!carryItem) return;
+      const offset = facingRight ? 6 : -6;
+      ctx.save();
+      ctx.translate(x + offset, y - 14);
+      if (carryItem === 'wood') {
+        ctx.fillStyle = '#7a5230';
+        ctx.strokeStyle = '#3b2412';
+        ctx.lineWidth = 1;
+        ctx.fillRect(-5, -2.5, 10, 5);
+        ctx.strokeRect(-5, -2.5, 10, 5);
+        ctx.fillStyle = '#c89b6e';
+        ctx.beginPath();
+        ctx.arc(5, 0, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (carryItem === 'stone') {
+        ctx.fillStyle = '#9aa3ab';
+        ctx.strokeStyle = '#49525a';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-4, 2);
+        ctx.lineTo(-2, -4);
+        ctx.lineTo(3, -3);
+        ctx.lineTo(5, 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (carryItem === 'gold') {
+        ctx.fillStyle = '#f2c144';
+        ctx.strokeStyle = '#8b6412';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, 3.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    class VillagerSpriteBank {
+      constructor({ cellWidth = 48, cellHeight = 56 } = {}) {
+        this.cellWidth = cellWidth;
+        this.cellHeight = cellHeight;
+        this.cache = new Map();
+        this.rows = [];
+        this.rowIndex = new Map();
+        this.maxFrames = 0;
+
+        for (const [stateName, cfg] of Object.entries(STATES)) {
+          this.maxFrames = Math.max(this.maxFrames, cfg.frames);
+          for (const dir of DIRECTIONS) {
+            const key = `${stateName}:${dir}`;
+            this.rowIndex.set(key, this.rows.length);
+            this.rows.push({ state: stateName, dir, frames: cfg.frames });
+          }
+        }
+      }
+
+      getAtlas(factionColor = '#2e6fd9') {
+        const key = factionColor.toLowerCase();
+        if (this.cache.has(key)) return this.cache.get(key);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = this.maxFrames * this.cellWidth;
+        canvas.height = this.rows.length * this.cellHeight;
+        const ctx = canvas.getContext('2d');
+
+        const palette = {
+          tunic: factionColor,
+          tunicLight: shadeHex(factionColor, 0.16),
+          tunicDark: shadeHex(factionColor, -0.2),
+          hair: '#3a281d',
+        };
+
+        for (let r = 0; r < this.rows.length; r++) {
+          const { state, dir, frames } = this.rows[r];
+          for (let f = 0; f < frames; f++) {
+            const cx = f * this.cellWidth + this.cellWidth * 0.5;
+            const groundY = (r + 1) * this.cellHeight - 8;
+            renderVillagerFrame(ctx, cx, groundY, {
+              state,
+              frameIndex: f,
+              frameCount: frames,
+              dir,
+              palette,
+            });
+          }
+        }
+        this.cache.set(key, canvas);
+        return canvas;
+      }
+
+      static vectorToDirection(vx, vy, fallback = 'SE') {
+        if (Math.abs(vx) < 0.01 && Math.abs(vy) < 0.01) return fallback;
+        if (vy >= 0) return vx >= 0 ? 'SE' : 'SW';
+        return vx >= 0 ? 'NE' : 'NW';
+      }
+
+      drawVillager(ctx, unit) {
+        const {
+          x,
+          y,
+          factionColor = '#2e6fd9',
+          state = 'idle',
+          dir = 'SE',
+          animTime = 0,
+          scale = 1,
+          carryItem = null,
+        } = unit;
+
+        const cfg = STATES[state] || STATES.idle;
+        const frameIndex = Math.floor(animTime * cfg.fps) % cfg.frames;
+        const row = this.rowIndex.get(`${state}:${dir}`) ?? 0;
+        const atlas = this.getAtlas(factionColor);
+
+        const sx = frameIndex * this.cellWidth;
+        const sy = row * this.cellHeight;
+        const dw = this.cellWidth * scale;
+        const dh = this.cellHeight * scale;
+        const dx = Math.round(x - dw * 0.5);
+        const dy = Math.round(y - dh + 8 * scale);
+
+        ctx.drawImage(atlas, sx, sy, this.cellWidth, this.cellHeight, dx, dy, dw, dh);
+
+        if (carryItem && (state === 'walk' || state === 'idle')) {
+          drawCarriedResource(ctx, x, y, carryItem, dir === 'SE' || dir === 'NE');
+        }
+      }
+    }
+
+    /*************************************************************************
+     * 3. MODULE 2: ENVIRONMENT SPRITE BANK (3-Stage Buildings, Smoke, Trees)
+     *************************************************************************/
+    function traceIsoDiamond(ctx, cx, cy, halfW, halfH) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - halfH);
+      ctx.lineTo(cx + halfW, cy);
+      ctx.lineTo(cx, cy + halfH);
+      ctx.lineTo(cx - halfW, cy);
+      ctx.closePath();
+    }
+
+    function drawIsoBox(ctx, cx, baseY, halfW, halfH, height, colors) {
+      ctx.fillStyle = colors.left;
+      ctx.beginPath();
+      ctx.moveTo(cx - halfW, baseY);
+      ctx.lineTo(cx, baseY + halfH);
+      ctx.lineTo(cx, baseY + halfH - height);
+      ctx.lineTo(cx - halfW, baseY - height);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = colors.outline || 'rgba(20, 16, 12, 0.55)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = colors.right;
+      ctx.beginPath();
+      ctx.moveTo(cx, baseY + halfH);
+      ctx.lineTo(cx + halfW, baseY);
+      ctx.lineTo(cx + halfW, baseY - height);
+      ctx.lineTo(cx, baseY + halfH - height);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      if (colors.top) {
+        ctx.fillStyle = colors.top;
+        traceIsoDiamond(ctx, cx, baseY - height, halfW, halfH);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    function drawIsoRoof(ctx, cx, wallTopY, halfW, halfH, ridgeHeight, colors) {
+      const overhang = 4;
+      const hw = halfW + overhang;
+      const hh = halfH + overhang * 0.5;
+      const ridgeY = wallTopY - ridgeHeight;
+
+      ctx.fillStyle = colors.left;
+      ctx.strokeStyle = colors.outline || 'rgba(25, 16, 10, 0.65)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(cx - hw, wallTopY);
+      ctx.lineTo(cx, wallTopY + hh);
+      ctx.lineTo(cx + halfW * 0.35, ridgeY);
+      ctx.lineTo(cx - halfW * 0.35, ridgeY - halfH * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = colors.right;
+      ctx.beginPath();
+      ctx.moveTo(cx, wallTopY + hh);
+      ctx.lineTo(cx + hw, wallTopY);
+      ctx.lineTo(cx + halfW * 0.35, ridgeY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    const BUILDING_SPECS = {
+      hut: { halfW: 26, halfH: 13, wallH: 20, roofH: 18, chimney: true, banner: false, costWood: 30, costStone: 0 },
+      sawmill: { halfW: 34, halfH: 17, wallH: 22, roofH: 16, chimney: false, banner: true, costWood: 50, costStone: 0 },
+      forge: { halfW: 32, halfH: 16, wallH: 24, roofH: 14, chimney: true, banner: true, costWood: 40, costStone: 30 },
+      citadel: { halfW: 44, halfH: 22, wallH: 38, roofH: 22, chimney: true, banner: true, costWood: 80, costStone: 60 },
+    };
+
+    function renderBuildingStage(ctx, cx, baseY, type, stage, factionColor) {
+      const spec = BUILDING_SPECS[type] || BUILDING_SPECS.hut;
+      const { halfW, halfH, wallH, roofH } = spec;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(10, 14, 18, 0.30)';
+      const shadowScale = stage === 0 ? 1.0 : stage === 1 ? 1.12 : 1.24;
+      traceIsoDiamond(
+        ctx,
+        cx + (stage === 0 ? 2 : 10),
+        baseY + (stage === 0 ? 1 : 5),
+        halfW * shadowScale,
+        halfH * shadowScale
+      );
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.fillStyle = type === 'citadel' ? '#7b7872' : '#7a6348';
+      ctx.strokeStyle = 'rgba(38, 28, 18, 0.5)';
+      ctx.lineWidth = 1;
+      traceIsoDiamond(ctx, cx, baseY, halfW + 4, halfH + 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      if (stage === 0) {
+        ctx.strokeStyle = '#5c3f26';
+        ctx.lineWidth = 2;
+        const corners = [
+          [cx, baseY - halfH],
+          [cx + halfW, baseY],
+          [cx, baseY + halfH],
+          [cx - halfW, baseY],
+        ];
+        for (const [px, py] of corners) {
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px, py - 9);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = '#cbb38a';
+        ctx.lineWidth = 1;
+        traceIsoDiamond(ctx, cx, baseY - 6, halfW, halfH);
+        ctx.stroke();
+        return;
+      }
+
+      if (stage === 1) {
+        drawIsoBox(ctx, cx, baseY, halfW, halfH, wallH * 0.58, {
+          left: '#b89f7d',
+          right: '#8c7456',
+          top: '#d4be9c',
+        });
+
+        ctx.strokeStyle = '#684729';
+        ctx.lineWidth = 2.2;
+        const poles = [
+          [cx - halfW - 2, baseY + 1],
+          [cx, baseY + halfH + 2],
+          [cx + halfW + 2, baseY + 1],
+          [cx, baseY - halfH - 1],
+        ];
+        for (const [px, py] of poles) {
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px, py - wallH - 6);
+          ctx.stroke();
+        }
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(cx - halfW - 2, baseY - wallH * 0.5);
+        ctx.lineTo(cx, baseY + halfH - wallH * 0.9);
+        ctx.lineTo(cx + halfW + 2, baseY - wallH * 0.5);
+        ctx.stroke();
+        return;
+      }
+
+      const isStone = type === 'citadel' || type === 'forge';
+      drawIsoBox(ctx, cx, baseY, halfW, halfH, wallH, {
+        left: isStone ? '#b9b5ad' : '#d5c1a0',
+        right: isStone ? '#848078' : '#9c8669',
+      });
+
+      ctx.fillStyle = '#3b2616';
+      ctx.beginPath();
+      ctx.moveTo(cx - halfW * 0.45, baseY + halfH * 0.55);
+      ctx.lineTo(cx - halfW * 0.25, baseY + halfH * 0.75);
+      ctx.lineTo(cx - halfW * 0.25, baseY + halfH * 0.75 - 12);
+      ctx.lineTo(cx - halfW * 0.45, baseY + halfH * 0.55 - 12);
+      ctx.closePath();
+      ctx.fill();
+
+      if (type === 'forge' || type === 'hut') {
+        ctx.fillStyle = type === 'forge' ? '#ff9d2e' : '#f4cf6e';
+        ctx.fillRect(cx + halfW * 0.28, baseY - wallH * 0.45, 5, 5);
+      }
+
+      if (type === 'citadel') {
+        drawIsoBox(ctx, cx, baseY - wallH, halfW + 2, halfH + 1, 7, {
+          left: '#a29e95',
+          right: '#716d65',
+          top: '#c4bfb6',
+        });
+        drawIsoBox(ctx, cx, baseY - wallH - 7, halfW * 0.45, halfH * 0.45, 16, {
+          left: '#c5c0b6',
+          right: '#8f8a80',
+        });
+        drawIsoRoof(ctx, cx, baseY - wallH - 23, halfW * 0.45, halfH * 0.45, roofH * 0.75, {
+          left: shadeHex(factionColor, 0.08),
+          right: shadeHex(factionColor, -0.22),
+        });
+      } else {
+        drawIsoRoof(ctx, cx, baseY - wallH, halfW, halfH, roofH, {
+          left: type === 'forge' ? '#7a4b3a' : '#a85a3a',
+          right: type === 'forge' ? '#513024' : '#743a24',
+        });
+      }
+
+      if (spec.chimney) {
+        drawIsoBox(ctx, cx + halfW * 0.25, baseY - wallH - roofH * 0.45, 5, 2.5, 11, {
+          left: '#8c857d',
+          right: '#5c5650',
+          top: '#443f3a',
+        });
+      }
+    }
+
+    function renderTree(ctx, cx, baseY, variant) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(10, 14, 18, 0.30)';
+      ctx.beginPath();
+      ctx.ellipse(cx + 9, baseY + 2, 16, 7.5, 0.15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      const trunkGrad = ctx.createLinearGradient(cx - 4, baseY - 24, cx + 4, baseY);
+      trunkGrad.addColorStop(0, '#785436');
+      trunkGrad.addColorStop(1, '#432c19');
+      ctx.fillStyle = trunkGrad;
+      ctx.beginPath();
+      ctx.moveTo(cx - 4.5, baseY + 1);
+      ctx.lineTo(cx - 2.5, baseY - 24);
+      ctx.lineTo(cx + 2.5, baseY - 24);
+      ctx.lineTo(cx + 5, baseY + 1);
+      ctx.closePath();
+      ctx.fill();
+
+      if (variant === 'pine') {
+        const tiers = [
+          { y: baseY - 16, w: 18, h: 18 },
+          { y: baseY - 28, w: 14, h: 16 },
+          { y: baseY - 39, w: 10, h: 14 },
+        ];
+        for (const tier of tiers) {
+          ctx.fillStyle = '#3b7341';
+          ctx.beginPath();
+          ctx.moveTo(cx, tier.y - tier.h);
+          ctx.lineTo(cx - tier.w, tier.y);
+          ctx.lineTo(cx, tier.y + 4);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = '#234a28';
+          ctx.beginPath();
+          ctx.moveTo(cx, tier.y - tier.h);
+          ctx.lineTo(cx + tier.w, tier.y);
+          ctx.lineTo(cx, tier.y + 4);
+          ctx.closePath();
+          ctx.fill();
+        }
+      } else {
+        const puffs = [
+          { dx: 5, dy: -26, r: 12, c: '#29542d' },
+          { dx: -6, dy: -25, r: 12, c: '#3d783d' },
+          { dx: 0, dy: -35, r: 13, c: '#488c44' },
+          { dx: -4, dy: -38, r: 8, c: '#65ab57' },
+        ];
+        for (const p of puffs) {
+          ctx.fillStyle = p.c;
+          ctx.beginPath();
+          ctx.arc(cx + p.dx, baseY + p.dy, p.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    class EnvironmentSpriteBank {
+      constructor() {
+        this.buildingCache = new Map();
+        this.treeCache = new Map();
+      }
+
+      getBuildingCanvas(type = 'hut', stage = 2, factionColor = '#2e6fd9') {
+        const key = `${type}:${stage}:${factionColor.toLowerCase()}`;
+        if (this.buildingCache.has(key)) return this.buildingCache.get(key);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 112;
+        const ctx = canvas.getContext('2d');
+        renderBuildingStage(ctx, 64, 94, type, stage, factionColor);
+
+        this.buildingCache.set(key, canvas);
+        return canvas;
+      }
+
+      getTreeCanvas(variant = 'oak') {
+        if (this.treeCache.has(variant)) return this.treeCache.get(variant);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 76;
+        const ctx = canvas.getContext('2d');
+        renderTree(ctx, 29, 64, variant);
+
+        this.treeCache.set(variant, canvas);
+        return canvas;
+      }
+
+      drawBuilding(ctx, building, timeSec = 0) {
+        const { x, y, type = 'hut', progress = 1, factionColor = '#2e6fd9', scale = 1 } = building;
+        const stage = progress < 0.35 ? 0 : progress < 1 ? 1 : 2;
+        const sprite = this.getBuildingCanvas(type, stage, factionColor);
+        const dw = sprite.width * scale;
+        const dh = sprite.height * scale;
+
+        ctx.drawImage(sprite, Math.round(x - dw * 0.5), Math.round(y - dh + 18 * scale), dw, dh);
+
+        if (stage < 2) {
+          // Construction progress bar
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+          ctx.fillRect(x - 22, y - 42, 44, 6);
+          ctx.fillStyle = '#f59e0b';
+          ctx.fillRect(x - 21, y - 41, Math.round(42 * progress), 4);
+          return;
+        }
+
+        const spec = BUILDING_SPECS[type] || BUILDING_SPECS.hut;
+
+        if (spec.chimney) {
+          const chimX = x + spec.halfW * 0.25 * scale;
+          const chimY = y - (spec.wallH + spec.roofH * 0.45 + 12) * scale;
+          for (let i = 0; i < 4; i++) {
+            const life = (timeSec * 0.45 + i * 0.25) % 1;
+            const px = chimX + Math.sin(life * 5 + i) * 4 * scale + life * 6 * scale;
+            const py = chimY - life * 24 * scale;
+            const radius = (2.5 + life * 5.5) * scale;
+            ctx.fillStyle = `rgba(225, 225, 230, ${(1 - life) * 0.38})`;
+            ctx.beginPath();
+            ctx.arc(px, py, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        if (spec.banner) {
+          const poleX = x - spec.halfW * 0.35 * scale;
+          const poleTopY = y - (spec.wallH + spec.roofH + (type === 'citadel' ? 24 : 6)) * scale;
+          ctx.strokeStyle = '#4a3520';
+          ctx.lineWidth = 1.6 * scale;
+          ctx.beginPath();
+          ctx.moveTo(poleX, poleTopY + 14 * scale);
+          ctx.lineTo(poleX, poleTopY);
+          ctx.stroke();
+
+          const wave = Math.sin(timeSec * 5 + x * 0.05) * 2.5 * scale;
+          ctx.fillStyle = factionColor;
+          ctx.beginPath();
+          ctx.moveTo(poleX, poleTopY);
+          ctx.quadraticCurveTo(
+            poleX + 7 * scale,
+            poleTopY + 2 * scale + wave,
+            poleX + 13 * scale,
+            poleTopY + 4 * scale - wave * 0.5
+          );
+          ctx.lineTo(poleX, poleTopY + 8 * scale);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      drawTree(ctx, tree, timeSec = 0) {
+        const { x, y, variant = 'oak', scale = 1 } = tree;
+        const sprite = this.getTreeCanvas(variant);
+        const sway = Math.sin(timeSec * 1.8 + x * 0.03 + y * 0.02) * 0.025;
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.transform(1, 0, sway, 1, 0, 0);
+        const dw = sprite.width * scale;
+        const dh = sprite.height * scale;
+        ctx.drawImage(sprite, Math.round(-dw * 0.5 + 3 * scale), Math.round(-dh + 12 * scale), dw, dh);
+        ctx.restore();
+      }
+    }
+
+    /*************************************************************************
+     * 4. MODULE 3: DYNAMIC FOOTPATH TERRAIN (Grass -> Worn Dirt -> Cobblestone)
+     *************************************************************************/
+    function createSurfacePatterns(tileSize = 24) {
+      const makeCanvas = (w, h) => {
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        return c;
+      };
+
+      const grass = makeCanvas(tileSize, tileSize);
+      const gCtx = grass.getContext('2d');
+      gCtx.fillStyle = '#4e7c3e';
+      gCtx.fillRect(0, 0, tileSize, tileSize);
+      for (let y = 0; y < tileSize; y += 2) {
+        for (let x = 0; x < tileSize; x += 2) {
+          const h = hash2D(x, y);
+          if (h > 0.72) {
+            gCtx.fillStyle = '#5c8e49';
+            gCtx.fillRect(x, y, 2, 2);
+          } else if (h < 0.22) {
+            gCtx.fillStyle = '#416933';
+            gCtx.fillRect(x, y, 2, 2);
+          }
+        }
+      }
+
+      const dirt = makeCanvas(tileSize, tileSize);
+      const dCtx = dirt.getContext('2d');
+      dCtx.fillStyle = '#8b6c4c';
+      dCtx.fillRect(0, 0, tileSize, tileSize);
+      for (let y = 0; y < tileSize; y += 2) {
+        for (let x = 0; x < tileSize; x += 2) {
+          const h = hash2D(x + 99, y + 99);
+          if (h > 0.75) {
+            dCtx.fillStyle = '#9e7d5b';
+            dCtx.fillRect(x, y, 2, 2);
+          } else if (h < 0.25) {
+            dCtx.fillStyle = '#73573b';
+            dCtx.fillRect(x, y, 2, 2);
+          }
+        }
+      }
+
+      const cobble = makeCanvas(tileSize, tileSize);
+      const cCtx = cobble.getContext('2d');
+      cCtx.fillStyle = '#6f675e';
+      cCtx.fillRect(0, 0, tileSize, tileSize);
+      const stones = [
+        [1, 1, 9, 6],
+        [12, 1, 10, 7],
+        [2, 9, 10, 6],
+        [14, 9, 8, 6],
+        [1, 16, 9, 6],
+        [12, 16, 10, 6],
+      ];
+      for (let i = 0; i < stones.length; i++) {
+        const [sx, sy, sw, sh] = stones[i];
+        cCtx.fillStyle = i % 2 === 0 ? '#969189' : '#857f77';
+        cCtx.strokeStyle = '#4a453f';
+        cCtx.lineWidth = 1;
+        cCtx.fillRect(sx, sy, sw, sh);
+        cCtx.strokeRect(sx, sy, sw, sh);
+      }
+
+      return { grass, dirt, cobble };
+    }
+
+    class DynamicFootpathTerrain {
+      constructor({ worldWidth = 2304, worldHeight = 2304, cellSize = 24, chunkCells = 16 } = {}) {
+        this.worldWidth = worldWidth;
+        this.worldHeight = worldHeight;
+        this.cellSize = cellSize;
+        this.chunkCells = chunkCells;
+        this.chunkPixelSize = cellSize * chunkCells;
+
+        this.cols = Math.ceil(worldWidth / cellSize);
+        this.rows = Math.ceil(worldHeight / cellSize);
+        this.chunkCols = Math.ceil(this.cols / chunkCells);
+        this.chunkRows = Math.ceil(this.rows / chunkCells);
+
+        this.wearGrid = new Float32Array(this.cols * this.rows);
+        this.surfaces = createSurfacePatterns(cellSize);
+        this.chunks = new Map();
+      }
+
+      _markChunkDirty(col, row) {
+        const cc = Math.floor(col / this.chunkCells);
+        const cr = Math.floor(row / this.chunkCells);
+        const chunk = this.chunks.get(`${cc}:${cr}`);
+        if (chunk) chunk.dirty = true;
+      }
+
+      addWearAtCell(col, row, amount = 0.05) {
+        const offsets = [
+          [0, 0, 1.0],
+          [-1, 0, 0.35],
+          [1, 0, 0.35],
+          [0, -1, 0.35],
+          [0, 1, 0.35],
+        ];
+        for (const [dc, dr, weight] of offsets) {
+          const c = col + dc;
+          const r = row + dr;
+          if (c < 0 || c >= this.cols || r < 0 || r >= this.rows) continue;
+          const idx = r * this.cols + c;
+          const prev = this.wearGrid[idx];
+          const next = Math.min(1.0, prev + amount * weight);
+          if (next !== prev) {
+            this.wearGrid[idx] = next;
+            if (Math.floor(next * 12) !== Math.floor(prev * 12)) {
+              this._markChunkDirty(c, r);
+            }
+          }
+        }
+      }
+
+      stampBuildingFootprint(x, y, radiusPx = 44, wearValue = 0.62) {
+        const centerCol = Math.floor(x / this.cellSize);
+        const centerRow = Math.floor(y / this.cellSize);
+        const cellRadius = Math.ceil(radiusPx / this.cellSize);
+
+        for (let dr = -cellRadius; dr <= cellRadius; dr++) {
+          for (let dc = -cellRadius; dc <= cellRadius; dc++) {
+            const dist = Math.hypot(dc, dr) / Math.max(1, cellRadius);
+            if (dist > 1) continue;
+            const c = centerCol + dc;
+            const r = centerRow + dr;
+            if (c < 0 || c >= this.cols || r < 0 || r >= this.rows) continue;
+            const idx = r * this.cols + c;
+            const target = wearValue * (1 - dist * 0.45);
+            if (target > this.wearGrid[idx]) {
+              this.wearGrid[idx] = target;
+              this._markChunkDirty(c, r);
+            }
+          }
+        }
+      }
+
+      updateTraffic(units, dtSeconds = 1 / 60) {
+        for (let i = 0; i < units.length; i++) {
+          const u = units[i];
+          if (u.state !== 'walk') continue;
+          const col = Math.floor(u.x / this.cellSize);
+          const row = Math.floor(u.y / this.cellSize);
+          if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
+            this.addWearAtCell(col, row, 0.055 * dtSeconds * 14);
+          }
+        }
+      }
+
+      _getChunkCanvas(cc, cr) {
+        const key = `${cc}:${cr}`;
+        let entry = this.chunks.get(key);
+        if (!entry) {
+          const canvas = document.createElement('canvas');
+          canvas.width = this.chunkPixelSize;
+          canvas.height = this.chunkPixelSize;
+          entry = { canvas, dirty: true };
+          this.chunks.set(key, entry);
+        }
+        if (!entry.dirty) return entry.canvas;
+
+        const ctx = entry.canvas.getContext('2d');
+        const startCol = cc * this.chunkCells;
+        const startRow = cr * this.chunkCells;
+        const cs = this.cellSize;
+
+        for (let lr = 0; lr < this.chunkCells; lr++) {
+          const row = startRow + lr;
+          if (row >= this.rows) break;
+          for (let lc = 0; lc < this.chunkCells; lc++) {
+            const col = startCol + lc;
+            if (col >= this.cols) break;
+
+            const px = lc * cs;
+            const py = lr * cs;
+            const wear = this.wearGrid[row * this.cols + col];
+
+            ctx.drawImage(this.surfaces.grass, px, py);
+
+            const h = hash2D(col, row);
+            if (wear < 0.12 && h > 0.92) {
+              ctx.fillStyle = h > 0.96 ? '#f2d15b' : '#d8e3cd';
+              ctx.fillRect(px + (cs >> 1), py + (cs >> 1), 2.5, 2.5);
+            }
+
+            if (wear > 0.08) {
+              const dirtAlpha = Math.min(1, (wear - 0.08) / 0.55);
+              ctx.save();
+              ctx.globalAlpha = dirtAlpha;
+              ctx.beginPath();
+              ctx.arc(px + cs * 0.5, py + cs * 0.5, cs * (0.4 + dirtAlpha * 0.34), 0, Math.PI * 2);
+              ctx.clip();
+              ctx.drawImage(this.surfaces.dirt, px, py);
+              ctx.restore();
+            }
+
+            if (wear > 0.68) {
+              const cobbleAlpha = Math.min(1, (wear - 0.68) / 0.25);
+              ctx.save();
+              ctx.globalAlpha = cobbleAlpha;
+              ctx.beginPath();
+              ctx.arc(px + cs * 0.5, py + cs * 0.5, cs * (0.42 + cobbleAlpha * 0.28), 0, Math.PI * 2);
+              ctx.clip();
+              ctx.drawImage(this.surfaces.cobble, px, py);
+              ctx.restore();
+            }
+          }
+        }
+        entry.dirty = false;
+        return entry.canvas;
+      }
+
+      drawViewport(ctx, camera) {
+        const minCC = Math.max(0, Math.floor(camera.x / this.chunkPixelSize));
+        const maxCC = Math.min(this.chunkCols - 1, Math.floor((camera.x + camera.width) / this.chunkPixelSize));
+        const minCR = Math.max(0, Math.floor(camera.y / this.chunkPixelSize));
+        const maxCR = Math.min(this.chunkRows - 1, Math.floor((camera.y + camera.height) / this.chunkPixelSize));
+
+        for (let cr = minCR; cr <= maxCR; cr++) {
+          for (let cc = minCC; cc <= maxCC; cc++) {
+            const chunkCanvas = this._getChunkCanvas(cc, cr);
+            ctx.drawImage(chunkCanvas, cc * this.chunkPixelSize, cr * this.chunkPixelSize);
+          }
+        }
+      }
+    }
+
+    /*************************************************************************
+     * 5. LIVE PLAYABLE WORLD SIMULATION & UI CONTROLLER
+     *************************************************************************/
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const terrain = new DynamicFootpathTerrain({ worldWidth: 2304, worldHeight: 2304, cellSize: 24, chunkCells: 16 });
+    const envBank = new EnvironmentSpriteBank();
+    const villagerBank = new VillagerSpriteBank();
+
+    const state = {
+      wood: 240,
+      stone: 160,
+      gold: 120,
+      factionColor: '#2e6fd9',
+      mode: 'inspect',
+      badgeMode: 'hover', // 'hover' | 'all' | 'off'
+      speedMultiplier: 1,
+      camera: { x: 550, y: 520, width: window.innerWidth, height: window.innerHeight },
+      pointer: { worldX: 900, worldY: 800, down: false, dragging: false, lastX: 0, lastY: 0 },
+      buildings: [],
+      trees: [],
+      villagers: [],
+      stepsDone: { s1: false, s2: false, s3: false },
+    };
+
+    function showToast(msg) {
+      const el = document.getElementById('toastBanner');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(showToast._timer);
+      showToast._timer = setTimeout(() => el.classList.add('hidden'), 2600);
+    }
+
+    function markStepDone(key, id, iconId) {
+      if (state.stepsDone[key]) return;
+      state.stepsDone[key] = true;
+      const item = document.getElementById(id);
+      const icon = document.getElementById(iconId);
+      if (item && icon) {
+        icon.textContent = '✓';
+        icon.className = 'text-emerald-400 font-bold';
+        item.classList.add('line-through', 'text-slate-400');
+      }
+    }
+
+    function initWorld() {
+      const cx = 1050;
+      const cy = 920;
+
+      // Starter finished buildings + 1 scaffolding building
+      const initialBuildings = [
+        { x: cx, y: cy, type: 'citadel', progress: 1.0, factionColor: state.factionColor, label: 'Royal Citadel' },
+        { x: cx - 160, y: cy + 70, type: 'sawmill', progress: 1.0, factionColor: state.factionColor, label: 'Timber Sawmill' },
+        { x: cx + 165, y: cy + 65, type: 'forge', progress: 1.0, factionColor: state.factionColor, label: 'Iron Forge' },
+        { x: cx - 90, y: cy - 95, type: 'hut', progress: 1.0, factionColor: state.factionColor, label: 'Villager Villa' },
+        { x: cx + 110, y: cy - 90, type: 'hut', progress: 0.45, factionColor: state.factionColor, label: 'New Hut (Building)' },
+      ];
+
+      for (const b of initialBuildings) {
+        state.buildings.push({ kind: 'building', ...b });
+        terrain.stampBuildingFootprint(b.x, b.y, b.type === 'citadel' ? 58 : 42, 0.66);
+      }
+
+      // Pre-worn starter dirt road between Sawmill, Citadel, and Forge
+      for (let t = 0; t <= 1; t += 0.03) {
+        const rx1 = (cx - 160) + t * 160;
+        const ry1 = (cy + 70) - t * 70;
+        terrain.addWearAtCell(Math.floor(rx1 / 24), Math.floor(ry1 / 24), 0.55);
+
+        const rx2 = cx + t * 165;
+        const ry2 = cy + t * 65;
+        terrain.addWearAtCell(Math.floor(rx2 / 24), Math.floor(ry2 / 24), 0.55);
+      }
+
+      // Forest rings around settlement
+      for (let i = 0; i < 58; i++) {
+        const angle = (i / 58) * Math.PI * 2 + (hash2D(i, 7) - 0.5) * 0.25;
+        const dist = 240 + hash2D(i, 19) * 260;
+        const tx = Math.round(cx + Math.cos(angle) * dist);
+        const ty = Math.round(cy + Math.sin(angle) * dist * 0.82);
+        state.trees.push({
+          kind: 'tree',
+          x: tx,
+          y: ty,
+          variant: i % 3 === 0 ? 'pine' : 'oak',
+          scale: 0.92 + hash2D(i, 31) * 0.22,
+        });
+      }
+
+      // Spawn 24 autonomous citizens
+      spawnCitizens(24, cx, cy);
+    }
+
+    function spawnCitizens(count, originX, originY) {
+      const roles = ['woodcutter', 'builder', 'miner', 'guard'];
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 35 + Math.random() * 95;
+        const role = roles[i % roles.length];
+        state.villagers.push({
+          kind: 'villager',
+          x: originX + Math.cos(angle) * radius,
+          y: originY + Math.sin(angle) * radius,
+          vx: 0,
+          vy: 0,
+          speed: 54 + Math.random() * 14,
+          factionColor: state.factionColor,
+          state: 'idle',
+          dir: 'SE',
+          animTime: Math.random() * 10,
+          carryItem: null,
+          role,
+          taskTimer: 0,
+          target: null,
+        });
+      }
+      updateHUD();
+    }
+
+    function pickCitizenTarget(u) {
+      // 1. Check for unfinished buildings first
+      const unfinished = state.buildings.find((b) => b.progress < 1);
+      if (unfinished && (u.role === 'builder' || Math.random() < 0.45)) {
+        u.target = { type: 'build', ref: unfinished, x: unfinished.x + (Math.random() - 0.5) * 34, y: unfinished.y + 14 };
+        return;
+      }
+
+      // 2. If carrying a resource, deliver it to Citadel or Sawmill/Forge
+      if (u.carryItem) {
+        const dropoffs = state.buildings.filter((b) => b.progress >= 1);
+        const dest = dropoffs[Math.floor(Math.random() * dropoffs.length)] || state.buildings[0];
+        if (dest) {
+          u.target = { type: 'dropoff', ref: dest, x: dest.x + (Math.random() - 0.5) * 24, y: dest.y + 16 };
+          return;
+        }
+      }
+
+      // 3. Otherwise head to a tree to chop wood or patrol between buildings
+      if (state.trees.length > 0 && (u.role === 'woodcutter' || Math.random() < 0.65)) {
+        const tree = state.trees[Math.floor(Math.random() * state.trees.length)];
+        u.target = { type: 'chop', ref: tree, x: tree.x - 10, y: tree.y + 6 };
+      } else {
+        const b = state.buildings[Math.floor(Math.random() * state.buildings.length)];
+        u.target = {
+          type: 'patrol',
+          x: (b ? b.x : 1050) + (Math.random() - 0.5) * 90,
+          y: (b ? b.y : 920) + (Math.random() - 0.5) * 70,
+        };
+      }
+    }
+
+    function updateSimulation(dt) {
+      const simDt = dt * state.speedMultiplier;
+
+      for (let i = 0; i < state.villagers.length; i++) {
+        const u = state.villagers[i];
+        u.animTime += simDt;
+        u.factionColor = state.factionColor;
+
+        if (!u.target) {
+          pickCitizenTarget(u);
+        }
+
+        if (u.target) {
+          const dx = u.target.x - u.x;
+          const dy = u.target.y - u.y;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist > 6) {
+            u.vx = (dx / dist) * u.speed;
+            u.vy = (dy / dist) * u.speed;
+            u.x += u.vx * simDt;
+            u.y += u.vy * simDt;
+            u.state = 'walk';
+            u.dir = VillagerSpriteBank.vectorToDirection(u.vx, u.vy, u.dir);
+          } else {
+            u.vx = 0;
+            u.vy = 0;
+            // Perform work at target
+            if (u.target.type === 'build' && u.target.ref && u.target.ref.progress < 1) {
+              u.state = 'build';
+              u.target.ref.progress = Math.min(1, u.target.ref.progress + 0.14 * simDt);
+              if (u.target.ref.progress >= 1) {
+                sfx.completeBuilding();
+                showToast(`${u.target.ref.type.toUpperCase()} construction completed!`);
+                u.target = null;
+              }
+            } else if (u.target.type === 'chop') {
+              u.state = 'chop';
+              u.taskTimer += simDt;
+              if (u.taskTimer >= 2.2) {
+                u.taskTimer = 0;
+                u.carryItem = Math.random() < 0.72 ? 'wood' : Math.random() < 0.6 ? 'stone' : 'gold';
+                u.target = null;
+              }
+            } else if (u.target.type === 'dropoff') {
+              if (u.carryItem === 'wood') state.wood += 4;
+              else if (u.carryItem === 'stone') state.stone += 3;
+              else if (u.carryItem === 'gold') state.gold += 2;
+              u.carryItem = null;
+              u.target = null;
+              markStepDone('s2', 'step2', 'step2Icon');
+              updateHUD();
+            } else {
+              u.state = u.role === 'guard' ? 'attack' : 'idle';
+              u.taskTimer += simDt;
+              if (u.taskTimer > 1.6) {
+                u.taskTimer = 0;
+                u.target = null;
+              }
+            }
+          }
+        }
+      }
+
+      terrain.updateTraffic(state.villagers, simDt);
+    }
+
+    function updateHUD() {
+      document.getElementById('woodCount').textContent = state.wood;
+      document.getElementById('stoneCount').textContent = state.stone;
+      document.getElementById('goldCount').textContent = state.gold;
+      document.getElementById('popCount').textContent = state.villagers.length;
+    }
+
+    function drawPlacementPreview(ctx) {
+      if (state.mode === 'inspect') return;
+      const wx = state.pointer.worldX;
+      const wy = state.pointer.worldY;
+
+      if (state.mode === 'road') {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(wx, wy, 26, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      const spec = BUILDING_SPECS[state.mode];
+      if (!spec) return;
+
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      envBank.drawBuilding(
+        ctx,
+        { x: wx, y: wy, type: state.mode, progress: 1, factionColor: state.factionColor },
+        performance.now() * 0.001
+      );
+      ctx.restore();
+    }
+
+    function drawBadges(ctx) {
+      if (state.badgeMode === 'off') return;
+
+      ctx.save();
+      ctx.font = '600 11px Inter, sans-serif';
+      ctx.textAlign = 'center';
+
+      for (const b of state.buildings) {
+        const dist = Math.hypot(state.pointer.worldX - b.x, state.pointer.worldY - b.y);
+        if (state.badgeMode === 'hover' && dist > 64) continue;
+
+        const status = b.progress < 1 ? `${Math.round(b.progress * 100)}%` : 'Ready';
+        const text = `${b.type.toUpperCase()} • ${status}`;
+        const tw = ctx.measureText(text).width + 14;
+        const bx = b.x;
+        const by = b.y - 68;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.55)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(bx - tw * 0.5, by - 10, tw, 18, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText(text, bx, by + 3);
+      }
+      ctx.restore();
+    }
+
+    /*************************************************************************
+     * 6. INPUT & TOOLBAR WIRING
+     *************************************************************************/
+    function setMode(newMode) {
+      state.mode = newMode;
+      document.querySelectorAll('.mode-btn').forEach((btn) => {
+        const active = btn.dataset.mode === newMode;
+        btn.className = active
+          ? 'mode-btn text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 transition'
+          : 'mode-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 transition';
+      });
+    }
+
+    document.querySelectorAll('.mode-btn').forEach((btn) => {
+      btn.addEventListener('click', () => setMode(btn.dataset.mode));
+    });
+
+    document.getElementById('factionSelect').addEventListener('change', (e) => {
+      state.factionColor = e.target.value;
+      for (const b of state.buildings) b.factionColor = state.factionColor;
+      for (const v of state.villagers) v.factionColor = state.factionColor;
+    });
+
+    document.getElementById('btnToggleBadges').addEventListener('click', () => {
+      const order = ['hover', 'all', 'off'];
+      const next = order[(order.indexOf(state.badgeMode) + 1) % order.length];
+      state.badgeMode = next;
+      document.getElementById('badgeStateText').textContent =
+        next === 'hover' ? 'Hover' : next === 'all' ? 'All' : 'Off';
+    });
+
+    document.getElementById('btnSpeed').addEventListener('click', () => {
+      state.speedMultiplier = state.speedMultiplier === 1 ? 2 : state.speedMultiplier === 2 ? 4 : 1;
+      document.getElementById('speedText').textContent = `${state.speedMultiplier}x`;
+    });
+
+    document.getElementById('btnAudio').addEventListener('click', () => {
+      sfx.enabled = !sfx.enabled;
+      document.getElementById('audioText').textContent = sfx.enabled ? 'ON' : 'OFF';
+    });
+
+    document.getElementById('btnCenterCam').addEventListener('click', () => {
+      state.camera.x = 1050 - canvas.width * 0.5;
+      state.camera.y = 920 - canvas.height * 0.5;
+    });
+
+    document.getElementById('btnCloseOnboarding').addEventListener('click', () => {
+      document.getElementById('onboardingCard').classList.add('hidden');
+    });
+
+    document.getElementById('btnSpawnCitizens').addEventListener('click', () => {
+      sfx.spawnUnits();
+      spawnCitizens(10, 1050, 920);
+      markStepDone('s3', 'step3', 'step3Icon');
+      showToast('+10 Citizens joined your Sovereign Empire!');
+    });
+
+    document.getElementById('btnPlantTrees').addEventListener('click', () => {
+      for (let i = 0; i < 15; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 180 + Math.random() * 280;
+        state.trees.push({
+          kind: 'tree',
+          x: Math.round(1050 + Math.cos(angle) * dist),
+          y: Math.round(920 + Math.sin(angle) * dist * 0.8),
+          variant: Math.random() < 0.35 ? 'pine' : 'oak',
+          scale: 0.9 + Math.random() * 0.25,
+        });
+      }
+      showToast('Planted 15 new isometric trees!');
+    });
+
+    document.getElementById('btnInstantFinish').addEventListener('click', () => {
+      let count = 0;
+      for (const b of state.buildings) {
+        if (b.progress < 1) {
+          b.progress = 1;
+          count++;
+        }
+      }
+      if (count > 0) {
+        sfx.completeBuilding();
+        showToast(`Completed ${count} building(s) instantly!`);
+      } else {
+        showToast('All current buildings are already finished.');
+      }
+    });
+
+    // Canvas Pointer & Camera Controls
+    canvas.addEventListener('pointerdown', (e) => {
+      state.pointer.down = true;
+      state.pointer.dragging = false;
+      state.pointer.lastX = e.clientX;
+      state.pointer.lastY = e.clientY;
+      state.pointer.worldX = e.clientX + state.camera.x;
+      state.pointer.worldY = e.clientY + state.camera.y;
+
+      if (state.mode === 'road') {
+        terrain.stampBuildingFootprint(state.pointer.worldX, state.pointer.worldY, 28, 0.92);
+        markStepDone('s3', 'step3', 'step3Icon');
+      }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      state.pointer.worldX = e.clientX + state.camera.x;
+      state.pointer.worldY = e.clientY + state.camera.y;
+
+      if (!state.pointer.down) return;
+
+      if (state.mode === 'road') {
+        terrain.stampBuildingFootprint(state.pointer.worldX, state.pointer.worldY, 28, 0.92);
+        markStepDone('s3', 'step3', 'step3Icon');
+        return;
+      }
+
+      const dx = e.clientX - state.pointer.lastX;
+      const dy = e.clientY - state.pointer.lastY;
+      if (Math.hypot(dx, dy) > 4) state.pointer.dragging = true;
+
+      if (state.pointer.dragging) {
+        state.camera.x = Math.max(0, Math.min(terrain.worldWidth - canvas.width, state.camera.x - dx));
+        state.camera.y = Math.max(0, Math.min(terrain.worldHeight - canvas.height, state.camera.y - dy));
+        state.pointer.lastX = e.clientX;
+        state.pointer.lastY = e.clientY;
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (state.pointer.down && !state.pointer.dragging) {
+        const spec = BUILDING_SPECS[state.mode];
+        if (spec) {
+          if (state.wood < spec.costWood || state.stone < spec.costStone) {
+            showToast(`Need ${spec.costWood} Wood & ${spec.costStone} Stone!`);
+          } else {
+            state.wood -= spec.costWood;
+            state.stone -= spec.costStone;
+            const bx = state.pointer.worldX;
+            const by = state.pointer.worldY;
+            const newB = {
+              kind: 'building',
+              x: bx,
+              y: by,
+              type: state.mode,
+              progress: 0.05,
+              factionColor: state.factionColor,
+            };
+            state.buildings.push(newB);
+            terrain.stampBuildingFootprint(bx, by, 44, 0.55);
+            sfx.placeBuilding();
+            updateHUD();
+            markStepDone('s1', 'step1', 'step1Icon');
+
+            // Assign nearby citizens to construct the new building
+            for (let i = 0; i < Math.min(5, state.villagers.length); i++) {
+              const v = state.villagers[i];
+              v.target = { type: 'build', ref: newB, x: bx + (Math.random() - 0.5) * 32, y: by + 14 };
+            }
+          }
+        }
+      }
+      state.pointer.down = false;
+      state.pointer.dragging = false;
+    });
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      state.camera.width = canvas.width;
+      state.camera.height = canvas.height;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    /*************************************************************************
+     * 7. MAIN 60 FPS RENDER LOOP
+     *************************************************************************/
+    let lastTime = performance.now();
+    let frameCounter = 0;
+    let fpsTimer = 0;
+
+    function loop(now) {
+      const dt = Math.min(0.05, (now - lastTime) * 0.001);
+      lastTime = now;
+
+      frameCounter++;
+      fpsTimer += dt;
+      if (fpsTimer >= 0.5) {
+        document.getElementById('fpsCount').textContent = Math.min(60, Math.round(frameCounter / fpsTimer));
+        frameCounter = 0;
+        fpsTimer = 0;
+      }
+
+      updateSimulation(dt);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(-Math.round(state.camera.x), -Math.round(state.camera.y));
+
+      // 1. Draw Chunked Terrain & Worn Footpaths
+      terrain.drawViewport(ctx, state.camera);
+
+      // 2. Unified Y-Sorted World Pass (Buildings, Trees, Shaded Villagers)
+      const pad = 120;
+      const minX = state.camera.x - pad;
+      const maxX = state.camera.x + state.camera.width + pad;
+      const minY = state.camera.y - pad;
+      const maxY = state.camera.y + state.camera.height + pad;
+
+      const visibleEntities = [];
+      for (const b of state.buildings) {
+        if (b.x >= minX && b.x <= maxX && b.y >= minY && b.y <= maxY) visibleEntities.push(b);
+      }
+      for (const t of state.trees) {
+        if (t.x >= minX && t.x <= maxX && t.y >= minY && t.y <= maxY) visibleEntities.push(t);
+      }
+      for (const v of state.villagers) {
+        if (v.x >= minX && v.x <= maxX && v.y >= minY && v.y <= maxY) visibleEntities.push(v);
+      }
+
+      visibleEntities.sort((a, b) => a.y - b.y);
+      const timeSec = now * 0.001;
+      for (const item of visibleEntities) {
+        if (item.kind === 'building') envBank.drawBuilding(ctx, item, timeSec);
+        else if (item.kind === 'tree') envBank.drawTree(ctx, item, timeSec);
+        else if (item.kind === 'villager') villagerBank.drawVillager(ctx, item);
+      }
+
+      // 3. Placement Ghost & Hover Badges
+      drawPlacementPreview(ctx);
+      drawBadges(ctx);
+
+      ctx.restore();
+      requestAnimationFrame(loop);
+    }
+
+    window.onload = () => {
+      resizeCanvas();
+      initWorld();
+      state.camera.x = 1050 - canvas.width * 0.5;
+      state.camera.y = 920 - canvas.height * 0.5;
+      requestAnimationFrame(loop);
+    };
+  </script>
+</body>
+</html>
