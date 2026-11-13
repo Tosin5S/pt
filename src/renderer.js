@@ -293,19 +293,31 @@ export const rendererMethods = {
         ctx.save();
         ctx.translate(sx, sy);
         ctx.scale(1, invTilt);
+
+        // Ground shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.32)';
+        ctx.beginPath();
+        ctx.ellipse(2, 2, 16, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
         if (node.type === 'tree') {
+            const sway = Math.sin(this.time * 1.9 + node.x * 0.015) * 2.2;
             ctx.fillStyle = '#5c4033';
             ctx.fillRect(-4, -18, 8, 18);
+            ctx.fillStyle = '#14532d';
+            ctx.beginPath();
+            ctx.arc(sway * 0.6, -26, 17, 0, Math.PI * 2);
+            ctx.fill();
             ctx.fillStyle = '#15803d';
             ctx.beginPath();
-            ctx.arc(0, -28, 17, 0, Math.PI * 2);
+            ctx.arc(sway * 0.85, -30, 15, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#22c55e';
             ctx.beginPath();
-            ctx.arc(-4, -32, 11, 0, Math.PI * 2);
+            ctx.arc(-4 + sway, -34, 10, 0, Math.PI * 2);
             ctx.fill();
         } else if (node.type === 'stone') {
-            ctx.fillStyle = '#94a3b8';
+            ctx.fillStyle = '#64748b';
             ctx.beginPath();
             ctx.moveTo(-16, 0);
             ctx.lineTo(-8, -22);
@@ -313,13 +325,30 @@ export const rendererMethods = {
             ctx.lineTo(16, 0);
             ctx.closePath();
             ctx.fill();
+            // Lit facet
+            ctx.fillStyle = '#cbd5e1';
+            ctx.beginPath();
+            ctx.moveTo(-8, -22);
+            ctx.lineTo(2, -12);
+            ctx.lineTo(10, -18);
+            ctx.closePath();
+            ctx.fill();
         } else {
-            ctx.fillStyle = '#eab308';
+            ctx.fillStyle = '#ca8a04';
             ctx.beginPath();
             ctx.moveTo(-15, 0);
             ctx.lineTo(-5, -24);
             ctx.lineTo(12, -16);
             ctx.lineTo(15, 0);
+            ctx.closePath();
+            ctx.fill();
+            // Shimmering gold crystal facet
+            const glint = 0.5 + 0.5 * Math.sin(this.time * 4 + node.x);
+            ctx.fillStyle = `rgba(254, 240, 138, ${(0.55 + glint * 0.45).toFixed(2)})`;
+            ctx.beginPath();
+            ctx.moveTo(-5, -24);
+            ctx.lineTo(2, -10);
+            ctx.lineTo(12, -16);
             ctx.closePath();
             ctx.fill();
         }
@@ -944,8 +973,11 @@ export const rendererMethods = {
         this.clashSparks.forEach(s => {
             const sx = wrapDX(this.cam.x, s.x);
             const sy = s.y - this.cam.y;
+            ctx.save();
+            ctx.globalAlpha = Math.max(0.15, Math.min(1, (s.life || 0.3) * 2.5));
             ctx.fillStyle = s.color;
-            ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+            ctx.fillRect(sx - 2, sy - 2, 4, 4);
+            ctx.restore();
         });
     
         this.floatTexts.forEach(f => {
@@ -953,9 +985,12 @@ export const rendererMethods = {
             const fy = f.y - this.cam.y;
             ctx.save();
             ctx.scale(1, invTilt);
-            ctx.fillStyle = f.color;
-            ctx.font = 'bold 10px Inter';
+            ctx.globalAlpha = Math.max(0, Math.min(1, f.life * 1.4));
+            ctx.fillStyle = 'rgba(0,0,0,0.65)';
+            ctx.font = 'bold 11px Inter';
             ctx.textAlign = 'center';
+            ctx.fillText(f.text, fx + 1, fy * this.cam.tiltScale + 1);
+            ctx.fillStyle = f.color;
             ctx.fillText(f.text, fx, fy * this.cam.tiltScale);
             ctx.restore();
         });
@@ -963,13 +998,41 @@ export const rendererMethods = {
 
     renderAtmosphereAndPostFX(ctx, w, h) {
         if (this.lightingMode === 1) {
-            ctx.fillStyle = 'rgba(245, 158, 11, 0.14)';
+            const sunGrad = ctx.createLinearGradient(0, 0, 0, h);
+            sunGrad.addColorStop(0, 'rgba(249, 115, 22, 0.24)');
+            sunGrad.addColorStop(1, 'rgba(245, 158, 11, 0.08)');
+            ctx.fillStyle = sunGrad;
             ctx.fillRect(0, 0, w, h);
         } else if (this.lightingMode === 2) {
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.42)';
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.44)';
             ctx.fillRect(0, 0, w, h);
+            // Twinkling stars & crescent moon
+            ctx.fillStyle = 'rgba(248, 250, 252, 0.75)';
+            for (let i = 0; i < 36; i++) {
+                const sx = ((i * 211 + 47) % 997) / 997 * w;
+                const sy = ((i * 137 + 23) % 991) / 991 * (h * 0.35);
+                const tw = 0.7 + 0.6 * Math.sin(this.time * 3 + i);
+                ctx.fillRect(sx, sy, tw * 2, tw * 2);
+            }
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.arc(w * 0.85, h * 0.14, 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(w * 0.85 + 6, h * 0.14 - 3, 14, 0, Math.PI * 2);
+            ctx.fill();
         } else if (this.lightingMode === 3 || this.greatCometTimer > 0) {
-            ctx.fillStyle = 'rgba(153, 27, 27, 0.22)';
+            ctx.fillStyle = 'rgba(153, 27, 27, 0.24)';
+            ctx.fillRect(0, 0, w, h);
+        }
+
+        // HD-2D Cinematic Vignette & Warm Bloom
+        if (this.hd2dEnabled) {
+            const vig = ctx.createRadialGradient(w * 0.5, h * 0.5, Math.min(w, h) * 0.32, w * 0.5, h * 0.5, Math.max(w, h) * 0.72);
+            vig.addColorStop(0, 'rgba(0,0,0,0)');
+            vig.addColorStop(1, 'rgba(2, 6, 23, 0.42)');
+            ctx.fillStyle = vig;
             ctx.fillRect(0, 0, w, h);
         }
     
@@ -984,12 +1047,25 @@ export const rendererMethods = {
             if (this.weatherMode === 4) {
                 ctx.fillStyle = 'rgba(127, 29, 29, 0.24)';
                 ctx.fillRect(0, 0, w, h);
-                ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
-                ctx.lineWidth = 3;
+                const pulse = 28 + Math.sin(this.time * 4) * 3;
+                const corona = ctx.createRadialGradient(w * 0.82, h * 0.18, pulse * 0.7, w * 0.82, h * 0.18, pulse * 2.1);
+                corona.addColorStop(0, 'rgba(250, 204, 21, 0.85)');
+                corona.addColorStop(0.5, 'rgba(239, 68, 68, 0.35)');
+                corona.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = corona;
                 ctx.beginPath();
-                ctx.arc(w * 0.82, h * 0.18, 28, 0, Math.PI * 2);
-                ctx.stroke();
+                ctx.arc(w * 0.82, h * 0.18, pulse * 2.1, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#090d16';
+                ctx.beginPath();
+                ctx.arc(w * 0.82, h * 0.18, pulse * 0.82, 0, Math.PI * 2);
+                ctx.fill();
             } else {
+                // Occasional subtle lightning flash during Monsoon
+                if (this.weatherMode === 1 && Math.sin(this.time * 17.3) > 0.992) {
+                    ctx.fillStyle = 'rgba(224, 242, 254, 0.18)';
+                    ctx.fillRect(0, 0, w, h);
+                }
                 ctx.save();
                 for (let i = 0; i < this.weatherParticles.length; i++) {
                     const wp = this.weatherParticles[i];
@@ -1036,17 +1112,51 @@ export const rendererMethods = {
     render3DPlanetaryGlobe(ctx, w, h) {
         ctx.fillStyle = '#050811';
         ctx.fillRect(0, 0, w, h);
+
+        // Deep-space twinkling starfield
+        for (let i = 0; i < 70; i++) {
+            const sx = ((i * 313 + 71) % 1009) / 1009 * w;
+            const sy = ((i * 199 + 43) % 1013) / 1013 * h;
+            const alpha = 0.35 + 0.55 * Math.abs(Math.sin(this.time * 1.6 + i));
+            ctx.fillStyle = `rgba(226, 232, 240, ${alpha.toFixed(2)})`;
+            ctx.fillRect(sx, sy, (i % 3 === 0 ? 2 : 1.3), (i % 3 === 0 ? 2 : 1.3));
+        }
+
         const cx = w * 0.5;
         const cy = h * 0.5;
         const R = Math.min(w, h) * 0.34;
+
+        // Outer atmospheric limb glow
+        const atmo = ctx.createRadialGradient(cx, cy, R * 0.85, cx, cy, R * 1.18);
+        atmo.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
+        atmo.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = atmo;
+        ctx.beginPath();
+        ctx.arc(cx, cy, R * 1.18, 0, Math.PI * 2);
+        ctx.fill();
     
         const grad = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.3, R * 0.1, cx, cy, R);
         grad.addColorStop(0, '#0284c7');
-        grad.addColorStop(1, '#0f172a');
+        grad.addColorStop(0.7, '#0c4a6e');
+        grad.addColorStop(1, '#090d16');
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(cx, cy, R, 0, Math.PI * 2);
         ctx.fill();
+
+        // Subtle latitude rings
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, R, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.strokeStyle = 'rgba(125, 211, 252, 0.14)';
+        ctx.lineWidth = 1;
+        for (let lat = -2; lat <= 2; lat++) {
+            const ly = cy + lat * R * 0.28 + Math.sin(this.globePitch) * R * 0.12;
+            ctx.beginPath();
+            ctx.ellipse(cx, ly, R, R * 0.16, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        }
     
         for (let c = 0; c < CONTINENTS.length; c++) {
             const cont = CONTINENTS[c];
@@ -1066,10 +1176,27 @@ export const rendererMethods = {
                 ctx.fillText(cont.name, sx, sy);
             }
         }
-        ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 2;
+
+        // Drifting cloud wisps
+        ctx.fillStyle = 'rgba(248, 250, 252, 0.14)';
+        for (let cl = 0; cl < 5; cl++) {
+            const clon = (cl * 1.25) + this.globeYaw + this.time * 0.08;
+            const cz = Math.cos(clon);
+            if (cz > 0) {
+                const clx = cx + Math.sin(clon) * R * 0.75;
+                const cly = cy + ((cl - 2) * 0.28) * R;
+                ctx.beginPath();
+                ctx.ellipse(clx, cly, R * 0.24 * cz, R * 0.06, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        ctx.restore();
+
+        // Orbital One-Ring Halo
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.arc(cx, cy, R + 8, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, R + 16, (R + 16) * 0.34, -0.22, 0, Math.PI * 2);
         ctx.stroke();
     },
 
