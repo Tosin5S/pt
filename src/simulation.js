@@ -332,7 +332,7 @@ export class PrehistoricPlanetaryGame {
             { type: 'tower',       x: 1090, y: 2260 },
             { type: 'tower',       x: 1090, y: 2410 },
             { type: 'gatehouse',   x: 1140, y: 2335 },
-            { type: 'shipyard',    x: 820,  y: 2065 },
+            { type: 'shipyard',    x: 820,  y: 2108 },
             { type: 'market',      x: 680,  y: 2330 }
         ];
         homeBuildings.forEach(b => {
