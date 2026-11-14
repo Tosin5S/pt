@@ -69,6 +69,7 @@ const UNIT_STATES = {
   bend_cast: { frames: 6, fps: 11 },
   swim: { frames: 6, fps: 10 },       // Freestyle front-crawl swimming + flutter kick
   water_surf: { frames: 6, fps: 12 }, // Waterbender hydro-wave surfing stance
+  earth_stomp: { frames: 6, fps: 11 }, // Hung-Gar Stomp -> Boulder Lift -> Palm Thrust
 };
 
 const DIRECTIONS = ['SE', 'SW', 'NE', 'NW'];
@@ -85,6 +86,10 @@ function mapUnitStateToAnim(unit) {
   if (inWater && !unit.skySoar && (unit.z || 0) < 6) {
     if (unit.bender === 'water' || unit.waterBendingSurf) return 'water_surf';
     return 'swim';
+  }
+
+  if (unit.bender === 'earth' && ((unit.swingAnim || 0) > 0.05 || unit.state === 'attack' || unit.state === 'fight')) {
+    return 'earth_stomp';
   }
 
   if (unit.bender && ((unit.swingAnim || 0) > 0.05 || unit.state === 'attack' || unit.state === 'fight')) {
@@ -376,7 +381,142 @@ function renderWaterSurfFrame(ctx, cx, groundY, opts) {
   drawLimb(ctx, cx + 4 * s, shoulderY + 2, cx + 13 * s, shoulderY - 2, 3.6, palette.tunic, palette.tunicLight);
 }
 
+function renderEarthStompFrame(ctx, cx, groundY, opts) {
+  const { frameIndex, dir, palette } = opts;
+  const facingRight = dir === 'SE' || dir === 'NE';
+  const facingBack = dir === 'NE' || dir === 'NW';
+  const s = facingRight ? 1 : -1;
+
+  const isChamber = frameIndex <= 1;
+  const isStompImpact = frameIndex === 2;
+  const isPalmThrust = frameIndex >= 3;
+
+  const bobY = isChamber ? -1.5 : isStompImpact ? 3.4 : 2.6;
+  const leanX = isPalmThrust ? 3.4 * s : isStompImpact ? 0.8 * s : -1.5 * s;
+
+  const hipY = groundY - 9 + bobY;
+  const shoulderY = hipY - 11;
+  const headY = shoulderY - 6.5;
+
+  if (frameIndex >= 2) {
+    ctx.save();
+    const ringScale = (frameIndex - 1) / 4;
+    ctx.strokeStyle = `rgba(163, 230, 53, ${(0.85 - ringScale * 0.5).toFixed(3)})`;
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    ctx.ellipse(cx + 4 * s, groundY, 10 + ringScale * 12, 4.5 + ringScale * 5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = 'rgba(10, 14, 18, 0.36)';
+  ctx.beginPath();
+  ctx.ellipse(cx + 1.5, groundY, 11.5, 5.0, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const leftKneeX = cx - 5.5 * s;
+  const leftKneeY = groundY - 5.5;
+  const leftFootX = cx - 6.2 * s;
+  const leftFootY = groundY - 1.2;
+
+  let rightKneeX = cx + 6.0 * s;
+  let rightKneeY = groundY - 5.5;
+  let rightFootX = cx + 6.8 * s;
+  let rightFootY = groundY - 1.0;
+
+  if (isChamber) {
+    rightKneeX = cx + 6.5 * s;
+    rightKneeY = groundY - 15.5;
+    rightFootX = cx + 5.8 * s;
+    rightFootY = groundY - 9.5;
+  }
+
+  drawArticulatedLimb(ctx, cx - 2.6 * s, hipY, leftKneeX, leftKneeY, leftFootX, leftFootY, 4.2, '#3b2f26', '#5c4a3c');
+  drawArticulatedLimb(ctx, cx + 2.6 * s, hipY, rightKneeX, rightKneeY, rightFootX, rightFootY, 4.2, '#4a3b30', '#6d5848');
+
+  const backShoulderX = cx - 4 * s + leanX * 0.6;
+  const backHandX = isPalmThrust ? cx + 11 * s : isStompImpact ? cx - 9 * s : cx - 2 * s;
+  const backHandY = isPalmThrust ? shoulderY + 1 : isStompImpact ? shoulderY + 8 : shoulderY - 5;
+  drawLimb(ctx, backShoulderX, shoulderY + 2, backHandX, backHandY, 3.8, palette.tunicDark, palette.tunic);
+
+  ctx.save();
+  const torsoGrad = ctx.createLinearGradient(cx - 8, shoulderY, cx + 8, hipY + 3);
+  torsoGrad.addColorStop(0, palette.tunicLight);
+  torsoGrad.addColorStop(0.55, palette.tunic);
+  torsoGrad.addColorStop(1, palette.tunicDark);
+  ctx.fillStyle = torsoGrad;
+  ctx.strokeStyle = '#1e1b18';
+  ctx.lineWidth = 1.1;
+
+  ctx.beginPath();
+  ctx.moveTo(cx - 5.8 + leanX * 0.8, shoulderY);
+  ctx.lineTo(cx + 5.8 + leanX * 0.8, shoulderY);
+  ctx.lineTo(cx + 7.2 + leanX * 0.2, hipY + 2);
+  ctx.quadraticCurveTo(cx + leanX * 0.2, hipY + 4.5, cx - 7.2 + leanX * 0.2, hipY + 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#365314';
+  ctx.fillRect(cx - 6.5 + leanX * 0.35, hipY - 2.4, 13.0, 2.6);
+  ctx.fillStyle = '#a3e635';
+  ctx.fillRect(cx + 1.5 * s + leanX * 0.35, hipY - 2.4, 2.5, 2.6);
+  ctx.restore();
+
+  ctx.save();
+  const headX = cx + leanX;
+  const skinGrad = ctx.createRadialGradient(headX - 1.8, headY - 2, 1, headX, headY, 6.2);
+  skinGrad.addColorStop(0, '#f3cfb3');
+  skinGrad.addColorStop(0.7, '#d9a784');
+  skinGrad.addColorStop(1, '#a97454');
+
+  ctx.fillStyle = skinGrad;
+  ctx.strokeStyle = '#2b1e16';
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.arc(headX, headY, 5.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = palette.hair;
+  ctx.beginPath();
+  if (facingBack) {
+    ctx.arc(headX, headY - 0.5, 5.7, Math.PI * 0.85, Math.PI * 2.15);
+    ctx.lineTo(headX + 4.5, headY + 3.5);
+    ctx.lineTo(headX - 4.5, headY + 3.5);
+  } else {
+    ctx.arc(headX - 0.4 * s, headY - 1.2, 5.5, Math.PI * 0.95, Math.PI * 2.05);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  if (!facingBack) {
+    ctx.fillStyle = '#1f1916';
+    ctx.fillRect(headX + 1.2 * s, headY - 0.4, 1.3, 1.4);
+    ctx.fillRect(headX + 3.4 * s, headY - 0.4, 1.2, 1.3);
+  }
+  ctx.restore();
+
+  const frontShoulderX = cx + 4.2 * s + leanX * 0.7;
+  const frontHandX = isPalmThrust ? cx + 14.5 * s : isStompImpact ? cx + 9.5 * s : cx + 3.5 * s;
+  const frontHandY = isPalmThrust ? shoulderY + 1 : isStompImpact ? shoulderY + 9 : shoulderY - 6;
+
+  drawLimb(ctx, frontShoulderX, shoulderY + 2, frontHandX, frontHandY, 4.0, palette.tunic, palette.tunicLight);
+
+  ctx.fillStyle = '#78716c';
+  ctx.strokeStyle = '#a3e635';
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.arc(frontHandX, frontHandY, 2.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
 function renderVillagerFrame(ctx, cx, groundY, opts) {
+  if (opts.state === 'earth_stomp') {
+    renderEarthStompFrame(ctx, cx, groundY, opts);
+    return;
+  }
   if (opts.state === 'swim') {
     renderSwimFrame(ctx, cx, groundY, opts);
     return;
@@ -669,6 +809,56 @@ function drawCarriedResource(ctx, x, y, carryItem, facingRight) {
  * Renders live Swimming Wakes, Tai-Chi Waterbending Ribbons & Tidal Whips,
  * Martial Arts Blocking Shields, Dodge Afterimages, and Sovereign God-Power Auras.
  */
+function drawIsometricRockMonolith(ctx, x, baseY, width, height, isLava = false) {
+  if (height <= 1) return;
+  const hw = width * 0.5;
+  const topY = baseY - height;
+  const bevel = hw * 0.45;
+
+  ctx.save();
+  // Left shaded face
+  ctx.fillStyle = isLava ? '#451a03' : '#57534e';
+  ctx.beginPath();
+  ctx.moveTo(x - hw, baseY);
+  ctx.lineTo(x, baseY + bevel);
+  ctx.lineTo(x, topY + bevel);
+  ctx.lineTo(x - hw * 0.85, topY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Right lit face
+  ctx.fillStyle = isLava ? '#7c2d12' : '#78716c';
+  ctx.beginPath();
+  ctx.moveTo(x + hw, baseY);
+  ctx.lineTo(x, baseY + bevel);
+  ctx.lineTo(x, topY + bevel);
+  ctx.lineTo(x + hw * 0.85, topY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Top facet
+  ctx.fillStyle = isLava ? '#ea580c' : '#a8a29e';
+  ctx.beginPath();
+  ctx.moveTo(x, topY - bevel * 0.6);
+  ctx.lineTo(x + hw * 0.85, topY);
+  ctx.lineTo(x, topY + bevel);
+  ctx.lineTo(x - hw * 0.85, topY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Rim & fissure highlight
+  ctx.strokeStyle = isLava ? 'rgba(251, 146, 60, 0.9)' : 'rgba(163, 230, 53, 0.65)';
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(x - hw * 0.85, topY);
+  ctx.lineTo(x, topY - bevel * 0.6);
+  ctx.lineTo(x + hw * 0.85, topY);
+  ctx.moveTo(x, topY + bevel);
+  ctx.lineTo(x, baseY + bevel);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
   const f = facingRight ? 1 : -1;
   const phase = gameTime * 4.5 + (unit.id || 0) * 0.9;
@@ -752,6 +942,10 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
       ctx.moveTo(Math.cos(sa) * r1, shieldY + Math.sin(sa) * r1);
       ctx.lineTo(Math.cos(sa) * r2, shieldY + Math.sin(sa) * r2);
       ctx.stroke();
+    }
+    if (unit.bender === 'earth') {
+      const wallH = Math.min(1, blockAnim * 4.5) * 24 * scale;
+      drawIsometricRockMonolith(ctx, f * 13 * scale, 2, 14 * scale, wallH, Boolean(unit.subElement));
     }
     ctx.restore();
   }
@@ -1067,32 +1261,61 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
         }
       }
     } else if (bender === 'earth') {
+      const isLava = Boolean(unit.subElement);
+      ctx.save();
+      const pulse = 0.5 + 0.5 * Math.sin(gameTime * 4.5);
+      ctx.strokeStyle = isLava ? `rgba(249, 115, 22, ${(0.28 + pulse * 0.25).toFixed(3)})` : `rgba(163, 230, 53, ${(0.25 + pulse * 0.25).toFixed(3)})`;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.ellipse(0, 1, (16 + pulse * 5) * scale, (7 + pulse * 2.2) * scale, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
       for (let i = 0; i < 3; i++) {
         const a = phase * 0.8 + (i * Math.PI * 2) / 3;
         const rx = Math.cos(a) * 18 * scale;
         const ry = -14 * scale + Math.sin(a) * 7 * scale;
-        ctx.fillStyle = '#78716c';
-        ctx.strokeStyle = unit.subElement ? '#f97316' : '#44403c';
-        ctx.lineWidth = 1.4;
+        const r = 4.6 * scale;
+        ctx.fillStyle = isLava ? '#7c2d12' : '#78716c';
+        ctx.strokeStyle = isLava ? '#f97316' : '#44403c';
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.arc(rx, ry, 4.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
-      if (isActivelyBending) {
-        const pillarH = (12 + Math.abs(Math.sin(gameTime * 10)) * 12) * scale;
-        const px = f * 22 * scale;
-        ctx.fillStyle = '#78716c';
-        ctx.strokeStyle = unit.subElement ? '#f97316' : '#292524';
-        ctx.lineWidth = 1.3;
-        ctx.beginPath();
-        ctx.moveTo(px - 6 * scale, 2);
-        ctx.lineTo(px - 4 * scale, 2 - pillarH);
-        ctx.lineTo(px + 4 * scale, 2 - pillarH - 3);
-        ctx.lineTo(px + 6 * scale, 2);
+        ctx.moveTo(rx, ry - r);
+        ctx.lineTo(rx + r * 0.9, ry - r * 0.2);
+        ctx.lineTo(rx + r * 0.65, ry + r * 0.85);
+        ctx.lineTo(rx - r * 0.7, ry + r * 0.75);
+        ctx.lineTo(rx - r * 0.95, ry - r * 0.25);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        ctx.fillStyle = isLava ? 'rgba(251, 146, 60, 0.75)' : 'rgba(214, 211, 209, 0.55)';
+        ctx.beginPath();
+        ctx.moveTo(rx, ry - r);
+        ctx.lineTo(rx + r * 0.9, ry - r * 0.2);
+        ctx.lineTo(rx, ry + r * 0.1);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      if (isLava) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(251, 146, 60, 0.78)';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.ellipse(0, 1.5, 19 * scale, 8.2 * scale, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (isActivelyBending) {
+        for (let sIdx = 0; sIdx < 3; sIdx++) {
+          const seq = Math.max(0, Math.min(1, Math.sin(gameTime * 10 - sIdx * 0.7) * 0.5 + 0.65));
+          const px = f * (16 + sIdx * 10) * scale;
+          const py = 2 + (sIdx % 2 === 0 ? 1 : -1) * 2 * scale;
+          const pillarH = (10 + sIdx * 5) * seq * scale;
+          drawIsometricRockMonolith(ctx, px, py, (9 + sIdx * 1.5) * scale, pillarH, isLava);
+        }
       }
     } else if (bender === 'air') {
       ctx.strokeStyle = 'rgba(226, 232, 240, 0.78)';
@@ -1426,12 +1649,15 @@ export class SovereignPhysicsEngine {
     this.camShakeY = 0;
     this.camShakeIntensity = 0;
     this.dustRings = [];
+      this.seismicWaves = [];
+      this.rockDebris = [];
   }
 
   getUnitMass(u) {
     if (!u) return 1.0;
     if (u.isBoss) return 10.0;
     if (u.isT101s) return 3.5;
+      if (u.bender === 'earth') return 2.3;
     if (u.isWraith) return 2.8;
     if (u.fightingStyle === 'juggernaut') return 2.4;
     if (u.fightingStyle === 'phalanx') return 1.9;
@@ -1518,6 +1744,55 @@ export class SovereignPhysicsEngine {
     return 'hit';
   }
 
+  triggerEarthbenderSeismicStomp(game, caster) {
+    if (!caster || !game) return;
+    this.camShakeIntensity = Math.max(this.camShakeIntensity || 0, 5.5);
+    this.seismicWaves.push({
+      x: caster.x,
+      y: caster.y,
+      radius: 8,
+      maxRadius: 96,
+      life: 0.55,
+      maxLife: 0.55,
+      ownerTeam: caster.team,
+    });
+    for (let i = 0; i < 10; i++) {
+      const ang = (Math.PI * 2 * i) / 10 + (Math.random() - 0.5) * 0.4;
+      const spd = 45 + Math.random() * 65;
+      this.rockDebris.push({
+        x: caster.x + Math.cos(ang) * 10,
+        y: caster.y + Math.sin(ang) * 6,
+        z: 2 + Math.random() * 6,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd * 0.55,
+        vz: 85 + Math.random() * 75,
+        size: 3 + Math.random() * 4,
+        rot: Math.random() * Math.PI * 2,
+        vrot: (Math.random() - 0.5) * 8,
+        life: 0.7 + Math.random() * 0.35,
+        maxLife: 1.05,
+      });
+    }
+    if (game.spatialGrid) {
+      const nearby = game.spatialGrid.query(caster.x, caster.y, 96);
+      for (const entity of nearby) {
+        if (!entity || entity === caster || entity._isBuilding || entity.invincible) continue;
+        if (entity.team && caster.team && entity.team === caster.team) continue;
+        const dx = wrapDX(entity.x, caster.x);
+        const dy = entity.y - caster.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        if (dist <= 96) {
+          const falloff = 1 - dist / 96;
+          const mass = this.getUnitMass(entity);
+          const push = (140 * falloff) / mass;
+          entity.kx = (entity.kx || 0) + (dx / dist) * push;
+          entity.ky = (entity.ky || 0) + (dy / dist) * push * 0.6;
+          entity.vz = Math.max(entity.vz || 0, (110 * falloff) / mass);
+        }
+      }
+    }
+  }
+
   stepWorldPhysics(game, dt, footpaths) {
     const clampedDt = Math.min(0.05, Math.max(0.001, dt));
 
@@ -1540,6 +1815,37 @@ export class SovereignPhysicsEngine {
       } else {
         const t = 1 - r.life / r.maxLife;
         r.radius = 4 + (r.maxRadius - 4) * t;
+      }
+    }
+
+    for (let i = this.seismicWaves.length - 1; i >= 0; i--) {
+      const w = this.seismicWaves[i];
+      w.life -= clampedDt;
+      if (w.life <= 0) {
+        this.seismicWaves.splice(i, 1);
+      } else {
+        const t = 1 - w.life / w.maxLife;
+        w.radius = 8 + (w.maxRadius - 8) * (1 - Math.pow(1 - t, 2));
+      }
+    }
+
+    for (let i = this.rockDebris.length - 1; i >= 0; i--) {
+      const p = this.rockDebris[i];
+      p.life -= clampedDt;
+      if (p.life <= 0) {
+        this.rockDebris.splice(i, 1);
+      } else {
+        p.x = wrapX(p.x + p.vx * clampedDt, WORLD_W);
+        p.y += p.vy * clampedDt;
+        p.vz -= 280 * clampedDt;
+        p.z += p.vz * clampedDt;
+        if (p.z < 0) {
+          p.z = 0;
+          p.vz = -p.vz * 0.35;
+          p.vx *= 0.65;
+          p.vy *= 0.65;
+        }
+        p.rot += p.vrot * clampedDt;
       }
     }
 
@@ -1580,6 +1886,12 @@ export class SovereignPhysicsEngine {
 
     for (let i = 0; i < allUnits.length; i++) {
       const u = allUnits[i];
+        if (!u) continue;
+        if (u._seismicCooldown > 0) u._seismicCooldown = Math.max(0, u._seismicCooldown - clampedDt);
+        if (u.bender === 'earth' && (u.hp || 1) > 0 && ((u.swingAnim || 0) > 0.35 || u.state === 'attack' || u.state === 'fight') && !(u._seismicCooldown > 0)) {
+          u._seismicCooldown = 0.95;
+          this.triggerEarthbenderSeismicStomp(game, u);
+        }
       if (!u) continue;
 
       if ((u.blockAnim || 0) > 0) u.blockAnim = Math.max(0, u.blockAnim - clampedDt);
@@ -1716,7 +2028,7 @@ export class SovereignPhysicsEngine {
   }
 
   drawPhysicsVFX(ctx, game, invTilt = 1) {
-    if (this.dustRings.length === 0) return;
+    if (this.dustRings.length === 0 && this.seismicWaves.length === 0 && this.rockDebris.length === 0) return;
     const viewHalfW = (game.canvas.width * 0.65) / game.cam.zoom;
 
     ctx.save();
@@ -1731,6 +2043,33 @@ export class SovereignPhysicsEngine {
       ctx.beginPath();
       ctx.ellipse(sx, sy, r.radius, r.radius * 0.45 * invTilt, 0, 0, Math.PI * 2);
       ctx.stroke();
+    }
+    for (const w of this.seismicWaves) {
+      const sx = wrapDX(game.cam.x, w.x);
+      if (Math.abs(sx) > viewHalfW + 120) continue;
+      const sy = w.y - game.cam.y;
+      const alpha = Math.max(0, (w.life / w.maxLife) * 0.72);
+      ctx.strokeStyle = `rgba(186, 138, 82, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, w.radius, w.radius * 0.46 * invTilt, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    for (const p of this.rockDebris) {
+      const sx = wrapDX(game.cam.x, p.x);
+      if (Math.abs(sx) > viewHalfW + 80) continue;
+      const sy = p.y - game.cam.y - (p.z || 0) * invTilt;
+      const alpha = Math.max(0, Math.min(1, p.life / (p.maxLife * 0.4)));
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(p.rot || 0);
+      ctx.fillStyle = `rgba(122, 102, 82, ${alpha.toFixed(3)})`;
+      ctx.strokeStyle = `rgba(62, 50, 38, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = 1;
+      const s = p.size || 4;
+      ctx.fillRect(-s * 0.5, -s * 0.5, s, s * 0.85);
+      ctx.strokeRect(-s * 0.5, -s * 0.5, s, s * 0.85);
+      ctx.restore();
     }
     ctx.restore();
   }
