@@ -1651,6 +1651,7 @@ export class SovereignPhysicsEngine {
     this.dustRings = [];
       this.seismicWaves = [];
       this.rockDebris = [];
+    this.stoneSpires = [];
   }
 
   getUnitMass(u) {
@@ -1773,6 +1774,19 @@ export class SovereignPhysicsEngine {
         maxLife: 1.05,
       });
     }
+    for (let i = 0; i < 4; i++) {
+      const ang = (Math.PI * 2 * i) / 4 + (Math.random() - 0.5) * 0.5;
+      const dist = 22 + Math.random() * 28;
+      this.stoneSpires.push({
+        x: caster.x + Math.cos(ang) * dist,
+        y: caster.y + Math.sin(ang) * dist * 0.55,
+        width: 11 + Math.random() * 7,
+        maxHeight: 26 + Math.random() * 22,
+        life: 1.15,
+        maxLife: 1.15,
+        isLava: false,
+      });
+    }
     if (game.spatialGrid) {
       const nearby = game.spatialGrid.query(caster.x, caster.y, 96);
       for (const entity of nearby) {
@@ -1827,6 +1841,11 @@ export class SovereignPhysicsEngine {
         const t = 1 - w.life / w.maxLife;
         w.radius = 8 + (w.maxRadius - 8) * (1 - Math.pow(1 - t, 2));
       }
+    }
+    for (let i = this.stoneSpires.length - 1; i >= 0; i--) {
+      const s = this.stoneSpires[i];
+      s.life -= clampedDt;
+      if (s.life <= 0) this.stoneSpires.splice(i, 1);
     }
 
     for (let i = this.rockDebris.length - 1; i >= 0; i--) {
@@ -2028,7 +2047,7 @@ export class SovereignPhysicsEngine {
   }
 
   drawPhysicsVFX(ctx, game, invTilt = 1) {
-    if (this.dustRings.length === 0 && this.seismicWaves.length === 0 && this.rockDebris.length === 0) return;
+    if (this.dustRings.length === 0 && this.seismicWaves.length === 0 && this.rockDebris.length === 0 && this.stoneSpires.length === 0) return;
     const viewHalfW = (game.canvas.width * 0.65) / game.cam.zoom;
 
     ctx.save();
@@ -2069,6 +2088,20 @@ export class SovereignPhysicsEngine {
       const s = p.size || 4;
       ctx.fillRect(-s * 0.5, -s * 0.5, s, s * 0.85);
       ctx.strokeRect(-s * 0.5, -s * 0.5, s, s * 0.85);
+      ctx.restore();
+    }
+    for (const sp of this.stoneSpires) {
+      const sx = wrapDX(game.cam.x, sp.x);
+      if (Math.abs(sx) > viewHalfW + 80) continue;
+      const sy = sp.y - game.cam.y;
+      const progress = 1 - Math.max(0, sp.life) / sp.maxLife;
+      const rise = Math.min(1, progress / 0.18);
+      const sink = sp.life < 0.35 ? Math.max(0, sp.life / 0.35) : 1;
+      const h = sp.maxHeight * rise * sink;
+      const alpha = Math.max(0, Math.min(1, sp.life / (sp.maxLife * 0.3)));
+      ctx.save();
+      ctx.globalAlpha *= alpha;
+      drawIsometricRockMonolith(ctx, sx, sy, sp.width, h, sp.isLava);
       ctx.restore();
     }
     ctx.restore();
@@ -2275,7 +2308,47 @@ export class CombatAndPowersVFXRenderer {
 export class EarthBiomeRenderer {
   constructor() {
     this.peakCache = new Map();
+    this.biomeStampCache = new Map();
   }
+  getBiomeStampCanvas(key) {
+    if (this.biomeStampCache.has(key)) return this.biomeStampCache.get(key);
+    const size = 256;
+    const half = size * 0.5;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    let grad;
+    if (key === 'coastalSea') {
+      grad = ctx.createRadialGradient(half, half, half * 0.15, half, half, half);
+      grad.addColorStop(0, 'rgba(3, 105, 161, 0.88)');
+      grad.addColorStop(0.7, 'rgba(2, 132, 199, 0.68)');
+      grad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+    } else if (key === 'deepOcean') {
+      grad = ctx.createRadialGradient(half, half, half * 0.15, half, half, half);
+      grad.addColorStop(0, 'rgba(12, 74, 110, 0.94)');
+      grad.addColorStop(0.75, 'rgba(3, 105, 161, 0.75)');
+      grad.addColorStop(1, 'rgba(3, 105, 161, 0.0)');
+    } else {
+      const biomePalette = {
+        forest: ['rgba(20, 62, 32, 0.58)', 'rgba(30, 86, 49, 0.28)', 'rgba(30, 86, 49, 0.0)'],
+        grassland: ['rgba(107, 142, 35, 0.45)', 'rgba(132, 169, 66, 0.20)', 'rgba(132, 169, 66, 0.0)'],
+        desert: ['rgba(212, 163, 106, 0.72)', 'rgba(194, 162, 107, 0.38)', 'rgba(194, 162, 107, 0.0)'],
+        agriUrban: ['rgba(132, 169, 66, 0.38)', 'rgba(180, 148, 72, 0.18)', 'rgba(180, 148, 72, 0.0)'],
+        iceTundra: ['rgba(226, 232, 240, 0.82)', 'rgba(203, 213, 225, 0.45)', 'rgba(203, 213, 225, 0.0)'],
+      };
+      const stops = biomePalette[key] || biomePalette.grassland;
+      grad = ctx.createRadialGradient(half, half, half * 0.12, half, half, half);
+      grad.addColorStop(0, stops[0]);
+      grad.addColorStop(0.65, stops[1]);
+      grad.addColorStop(1, stops[2]);
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    this.biomeStampCache.set(key, c);
+    return c;
+  }
+
 
   getMountainPeakCanvas(biomeType = 'grassland') {
     if (this.peakCache.has(biomeType)) return this.peakCache.get(biomeType);
@@ -2389,20 +2462,8 @@ export class EarthBiomeRenderer {
 
         if (terr.isOcean) {
           const radius = tCell * 0.78;
-          const oceanGrad = ctx.createRadialGradient(cx, cy, radius * 0.15, cx, cy, radius);
-          if (terr.label === 'Coastal Sea') {
-            oceanGrad.addColorStop(0, 'rgba(3, 105, 161, 0.88)');
-            oceanGrad.addColorStop(0.7, 'rgba(2, 132, 199, 0.68)');
-            oceanGrad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
-          } else {
-            oceanGrad.addColorStop(0, 'rgba(12, 74, 110, 0.94)');
-            oceanGrad.addColorStop(0.75, 'rgba(3, 105, 161, 0.75)');
-            oceanGrad.addColorStop(1, 'rgba(3, 105, 161, 0.0)');
-          }
-          ctx.fillStyle = oceanGrad;
-          ctx.beginPath();
-          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-          ctx.fill();
+          const stamp = this.getBiomeStampCanvas(terr.label === 'Coastal Sea' ? 'coastalSea' : 'deepOcean');
+          ctx.drawImage(stamp, cx - radius, cy - radius, radius * 2, radius * 2);
 
           if (cam.zoom >= 0.25 && h > 0.35) {
             const waveOffset = Math.sin(timeSec * 2.0 + tc * 0.7 + tr * 0.5) * 6;
@@ -2420,23 +2481,8 @@ export class EarthBiomeRenderer {
         }
 
         const radius = tCell * 0.82;
-        const biomePalette = {
-          forest: ['rgba(20, 62, 32, 0.58)', 'rgba(30, 86, 49, 0.28)', 'rgba(30, 86, 49, 0.0)'],
-          grassland: ['rgba(107, 142, 35, 0.45)', 'rgba(132, 169, 66, 0.20)', 'rgba(132, 169, 66, 0.0)'],
-          desert: ['rgba(212, 163, 106, 0.72)', 'rgba(194, 162, 107, 0.38)', 'rgba(194, 162, 107, 0.0)'],
-          agriUrban: ['rgba(132, 169, 66, 0.38)', 'rgba(180, 148, 72, 0.18)', 'rgba(180, 148, 72, 0.0)'],
-          iceTundra: ['rgba(226, 232, 240, 0.82)', 'rgba(203, 213, 225, 0.45)', 'rgba(203, 213, 225, 0.0)'],
-        };
-        const stops = biomePalette[terr.type] || biomePalette.grassland;
-        const landGrad = ctx.createRadialGradient(cx, cy, radius * 0.12, cx, cy, radius);
-        landGrad.addColorStop(0, stops[0]);
-        landGrad.addColorStop(0.65, stops[1]);
-        landGrad.addColorStop(1, stops[2]);
-
-        ctx.fillStyle = landGrad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fill();
+        const stamp = this.getBiomeStampCanvas(terr.type || 'grassland');
+        ctx.drawImage(stamp, cx - radius, cy - radius, radius * 2, radius * 2);
 
         if (cam.zoom >= 0.32) {
           if (terr.type === 'agriUrban' && h > 0.35) {
