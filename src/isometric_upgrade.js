@@ -968,7 +968,7 @@ function drawUnitCombatAndBendingFX(ctx, unit, facingRight, scale, gameTime) {
   // 1. Sovereign Hero / Ring-Wraith Flowing Cape & Fellbeast Wings
   if (unit.isT101s || unit.isWraith || unit.skySoar) {
     const flap = Math.sin(gameTime * 7 + (unit.id || 0)) * 5;
-    if (unit.isWraith || unit.skySoar) {
+    if ((unit.isWraith || unit.skySoar) && unit.mountType !== 'drake') {
       ctx.save();
       ctx.fillStyle = unit.isWraith ? 'rgba(30, 27, 75, 0.78)' : 'rgba(251, 191, 36, 0.38)';
       ctx.strokeStyle = unit.isWraith ? '#818cf8' : '#fde047';
@@ -1487,7 +1487,389 @@ export class VillagerSpriteBank {
     return vx >= 0 ? 'NE' : 'NW';
   }
 
+  drawPrehistoricMount(ctx, unit, facingRight, scale, gameTime) {
+    const f = facingRight ? 1 : -1;
+    const walkSpeed = Math.hypot(unit.vx || 0, unit.vy || 0) > 2 ? 9.5 : 2.2;
+    const phase = gameTime * walkSpeed + (unit.id || 0);
+    const stride = Math.sin(phase) * (walkSpeed > 4 ? 5.5 : 1.0);
+    const bob = Math.abs(Math.cos(phase)) * (walkSpeed > 4 ? 2.2 : 0.6);
+    const mType = unit.mountType;
+
+    ctx.save();
+    if (mType === 'mammoth') {
+      ctx.fillStyle = 'rgba(10, 14, 18, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(0, 4, 24 * scale, 10 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const legPairs = [
+        [-11 * f, -3, stride * 0.7, '#3e2723'],
+        [9 * f, -3, -stride * 0.7, '#3e2723'],
+        [-9 * f, 2, -stride, '#4e342e'],
+        [11 * f, 2, stride, '#4e342e'],
+      ];
+      for (const [lx, ly, lStride, col] of legPairs) {
+        drawLimb(ctx, lx * scale, (ly - 14 - bob) * scale, (lx + lStride) * scale, ly * scale, 6.2 * scale, col, '#6d4c41');
+      }
+
+      const bodyGrad = ctx.createLinearGradient(0, -32 * scale, 0, -4 * scale);
+      bodyGrad.addColorStop(0, '#795548');
+      bodyGrad.addColorStop(0.6, '#4e342e');
+      bodyGrad.addColorStop(1, '#271815');
+      ctx.fillStyle = bodyGrad;
+      ctx.strokeStyle = '#1b0f0d';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.ellipse(0, (-16 - bob) * scale, 21 * scale, 13.5 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = unit.isT101s ? '#991b1b' : '#1e3a8a';
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 1.3;
+      ctx.fillRect(-9 * scale, (-27 - bob) * scale, 18 * scale, 11 * scale);
+      ctx.strokeRect(-9 * scale, (-27 - bob) * scale, 18 * scale, 11 * scale);
+
+      const headX = 18 * f * scale;
+      const headY = (-20 - bob) * scale;
+      ctx.fillStyle = '#5d4037';
+      ctx.beginPath();
+      ctx.arc(headX, headY, 9.5 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      const trunkSwing = Math.sin(gameTime * 3.5 + (unit.id || 0)) * 4 * f;
+      ctx.strokeStyle = '#4e342e';
+      ctx.lineWidth = 4.5 * scale;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(headX + 5 * f * scale, headY);
+      ctx.quadraticCurveTo(
+        headX + (14 + trunkSwing) * f * scale,
+        headY + 12 * scale,
+        headX + (9 + trunkSwing) * f * scale,
+        headY + 16 * scale
+      );
+      ctx.stroke();
+
+      ctx.strokeStyle = '#fef3c7';
+      ctx.lineWidth = 3.0 * scale;
+      ctx.beginPath();
+      ctx.moveTo(headX + 3 * f * scale, headY + 4 * scale);
+      ctx.quadraticCurveTo(headX + 18 * f * scale, headY + 9 * scale, headX + 23 * f * scale, headY - 4 * scale);
+      ctx.stroke();
+
+      ctx.restore();
+      return -20 * scale - bob;
+    }
+
+    if (mType === 'sabre') {
+      ctx.fillStyle = 'rgba(10, 14, 18, 0.34)';
+      ctx.beginPath();
+      ctx.ellipse(0, 3, 19 * scale, 7.5 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      drawLimb(ctx, -11 * f * scale, (-10 - bob) * scale, (-13 * f - stride) * scale, 2, 4.0 * scale, '#b45309', '#f59e0b');
+      drawLimb(ctx, 10 * f * scale, (-10 - bob) * scale, (12 * f + stride) * scale, 2, 4.0 * scale, '#d97706', '#fbbf24');
+
+      ctx.strokeStyle = '#b45309';
+      ctx.lineWidth = 2.8 * scale;
+      ctx.beginPath();
+      ctx.moveTo(-14 * f * scale, (-12 - bob) * scale);
+      ctx.quadraticCurveTo(-24 * f * scale, (-18 + Math.sin(gameTime * 8) * 5) * scale, -27 * f * scale, (-14 - bob) * scale);
+      ctx.stroke();
+
+      const catGrad = ctx.createLinearGradient(-15 * scale, -20 * scale, 15 * scale, -4 * scale);
+      catGrad.addColorStop(0, '#fbbf24');
+      catGrad.addColorStop(0.6, '#d97706');
+      catGrad.addColorStop(1, '#78350f');
+      ctx.fillStyle = catGrad;
+      ctx.strokeStyle = '#451a03';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(0, (-11 - bob) * scale, 16 * scale, 7.5 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#451a03';
+      ctx.lineWidth = 1.4;
+      for (let st = -6; st <= 4; st += 5) {
+        ctx.beginPath();
+        ctx.moveTo(st * scale, (-17 - bob) * scale);
+        ctx.lineTo((st - 1.5) * scale, (-9 - bob) * scale);
+        ctx.stroke();
+      }
+
+      const hx = 15 * f * scale;
+      const hy = (-15 - bob) * scale;
+      ctx.fillStyle = '#d97706';
+      ctx.beginPath();
+      ctx.arc(hx, hy, 6.5 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(hx + 3 * f * scale, hy + 2 * scale);
+      ctx.lineTo(hx + 4.5 * f * scale, hy + 10 * scale);
+      ctx.lineTo(hx + 6 * f * scale, hy + 2 * scale);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+      return -13 * scale - bob;
+    }
+
+    const flap = Math.sin(gameTime * 9.5 + (unit.id || 0)) * 12;
+    ctx.fillStyle = 'rgba(136, 19, 55, 0.82)';
+    ctx.strokeStyle = '#fda4af';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(-2 * f * scale, -16 * scale);
+    ctx.quadraticCurveTo(-18 * f * scale, (-38 + flap) * scale, -28 * f * scale, (-20 + flap) * scale);
+    ctx.lineTo(-6 * f * scale, -10 * scale);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = '#9f1239';
+    ctx.lineWidth = 4.2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-14 * f * scale, -11 * scale);
+    ctx.quadraticCurveTo(-28 * f * scale, (-6 + Math.sin(gameTime * 6) * 5) * scale, -36 * f * scale, -14 * scale);
+    ctx.stroke();
+
+    const drakeGrad = ctx.createLinearGradient(-16 * scale, -20 * scale, 16 * scale, -4 * scale);
+    drakeGrad.addColorStop(0, '#f43f5e');
+    drakeGrad.addColorStop(0.5, '#be123c');
+    drakeGrad.addColorStop(1, '#4c0519');
+    ctx.fillStyle = drakeGrad;
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(0, -12 * scale, 17 * scale, 8 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    const dhx = 18 * f * scale;
+    const dhy = -20 * scale;
+    drawLimb(ctx, 11 * f * scale, -14 * scale, dhx, dhy, 6 * scale, '#9f1239', '#f43f5e');
+    ctx.fillStyle = '#be123c';
+    ctx.beginPath();
+    ctx.ellipse(dhx + 3 * f * scale, dhy, 7 * scale, 4.5 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(dhx, dhy - 2 * scale);
+    ctx.lineTo(dhx - 8 * f * scale, dhy - 8 * scale);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(190, 18, 60, 0.85)';
+    ctx.strokeStyle = '#fecdd3';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(2 * f * scale, -14 * scale);
+    ctx.quadraticCurveTo(14 * f * scale, (-36 + flap) * scale, -18 * f * scale, (-28 + flap) * scale);
+    ctx.lineTo(-6 * f * scale, -10 * scale);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+    return -15 * scale;
+  }
+
+  drawWorldBoss(ctx, boss, dx, sy, invTilt = 1, gameTime = 0) {
+    const name = boss.name || 'World Boss';
+    const f = (boss.vx || 0) < -0.05 ? -1 : boss.facing || -1;
+    const phase = gameTime * 3.2 + (boss.id || 0);
+    const bob = Math.sin(phase) * 3.0;
+    const swing = (boss.swingAnim || 0) > 0.05 ? Math.sin(boss.swingAnim * Math.PI) * 10 * f : 0;
+
+    ctx.save();
+    ctx.translate(dx, sy);
+    ctx.scale(1, invTilt);
+
+    const auraR = 42 + Math.sin(gameTime * 4) * 4;
+    const auraGrad = ctx.createRadialGradient(0, 2, auraR * 0.2, 0, 2, auraR);
+    auraGrad.addColorStop(0, 'rgba(244, 63, 94, 0.32)');
+    auraGrad.addColorStop(0.7, 'rgba(245, 158, 11, 0.18)');
+    auraGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = auraGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 2, auraR, auraR * 0.48, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (name.includes('Mammoth')) {
+      this.drawPrehistoricMount(ctx, { ...boss, mountType: 'mammoth', isT101s: true }, f > 0, 1.85, gameTime);
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(28 * f, -32);
+      ctx.quadraticCurveTo(54 * f, -22, 62 * f, -44);
+      ctx.stroke();
+    } else if (name.includes('Magma') || name.includes('Behemoth')) {
+      const stride = Math.sin(phase) * 7;
+      drawLimb(ctx, -14 * f, -18 + bob, -16 * f + stride, 4, 11, '#292524', '#ea580c');
+      drawLimb(ctx, 14 * f, -18 + bob, 16 * f - stride, 4, 11, '#1c1917', '#f97316');
+
+      const bodyGrad = ctx.createLinearGradient(-28, -64 + bob, 28, -14 + bob);
+      bodyGrad.addColorStop(0, '#44403c');
+      bodyGrad.addColorStop(0.5, '#1c1917');
+      bodyGrad.addColorStop(1, '#7c2d12');
+      ctx.fillStyle = bodyGrad;
+      ctx.strokeStyle = '#f97316';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.moveTo(-26, -54 + bob);
+      ctx.lineTo(0, -64 + bob);
+      ctx.lineTo(26, -54 + bob);
+      ctx.lineTo(20, -16 + bob);
+      ctx.lineTo(-20, -16 + bob);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(0, -56 + bob);
+      ctx.lineTo(-8, -38 + bob);
+      ctx.lineTo(6, -28 + bob);
+      ctx.moveTo(0, -44 + bob);
+      ctx.lineTo(12, -34 + bob);
+      ctx.stroke();
+
+      ctx.fillStyle = '#292524';
+      ctx.strokeStyle = '#fb923c';
+      ctx.beginPath();
+      ctx.arc(4 * f, -66 + bob, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(6 * f, -68 + bob, 4, 3);
+
+      drawLimb(ctx, 22 * f, -48 + bob, 34 * f + swing, -24 + bob, 10, '#292524', '#f97316');
+      ctx.fillStyle = '#ea580c';
+      ctx.beginPath();
+      ctx.arc(34 * f + swing, -22 + bob, 7.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (name.includes('Leviathan')) {
+      for (let w = 0; w < 3; w++) {
+        const wr = 18 + w * 12 + Math.sin(gameTime * 4 + w) * 3;
+        ctx.strokeStyle = w === 0 ? '#e0f2fe' : '#38bdf8';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.ellipse(0, 2, wr, wr * 0.42, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      for (let seg = 6; seg >= 0; seg--) {
+        const t = seg / 6;
+        const sx = Math.sin(phase + seg * 0.75) * 22 * (1 - t * 0.3) - seg * 4 * f;
+        const sySeg = -10 - seg * 8.5 + Math.cos(phase + seg * 0.6) * 3;
+        const rad = 13 - seg * 0.9;
+
+        const segGrad = ctx.createRadialGradient(sx - 3, sySeg - 3, 1, sx, sySeg, rad);
+        segGrad.addColorStop(0, '#67e8f9');
+        segGrad.addColorStop(0.55, '#0284c7');
+        segGrad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = segGrad;
+        ctx.strokeStyle = '#bae6fd';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(sx, sySeg, rad, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      const hx = Math.sin(phase) * 18 + 8 * f + swing;
+      const hy = -64 + bob;
+      ctx.fillStyle = '#0369a1';
+      ctx.strokeStyle = '#7dd3fc';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(hx, hy, 14, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(hx + 5 * f, hy - 2, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const hoverY = -28 + bob * 1.6;
+      const wingFlap = Math.sin(gameTime * 8.5) * 22;
+
+      for (const side of [-1, 1]) {
+        const wingGrad = ctx.createLinearGradient(0, hoverY, side * 48, hoverY - 24 + wingFlap);
+        wingGrad.addColorStop(0, '#f59e0b');
+        wingGrad.addColorStop(0.6, '#fde047');
+        wingGrad.addColorStop(1, '#38bdf8');
+        ctx.fillStyle = wingGrad;
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(0, hoverY);
+        ctx.quadraticCurveTo(side * 28, hoverY - 32 + wingFlap, side * 48, hoverY - 12 + wingFlap);
+        ctx.quadraticCurveTo(side * 24, hoverY + 8, 0, hoverY + 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = '#d97706';
+      ctx.strokeStyle = '#fef08a';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(0, hoverY, 15, 19, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.moveTo(8 * f, hoverY - 12);
+      ctx.lineTo(20 * f, hoverY - 8);
+      ctx.lineTo(8 * f, hoverY - 4);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-28, hoverY - 8 + wingFlap * 0.5);
+      ctx.lineTo(0, hoverY + 18);
+      ctx.lineTo(28, hoverY - 8 + wingFlap * 0.5);
+      ctx.stroke();
+    }
+
+    const hpRatio = Math.max(0, Math.min(1, (boss.hp || 1650) / (boss.maxHp || 1650)));
+    const barW = 68;
+    const barY = -84;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 1.4;
+    ctx.fillRect(-barW * 0.5, barY, barW, 7);
+    ctx.strokeRect(-barW * 0.5, barY, barW, 7);
+
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(-barW * 0.5 + 1, barY + 1, Math.round((barW - 2) * hpRatio), 5);
+
+    ctx.font = 'bold 10.5px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fef08a';
+    ctx.fillText(`${name} (${Math.ceil(boss.hp || 0)} HP)`, 0, barY - 4);
+
+    ctx.restore();
+  }
+
   drawGameUnit(ctx, unit, dx, sy, invTilt = 1, isEnemy = false, gameTime = 0, showBadges = true) {
+    if (unit.isBoss) {
+      this.drawWorldBoss(ctx, unit, dx, sy, invTilt, gameTime);
+      return;
+    }
     const factionColor = unit.isWraith
       ? '#312e81'
       : unit.isShadowClone
@@ -1513,7 +1895,7 @@ export class VillagerSpriteBank {
     const physZ = Math.max(0, unit.z || 0);
     const hoverOffset =
       -physZ +
-      (unit.skySoar || unit.isWraith
+      (unit.skySoar || unit.isWraith || unit.mountType === 'drake'
         ? -18 + Math.sin(gameTime * 4 + (unit.id || 0)) * 4
         : (unit.kataTimer || 0) > 0
         ? -Math.abs(Math.sin(gameTime * 10)) * 16
@@ -1536,6 +1918,11 @@ export class VillagerSpriteBank {
     }
 
     ctx.translate(0, hoverOffset);
+
+    if (unit.mountType) {
+      const saddleOffsetY = this.drawPrehistoricMount(ctx, unit, facingRight, baseScale, gameTime);
+      ctx.translate(0, saddleOffsetY);
+    }
 
     const dw = this.cellWidth * baseScale;
     const dh = this.cellHeight * baseScale;
@@ -1809,6 +2196,14 @@ export class SovereignPhysicsEngine {
 
   stepWorldPhysics(game, dt, footpaths) {
     const clampedDt = Math.min(0.05, Math.max(0.001, dt));
+
+    if (Array.isArray(game.worldBosses)) {
+      for (const b of game.worldBosses) {
+        if (b && b.y > 3100) {
+          b.y = 2280 + ((b.id || 0) % 3) * 140;
+        }
+      }
+    }
 
     if (this.camShakeIntensity > 0.1) {
       this.camShakeIntensity *= Math.exp(-clampedDt * 12);
@@ -3811,7 +4206,7 @@ export function installIsometricGraphicsUpgrade(targetClassOrInstance) {
 
   const origDrawHuman = proto.drawArticulatedHuman;
   proto.drawArticulatedHuman = function (ctx, unit, dx, sy, invTilt, isEnemy) {
-    if (unit.isBoss || unit.mountType || (this.cam && this.cam.zoom < 0.45)) {
+    if (this.cam && this.cam.zoom < 0.45 && !unit.isBoss && !unit.isT101s) {
       if (typeof origDrawHuman === 'function') {
         origDrawHuman.call(this, ctx, unit, dx, sy, invTilt, isEnemy);
       }
