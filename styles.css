@@ -128,3 +128,17 @@ html, body {
 #perfContinent {
   white-space: nowrap;
 }
+/* Ensure inner HUD flex rows wrap cleanly without clipping or overlapping FPS badge */
+.hud-interactive .no-scrollbar {
+    flex-wrap: wrap;
+row-gap: 5px;
+column-gap: 6px;
+overflow-x: visible;
+}
+
+.hud-interactive .no-scrollbar > .shrink-0 {
+  flex-wrap: wrap;
+  flex-shrink: 1;
+  row-gap: 5px;
+  column-gap: 4px;
+}    
