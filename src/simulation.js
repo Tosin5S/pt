@@ -7,6 +7,14 @@ import { TribalAudioEngine } from './audio.js';
 import { uiMethods } from './ui.js';
 import { rendererMethods } from './renderer.js';
 
+function clampDryLandY(y, minY = 1480, maxY = 2850, riverBuffer = 86) {
+  const clamped = Math.max(minY, Math.min(maxY, y));
+  if (Math.abs(clamped - RIVER_Y) < riverBuffer) {
+    return clamped < RIVER_Y ? RIVER_Y - riverBuffer : RIVER_Y + riverBuffer;
+  }
+  return clamped;
+}
+
 export class PrehistoricPlanetaryGame {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -1118,7 +1126,7 @@ export class PrehistoricPlanetaryGame {
 
         if (bp.category === 'house' || bp.category === 'structure') {
             const bx = wrapX(tx + (Math.random() - 0.5) * 90);
-            const by = Math.max(1450, Math.min(WORLD_H - 220, ty + (Math.random() - 0.5) * 70));
+           const by = clampDryLandY(ty + (Math.random() - 0.5) * 70, 1450, WORLD_H - 220); 
             const isStruct = bp.category === 'structure';
             const hpTotal = (isStruct ? 1200 : 580) + (hasStone ? 350 : 0) + (hasMetal ? 450 : 0);
             this.buildings.push({
@@ -1318,7 +1326,7 @@ export class PrehistoricPlanetaryGame {
         const icon = icons[this.aiPlayers.length % icons.length];
 
         const founderX = wrapX(founder.x + (Math.random() > 0.5 ? 280 : -280));
-        const founderY = Math.max(1520, Math.min(2580, founder.y + (Math.random() - 0.5) * 180));
+        const founderY = clampDryLandY(founder.y + (Math.random() - 0.5) * 180, 1520, 2580);
 
         const newTribe = {
             id: newId,
@@ -1360,7 +1368,7 @@ export class PrehistoricPlanetaryGame {
             name: `${tribeName} Lodge`,
             icon: '🛖',
             x: wrapX(founderX + 68),
-            y: founderY + 24,
+            y: clampDryLandY(founderY + 24, 1520, 2580),
             hp: 520,
             maxHp: 520,
             radius: 28,
@@ -2570,7 +2578,7 @@ export class PrehistoricPlanetaryGame {
                             name: `${ai.tribe} ${spec.name}`,
                             icon: spec.icon,
                             x: wrapX(ai.x + Math.cos(ang) * dist),
-                            y: Math.max(1740, Math.min(2850, ai.y + Math.sin(ang) * dist * 0.55)),
+                            y: clampDryLandY(ai.y + Math.sin(ang) * dist * 0.55, 1740, 2850),
                             hp: spec.hp,
                             maxHp: spec.hp,
                             radius: spec.radius,
